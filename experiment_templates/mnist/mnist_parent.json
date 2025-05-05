@@ -1,0 +1,43 @@
+{
+    "globals": {
+        "project": "MNIST classifier",
+        "author": "Marc",
+        "set_random_seed": 22
+    },
+    "data": {
+        "MNIST": {
+            "processor": "/home/marc/dev/fonduecaquelon/experiment_templates/mnist/mnist_preparator.py",
+            "args": {
+                "preparatorName": "mnist_class_preparator",
+                "base_path": "~/data/ML_data/mnist_from_torchvision/",
+                "val_ratio": 0.2,
+                "pin_memory": true,
+                "num_workers": 4,
+                "train_batch_size": 32,
+                "val_batch_size": 32,
+                "test_batch_size": 32,
+                "shuffle_train": true,
+                "shuffle_val": false,
+                "shuffle_test": false
+            }
+        }
+    },
+    "store": {
+        "results_path": "~/data/ML_data/results",
+        "cluster_results_path": "/scratch/vlf_results",
+        "img_exp_nb": 4,
+        "save_last_model": true,
+        "save_best_model": true,
+        "checkpoint_frequency": true
+    },
+    "eval": {
+        "evaluator": "eval_loop.py",
+        "args": {
+            "val_batch_size": 1,
+            "metrics": {
+                "METRIC_NAME_1": "dice",
+                "METRIC_NAME_2": "hausdorff"
+            }
+        }
+    }
+}
