@@ -5,17 +5,18 @@
         "parent": "mnist_parent.json",
         "set_random_seed": 33
     },
-    "useGPU": false,
     "models": {
         "simpleNet": {
-            "model": "simpleNet.py",
-            "args": {
-                "nb_in_channels": 1,
-                "nb_out_channels": 10,
-                "input_shape": [
-                    28,
-                    28
-                ]
+            "name": "simpleNet.py",
+            "nb_in_channels": 1,
+            "nb_out_channels": 10,
+            "input_shape": [
+                28,
+                28
+            ],
+            "optimizer": {
+                "name": "adam",
+                "lr": 0.001
             }
         }
     },
@@ -23,9 +24,15 @@
         "train_loop": "/home/marc/dev/fonduecaquelon/experiment_templates/mnist/default.py",
         "args": {
             "epochs": 4,
-            "learningRate": 0.001,
-            "loss": "crossentropy",
-            "optimizer": "adam"
+            "use_GPU": false,
+            "use_AMP": false,
+            "accumulate_grad_batches": 1
+        }
+    },
+    "losses": {
+        "cp": {
+            "name": "crossentropy",
+            "reduction": "mean"
         }
     }
 }

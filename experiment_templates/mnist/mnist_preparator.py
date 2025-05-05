@@ -26,14 +26,16 @@ def createDatasets(experiment):
     # val set = subset from train
     val_ratio = dargs.val_ratio
     n_train_all = len(train_all_set)
-    n_test = len(test_set)
+    n_test_samples = len(test_set)
     if val_ratio is not None and val_ratio > 0:
-        n_val = int(n_train_all * val_ratio)
-        n_train = n_train_all - n_val
-        train_set, val_set = random_split(train_all_set, [n_train, n_val])
+        n_val_samples = int(n_train_all * val_ratio)
+        n_train_samples = n_train_all - n_val_samples
+        train_set, val_set = random_split(
+            train_all_set, [n_train_samples, n_val_samples]
+        )
     else:
-        n_val = 0
-        n_train = n_train_all
+        n_val_samples = 0
+        n_train_samples = n_train_all
         train_set = train_all_set
 
     train_loader = DataLoader(
@@ -52,7 +54,7 @@ def createDatasets(experiment):
         pin_memory=dargs.pin_memory,
     )
 
-    if n_val > 0:
+    if n_val_samples > 0:
         val_loader = DataLoader(
             val_set,
             batch_size=dargs.val_batch_size,
@@ -66,10 +68,13 @@ def createDatasets(experiment):
     # experiment.print_dataset_infos()
 
     return {
-        "train_loader": train_loader,
+        "train_data_loader": train_loader,
         "val_data_loader": val_loader,
         "test_data_loader": test_loader,
-        "n_train": n_train,
-        "n_val": n_val,
-        "n_test": n_test,
+        "n_train_samples": n_train_samples,
+        "n_val_samples": n_val_samples,
+        "n_test_samples": n_test_samples,
+        "n_train_batches": len(train_loader),
+        "n_val_batches": len(val_loader) if val_loader is not None else 0,
+        "n_test_batches": len(test_loader),
     }

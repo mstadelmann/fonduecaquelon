@@ -20,7 +20,10 @@ from optimizer import createOptimizer, set_lr_schedule
 from testing import find_experiment_result_dirs, get_nb_exp_epochs
 from utils import remove_file, store_processing_infos
 from ui_functions import iprint, wprint
-from common import getYesNoInput, getIntInput
+
+from misc import save_train_history
+
+# from common import getYesNoInput, getIntInput
 from tqdm import tqdm
 
 
@@ -57,7 +60,7 @@ class DictToObj:
             setattr(self, key, value)
 
     def __getattr__(self, name):
-        # return non if attribute not found
+        # if attribute not found
         return None
 
     def __repr__(self):
@@ -67,6 +70,9 @@ class DictToObj:
     def __str__(self):
         return self.__repr__()
 
+    def __iter__(self):
+        return iter(self.__dict__.items())
+
     def keys(self):
         return self.__dict__.keys()
 
@@ -75,6 +81,21 @@ class DictToObj:
 
     def values(self):
         return self.__dict__.values()
+
+    def to_dict(self):
+        result = {}
+        for key, value in self.__dict__.items():
+            if isinstance(value, DictToObj):
+                result[key] = value.to_dict()
+            else:
+                result[key] = value
+        return result
+
+    def get(self, key, default=None):
+        res = getattr(self, key)
+        if res is None:
+            return default
+        return res
 
 
 class fdqExperiment:
@@ -136,6 +157,9 @@ class fdqExperiment:
 
         self.exp_def = DictToObj(self.exp_file)
         self.data = {}
+        self.models = {}
+        self.optimizers = {}
+        self.losses = {}
 
         self.creation_time = datetime.now()
         self.finish_time = None
@@ -175,6 +199,7 @@ class fdqExperiment:
         self.best_val_model_path = None
         self.best_train_model_path = None
         self.checkpoint_path = None
+        self._results_dir = None
 
         self.useTensorboard = self.exp_file.get("store", {}).get("tensorboard", False)
         self.useWandb = self.exp_file.get("store", {}).get("use_wandb", False)
@@ -206,6 +231,14 @@ class fdqExperiment:
         self.new_best_val_loss = False  # flag to indicate if a new best epoch was reached according to val loss
         self.new_best_val_loss_ep_id = None
 
+        self.nb_epochs = self.exp_def.train.args.epochs
+        self.current_epoch = 0
+        self.start_epoch = 0
+
+        self.gradacc_iter = self.exp_def.train.args.get(
+            "accumulate_grad_batches", default=1
+        )
+
         self.is_slurm = False
         self.slurm_job_id = None
         self.previous_slurm_job_id = None
@@ -216,23 +249,18 @@ class fdqExperiment:
             self.slurm_job_id = slurm_job_id
 
         # CUDA, MPS or CPU?
-        if torch.cuda.is_available() and self.exp_file.get("useGPU", False):
+        if torch.cuda.is_available() and bool(self.exp_def.train.args.use_GPU):
             torch.cuda.empty_cache()
             self.device = torch.device("cuda")
             iprint(
                 f"CUDA available: {torch.cuda.is_available()}. NB devices: {torch.cuda.device_count()}"
             )
 
-        elif torch.backends.mps.is_available() and self.exp_file.get("useGPU", False):
-            # TODO: update pytorch and then empty mps cache
-            # torch.mps.empty_cache()
-            iprint("MPS available")
-            self.device = torch.device("mps")
         else:
             wprint("NO CUDA available - CPU mode")
             self.device = torch.device("cpu")
 
-        self.useAMP = self.exp_file.get("useAMP", False)
+        self.useAMP = bool(self.exp_def.train.args.use_AMP)
 
     def setupData(self):
         for data_name, data_source in self.exp_def.data.items():
@@ -257,12 +285,26 @@ class fdqExperiment:
         return currentEvaluator.createEvaluator(self)
 
     def createModel(self):
-        if self.networkName is None:
-            raise ValueError("ERROR, no valid network defined.")
+        for model_name, model_source in self.exp_def.models.items():
+            model_path = model_source.name
 
-        currentNetArch = importlib.import_module(f"networks.{self.networkName}")
-        self.networkModel = currentNetArch.createNetwork(self)
-        self.networkModel.to(self.device)
+            if not os.path.exists(model_path):
+                current_file_path = os.path.abspath(__file__)
+                networks_dir = os.path.abspath(
+                    os.path.join(os.path.dirname(current_file_path), "../networks/")
+                )
+                model_path = os.path.join(networks_dir, model_path)
+
+                if not os.path.exists(model_path):
+                    raise FileNotFoundError(f"Model file not found: {model_path}")
+
+            parent_dir = os.path.dirname(model_path)
+            if parent_dir not in sys.path:
+                sys.path.append(parent_dir)
+
+            module_name = os.path.splitext(os.path.basename(model_path))[0]
+            model = importlib.import_module(module_name)
+            self.models[model_name] = model.createNetwork(self).to(self.device)
 
     def copy_data_to_scratch(self):
         """
@@ -319,22 +361,38 @@ class fdqExperiment:
         iprint("Copy datasets to temporary scratch location... Done!")
         iprint("----------------------------------------------------")
 
-    def prepareTraining(self):
-        try:
-            self.train_function = importlib.import_module(
-                f"trainings.{self.training_strategy}"
-            )
-        except Exception as exc:
-            raise ImportError(
-                f"Error loading training strategy {self.training_strategy}."
-            ) from exc
+    def prepareTrainLoop(self):
+        train_path = self.exp_def.train.train_loop
+
+        if not os.path.exists(train_path):
+            raise FileNotFoundError(f"Training file not found: {train_path}")
+
+        parent_dir = os.path.dirname(train_path)
+        if parent_dir not in sys.path:
+            sys.path.append(parent_dir)
+
+        module_name = os.path.splitext(os.path.basename(train_path))[0]
+        self.trainer = importlib.import_module(module_name)
+
+        # try:
+        #     self.train_function = importlib.import_module(
+        #         f"trainings.{self.training_strategy}"
+        #     )
+        # except Exception as exc:
+        #     raise ImportError(
+        #         f"Error loading training strategy {self.training_strategy}."
+        #     ) from exc
 
         # self.copy_data_to_scratch()
 
+    def prepareTraining(self):
+        self.setupData()
+        self.prepareTrainLoop()
         self.createModel()
-        self.optimizer = createOptimizer(self)
-        self.lr_scheduler = set_lr_schedule(self)
-        self.lossFunction = createLoss(self)
+        createOptimizer(self)
+        self.lr_scheduler = None  # set_lr_schedule(self)
+        createLoss(self)
+
         if self.useAMP:
             self.scaler = torch.amp.GradScaler(device=self.device, enabled=True)
 
@@ -346,13 +404,12 @@ class fdqExperiment:
 
             self.load_checkpoint(self.resume_training_path)
 
-        self.copy_files_to_res_dir(file_path=self.experiment_file_path)
-        if self.parent_file_path is not None:
-            self.copy_files_to_res_dir(file_path=self.parent_file_path)
+        self.cp_to_res_dir(file_path=self.experiment_file_path)
 
-        self.setupData()
+        if self.parent_file_path is not None:
+            self.cp_to_res_dir(file_path=self.parent_file_path)
+
         store_processing_infos(self)
-        self.setupPretrain()
 
     @property
     def results_dir(self):
@@ -476,7 +533,7 @@ class fdqExperiment:
         if not self.data_is_3d and self._img_export_dims != ["D"]:
             raise ValueError("Custom slicing is not supported in 2D experiments!")
 
-    def copy_files_to_res_dir(self, file_path):
+    def cp_to_res_dir(self, file_path):
         fn = file_path.split("/")[-1]
         iprint(f"Saving {fn} to {self.results_dir}...")
         shutil.copyfile(file_path, f"{self.results_dir}/{fn}")
@@ -512,7 +569,7 @@ class fdqExperiment:
                 f"Error, checkpoint epoch {self.start_epoch + 1} already reached defined nb epochs ({self.nb_epochs})."
             )
 
-        self.networkModel.load_state_dict(checkpoint["model_state_dict"])
+        self.model.load_state_dict(checkpoint["model_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
 
     def save_checkpoint(self):
@@ -536,7 +593,7 @@ class fdqExperiment:
 
         checkpoint = {
             "epoch": self.current_epoch,
-            "model_state_dict": self.networkModel.state_dict(),
+            "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": optimizer_state,
             "train_loss": self.trainLoss_per_ep[-1],
             "val_loss": self.valLoss_per_ep[-1],
@@ -557,7 +614,7 @@ class fdqExperiment:
             self.last_model_path = os.path.join(
                 self.results_dir, f"last_trained_model_e{self.current_epoch}.vlfm"
             )
-            torch.save(self.networkModel, self.last_model_path)
+            torch.save(self.model, self.last_model_path)
 
         current_best_model_path = os.path.join(
             self.results_dir, f"best_trained_model_e{self.current_epoch}.vlfm"
@@ -566,37 +623,37 @@ class fdqExperiment:
         # first epoch is always best
         if self.current_epoch == self.start_epoch:
             self.best_val_model_path = current_best_model_path
-            torch.save(self.networkModel, self.best_val_model_path)
+            torch.save(self.model, self.best_val_model_path)
 
         # new best val loss (default!)
         elif self.store_bestValModel and self.new_best_val_loss:
             remove_file(self.best_val_model_path)
             self.best_val_model_path = current_best_model_path
-            torch.save(self.networkModel, self.best_val_model_path)
+            torch.save(self.model, self.best_val_model_path)
 
         # if we want to store best model (unspecific) but have no val loss
         # check train loss instead
         elif self.store_bestValModel and self.valLoss == 0 and self.new_best_train_loss:
             remove_file(self.best_train_model_path)
             self.best_train_model_path = current_best_model_path
-            torch.save(self.networkModel, self.best_train_model_path)
+            torch.save(self.model, self.best_train_model_path)
 
         # save best model according to train loss
         # this might be useful if we use dummy validation losses like in diffusion
         elif self.store_bestTrainModel and self.new_best_train_loss:
             remove_file(self.best_train_model_path)
             self.best_train_model_path = current_best_model_path
-            torch.save(self.networkModel, self.best_train_model_path)
+            torch.save(self.model, self.best_train_model_path)
 
     def load_model(self, path):
         iprint(f"Loading model from {path}")
-        self.networkModel = torch.load(path).to(self.device)
-        self.networkModel.eval()
+        self.model = torch.load(path).to(self.device)
+        self.model.eval()
 
     def load_weights(self, path):
         iprint(f"Loading weights from {path}")
-        self.networkModel.load_state_dict(torch.load(path))
-        self.networkModel.eval()
+        self.model.load_state_dict(torch.load(path))
+        self.model.eval()
 
     def dump_model(self, res_folder=None):
         # https://pytorch.org/tutorials/advanced/cpp_export.html
@@ -609,7 +666,7 @@ class fdqExperiment:
         # jit tracer to serialize model using example
         # this only works if there is no flow control applied in the model.
         # otherwise, the model has to be annotated and the torch script compiler applied.
-        traced_script_module = torch.jit.trace(self.networkModel, example)
+        traced_script_module = torch.jit.trace(self.model, example)
 
         # test network
         # test_out = traced_script_module(example)
@@ -783,14 +840,41 @@ class fdqExperiment:
                     wprint(f"Removing {path}...")
                     shutil.rmtree(path)
 
-    def update_gradients(self, b_idx):
-        length_loader = len(self.dataPreparator.train_data_loader)
+    def update_gradients(self, b_idx, loader_name, model_name):
+        length_loader = self.data[loader_name].n_train_batches
 
         if ((b_idx + 1) % self.gradacc_iter == 0) or (b_idx + 1 == length_loader):
             if self.useAMP:
-                self.scaler.step(self.optimizer)
+                self.scaler.step(self.optimizers[model_name])
                 self.scaler.update()
             else:
-                self.optimizer.step()
+                self.optimizers[model_name].step()
 
-            self.optimizer.zero_grad()
+            self.optimizers[model_name].zero_grad()
+
+    def finalize_epoch(self):
+        # update learning rate
+        if self.lr_scheduler is not None:
+            current_LR = self.lr_scheduler.get_last_lr()
+            self.lr_scheduler.step()
+            new_LR = self.lr_scheduler.get_last_lr()
+            if current_LR != new_LR:
+                iprint(f"Updating LR. Old LR: {current_LR}, New LR: {new_LR}")
+
+        # end of last epoch
+        elif self.current_epoch == self.nb_epochs - 1:
+            self.finish_time = datetime.now()
+            store_processing_infos(self)
+
+        try:
+            self.run_time = datetime.now() - self.creation_time
+            td = self.run_time
+            run_t_string = f"days: {td.days}, hours: {td.seconds // 3600}, minutes: {td.seconds % 3600 / 60.0:.0f}"
+            iprint(f"Current run time: {run_t_string}")
+            store_processing_infos(self)
+        except Exception:
+            pass
+
+        save_train_history(self)
+        self.save_checkpoint()
+        self.save_current_model()
