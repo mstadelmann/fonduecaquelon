@@ -195,9 +195,16 @@ class fdqExperiment:
         self.experimentName = self.experiment_file_path.split("/")[-1].split(".json")[0]
         self.funky_name = None
 
-        self.last_model_path = None
-        self.best_val_model_path = None
-        self.best_train_model_path = None
+        self.checkpoint_frequency = self.exp_def.store.checkpoint_frequency
+        self.store_lastModel = self.exp_def.store.get("save_last_model", False)
+        self.store_bestValModel = self.exp_def.store.get("save_best_val_model", False)
+        self.store_bestTrainModel = self.exp_def.store.get(
+            "save_best_train_model", False
+        )
+
+        self.last_model_path = {}
+        self.best_val_model_path = {}
+        self.best_train_model_path = {}
         self.checkpoint_path = None
         self._results_dir = None
 
@@ -231,6 +238,13 @@ class fdqExperiment:
         self.new_best_val_loss = False  # flag to indicate if a new best epoch was reached according to val loss
         self.new_best_val_loss_ep_id = None
 
+        # self.early_stop_val_loss = self.train_params.get("early_stop_val_loss", None)
+        # self.early_stop_train_loss = self.train_params.get(
+        #     "early_stop_train_loss", None
+        # )
+        # self.early_stop_nan = self.train_params.get("early_stop_nan", 5)
+        self.early_stop_detected = False
+
         self.nb_epochs = self.exp_def.train.args.epochs
         self.current_epoch = 0
         self.start_epoch = 0
@@ -238,6 +252,8 @@ class fdqExperiment:
         self.gradacc_iter = self.exp_def.train.args.get(
             "accumulate_grad_batches", default=1
         )
+
+        # ------------- SLURM ------------------------------
 
         self.is_slurm = False
         self.slurm_job_id = None
@@ -248,10 +264,12 @@ class fdqExperiment:
             self.is_slurm = True
             self.slurm_job_id = slurm_job_id
 
-        # CUDA, MPS or CPU?
+        # ------------- CUDA / CPU -------------------------
+
         if torch.cuda.is_available() and bool(self.exp_def.train.args.use_GPU):
             torch.cuda.empty_cache()
             self.device = torch.device("cuda")
+            self.is_cuda = True
             iprint(
                 f"CUDA available: {torch.cuda.is_available()}. NB devices: {torch.cuda.device_count()}"
             )
@@ -259,6 +277,7 @@ class fdqExperiment:
         else:
             wprint("NO CUDA available - CPU mode")
             self.device = torch.device("cpu")
+            self.is_cuda = False
 
         self.useAMP = bool(self.exp_def.train.args.use_AMP)
 
@@ -496,9 +515,6 @@ class fdqExperiment:
             self.bestTrainLoss = min(self.bestTrainLoss, self._trainLoss)
             self.new_best_train_loss = self.bestTrainLoss == value
             self.new_best_train_loss_ep_id = self.current_epoch
-        else:
-            # count NaN epochs to induce early stopping
-            self.early_stop_nan_count += 1
 
     @property
     def mode(self):
@@ -586,15 +602,22 @@ class fdqExperiment:
 
         iprint(f"Saving checkpoint to {self.checkpoint_path}")
 
-        if self.optimizer is not None:
-            optimizer_state = self.optimizer.state_dict()
+        if self.optimizers == {}:
+            optimizer_state = "No optimizers used"
         else:
-            optimizer_state = None
+            optimizer_state = {
+                optim_name: optim.state_dict()
+                for optim_name, optim in self.optimizers.items()
+            }
+
+        model_state = {
+            model_name: model.state_dict() for model_name, model in self.models.items()
+        }
 
         checkpoint = {
             "epoch": self.current_epoch,
-            "model_state_dict": self.model.state_dict(),
-            "optimizer_state_dict": optimizer_state,
+            "model_state_dict": model_state,
+            "optimizer": optimizer_state,
             "train_loss": self.trainLoss_per_ep[-1],
             "val_loss": self.valLoss_per_ep[-1],
             "funky_name": self.funky_name,
@@ -609,41 +632,43 @@ class fdqExperiment:
         This is run at the end of every epoch.
         """
 
-        if self.store_lastModel:
-            remove_file(self.last_model_path)
-            self.last_model_path = os.path.join(
-                self.results_dir, f"last_trained_model_e{self.current_epoch}.vlfm"
+        for model_name, model in self.models.items():
+            if self.store_lastModel:
+                remove_file(self.last_model_path.get(model_name))
+                self.last_model_path[model_name] = os.path.join(
+                    self.results_dir,
+                    f"last_model_{model_name}_e{self.current_epoch}.fdqm",
+                )
+                torch.save(model, self.last_model_path[model_name])
+
+            # new best val loss (default!)
+            best_model_path = os.path.join(
+                self.results_dir,
+                f"best_val_{model_name}_e{self.current_epoch}.fdqm",
             )
-            torch.save(self.model, self.last_model_path)
+            if (
+                self.current_epoch == self.start_epoch
+                or self.store_bestValModel
+                and self.new_best_val_loss
+            ):
+                remove_file(self.best_val_model_path.get(model_name))
+                self.best_val_model_path[model_name] = best_model_path
+                torch.save(model, best_model_path)
 
-        current_best_model_path = os.path.join(
-            self.results_dir, f"best_trained_model_e{self.current_epoch}.vlfm"
-        )
-
-        # first epoch is always best
-        if self.current_epoch == self.start_epoch:
-            self.best_val_model_path = current_best_model_path
-            torch.save(self.model, self.best_val_model_path)
-
-        # new best val loss (default!)
-        elif self.store_bestValModel and self.new_best_val_loss:
-            remove_file(self.best_val_model_path)
-            self.best_val_model_path = current_best_model_path
-            torch.save(self.model, self.best_val_model_path)
-
-        # if we want to store best model (unspecific) but have no val loss
-        # check train loss instead
-        elif self.store_bestValModel and self.valLoss == 0 and self.new_best_train_loss:
-            remove_file(self.best_train_model_path)
-            self.best_train_model_path = current_best_model_path
-            torch.save(self.model, self.best_train_model_path)
-
-        # save best model according to train loss
-        # this might be useful if we use dummy validation losses like in diffusion
-        elif self.store_bestTrainModel and self.new_best_train_loss:
-            remove_file(self.best_train_model_path)
-            self.best_train_model_path = current_best_model_path
-            torch.save(self.model, self.best_train_model_path)
+            # save best model according to train loss
+            # this might be useful if we use dummy validation losses like in diffusion
+            best_train_model_path = os.path.join(
+                self.results_dir,
+                f"best_train_{model_name}_e{self.current_epoch}.fdq",
+            )
+            if (
+                self.current_epoch == self.start_epoch
+                or self.store_bestTrainModel
+                and self.new_best_train_loss
+            ):
+                remove_file(self.best_train_model_path.get(model_name))
+                self.best_train_model_path[model_name] = best_train_model_path
+                torch.save(model, best_train_model_path)
 
     def load_model(self, path):
         iprint(f"Loading model from {path}")
@@ -732,23 +757,6 @@ class fdqExperiment:
 
         store_processing_infos(self)
 
-        if self.track_memory_usage and self.device == torch.device("cuda"):
-            try:
-                # torch.cuda.memory._dump_snapshot()
-                fn = self.get_next_export_fn(
-                    name="memory_tracking", file_ending="pickle"
-                )
-                snapshot = torch.cuda.memory._snapshot()
-
-                iprint(f"Saving memory snapshot to {fn}")
-                # dump(snapshot, open('snapshot.pickle', 'wb'))
-                with open(fn, "wb") as f:
-                    dump(snapshot, f)
-                iprint("done")
-            except Exception as e:
-                wprint(f"Failed to dump memory snapshot: {e}")
-            torch.cuda.memory._record_memory_history(enabled=False)
-
     def check_early_stop(self):
         """
         1) Stop training if the validation los over last last N epochs did not further decrease.
@@ -757,30 +765,28 @@ class fdqExperiment:
 
         2) Stop training if the loss is NaN for N epochs.
         """
+        e_stop_nan = self.exp_def.train.args.early_stop_nan
+        e_stop_val = self.exp_def.train.args.early_stop_val_loss
+        e_stop_train = self.exp_def.train.args.early_stop_train_loss
 
-        if self.early_stop_nan_count >= self.early_stop_nan:
-            self.early_stop_nan_detected = True
-            wprint(
-                "\n###############################\n"
-                f"!! Early Stop NaN EP {self.current_epoch} !!\n"
-                "###############################\n"
-            )
-            return True
+        # early stop NaN ?
+        if e_stop_nan is not None:
+            if all(math.isnan(x) for x in self.trainLoss_per_ep[-e_stop_nan:]):
+                self.early_stop_nan_detected = "NaN detected"
+                wprint(
+                    "\n###############################\n"
+                    f"!! Early Stop NaN EP {self.current_epoch} !!\n"
+                    "###############################\n"
+                )
+                return True
 
-        nb_epochs_in_run = self.current_epoch - self.start_epoch
-
+        # early stop val loss?
+        # did we have a new best val loss within the last N epochs?
         # we want at least N losses
-        if (
-            self.early_stop_val_loss is not None
-            and nb_epochs_in_run > self.early_stop_val_loss
-        ):
-            if (
-                min(self.valLoss_per_ep[-(self.early_stop_val_loss - 1) :])
-                < self.valLoss_per_ep[-self.early_stop_val_loss]
-            ):
-                return False
-            else:
-                self.early_stop_val_loss_detected = True
+        if e_stop_val is not None and len(self.valLoss_per_ep) >= e_stop_val:
+            # was there a new best val loss within the last N epochs?
+            if min(self.valLoss_per_ep[-e_stop_val:]) != self.bestValLoss:
+                self.early_stop_nan_detected = "ValLoss_stagnated"
                 wprint(
                     "\n###############################\n"
                     f"!! Early Stop Val Loss EP {self.current_epoch} !!\n"
@@ -788,23 +794,15 @@ class fdqExperiment:
                 )
                 return True
 
-        elif (
-            self.early_stop_train_loss is not None
-            and nb_epochs_in_run > self.early_stop_train_loss
-        ):
-            if (
-                min(self.trainLoss_per_ep[-(self.early_stop_train_loss - 1) :])
-                < self.trainLoss_per_ep[-self.early_stop_train_loss]
-            ):
-                return False
-
-            else:
-                self.early_stop_train_loss_detected = True
+        # early stop train loss?
+        elif e_stop_train is not None and len(self.trainLoss_per_ep) >= e_stop_train:
+            if min(self.trainLoss_per_ep[-e_stop_train:]) != self.bestTrainLoss:
                 wprint(
                     "\n###############################\n"
                     f"!! Early Stop Train Loss EP {self.current_epoch} !!\n"
                     "###############################\n"
                 )
+                self.early_stop_nan_detected = "TrainLoss_stagnated"
                 return True
 
         return False

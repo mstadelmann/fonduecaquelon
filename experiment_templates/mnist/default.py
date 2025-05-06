@@ -77,43 +77,24 @@ def train(experiment: fdqExperiment) -> None:
 
         experiment.models["simpleNet"].eval()
 
-        if val_loader is not None:
-            pbar = startProgBar(n_val_samples, "validation...")
+        pbar = startProgBar(n_val_samples, "validation...")
 
-            for nb_vbatch, batch in enumerate(val_loader):
-                experiment.current_val_batch = nb_vbatch
-                pbar.update(
-                    nb_tbatch * experiment.exp_def.data.MNIST.args.val_batch_size
-                )
+        for nb_vbatch, batch in enumerate(val_loader):
+            experiment.current_val_batch = nb_vbatch
+            pbar.update(nb_vbatch * experiment.exp_def.data.MNIST.args.val_batch_size)
 
-                inputs, targets = batch
+            inputs, targets = batch
 
-                with torch.no_grad():
-                    inputs = inputs.to(experiment.device)
-                    output = experiment.models["simpleNet"](inputs)
-                    targets = targets.to(experiment.device)
-                    val_loss_tensor = experiment.lossFunction(output, targets)
+            with torch.no_grad():
+                inputs = inputs.to(experiment.device)
+                output = experiment.models["simpleNet"](inputs)
+                targets = targets.to(experiment.device)
+                val_loss_tensor = experiment.losses["cp"](output, targets)
 
-                images = [
-                    ("inputs", inputs),
-                    ("targets", targets),
-                    ("outputs", output),
-                ]
+            valid_loss_value += val_loss_tensor.data.item() * inputs.size(0)
 
-                save_checkpoint_img(experiment=experiment, images=images)
-                save_tensorboard(experiment=experiment, images=images)
-                save_wandb(experiment=experiment, images=images)
-
-                valid_loss_value += val_loss_tensor.data.item() * inputs.size(0)
-
-                if nb_vbatch == 0:
-                    experiment.compute_memory_requirements(val_batch=batch)
-
-            pbar.finish()
-            experiment.valLoss = valid_loss_value / len(val_loader.dataset)
-
-        else:
-            experiment.valLoss = 0
+        pbar.finish()
+        experiment.valLoss = valid_loss_value / len(val_loader.dataset)
 
         save_wandb_loss(experiment)
 

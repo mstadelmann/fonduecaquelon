@@ -11,6 +11,8 @@ def createDatasets(experiment):
 
     dargs = experiment.exp_def.data.MNIST.args
 
+    pin_mem = False if not experiment.is_cuda else dargs.get("pin_memory", False)
+
     if not os.path.exists(dargs.base_path):
         os.makedirs(dargs.base_path)
 
@@ -23,10 +25,28 @@ def createDatasets(experiment):
     )
     test_set = datasets.MNIST(dargs.base_path, train=False, transform=transform)
 
-    # val set = subset from train
-    val_ratio = dargs.val_ratio
     n_train_all = len(train_all_set)
     n_test_samples = len(test_set)
+
+    # subsets
+    subset_ratio = dargs.get("subset_train", 1)
+    if subset_ratio < 1:
+        n_subset_samples = int(n_train_all * subset_ratio)
+        train_all_set, _ = random_split(
+            train_all_set, [n_subset_samples, n_train_all - n_subset_samples]
+        )
+        n_train_all = len(train_all_set)
+
+    subset_ratio = dargs.get("subset_test", 1)
+    if subset_ratio < 1:
+        n_subset_samples = int(n_test_samples * subset_ratio)
+        test_set, _ = random_split(
+            test_set, [n_subset_samples, n_test_samples - n_subset_samples]
+        )
+        n_test_samples = len(test_set)
+
+    # val set = subset from train
+    val_ratio = dargs.val_ratio
     if val_ratio is not None and val_ratio > 0:
         n_val_samples = int(n_train_all * val_ratio)
         n_train_samples = n_train_all - n_val_samples
@@ -43,7 +63,7 @@ def createDatasets(experiment):
         batch_size=dargs.train_batch_size,
         shuffle=dargs.shuffle_train,
         num_workers=dargs.num_workers,
-        pin_memory=dargs.pin_memory,
+        pin_memory=pin_mem,
     )
 
     test_loader = DataLoader(
@@ -51,7 +71,7 @@ def createDatasets(experiment):
         batch_size=dargs.test_batch_size,
         shuffle=dargs.shuffle_test,
         num_workers=dargs.num_workers,
-        pin_memory=dargs.pin_memory,
+        pin_memory=pin_mem,
     )
 
     if n_val_samples > 0:
@@ -60,7 +80,7 @@ def createDatasets(experiment):
             batch_size=dargs.val_batch_size,
             shuffle=dargs.shuffle_val,
             num_workers=dargs.num_workers,
-            pin_memory=dargs.pin_memory,
+            pin_memory=pin_mem,
         )
     else:
         val_loader = None

@@ -23,10 +23,13 @@
     "train": {
         "train_loop": "/home/marc/dev/fonduecaquelon/experiment_templates/mnist/default.py",
         "args": {
-            "epochs": 4,
+            "epochs": 8,
             "use_GPU": false,
             "use_AMP": false,
-            "accumulate_grad_batches": 1
+            "accumulate_grad_batches": 1,
+            "early_stop_val_loss": 5,
+            "early_stop_train_loss": 5,
+            "early_stop_nan": 5
         }
     },
     "losses": {

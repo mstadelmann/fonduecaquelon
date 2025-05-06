@@ -1,6 +1,6 @@
 {
     "globals": {
-        "project": "MNIST classifier",
+        "project": "MNIST classifier - parent",
         "author": "Marc",
         "set_random_seed": 22
     },
@@ -10,6 +10,8 @@
             "args": {
                 "preparatorName": "mnist_class_preparator",
                 "base_path": "~/data/ML_data/mnist_from_torchvision/",
+                "subset_train": 0.2,
+                "subset_test": 0.2,
                 "val_ratio": 0.2,
                 "pin_memory": true,
                 "num_workers": 4,
@@ -27,8 +29,9 @@
         "cluster_results_path": "/scratch/vlf_results",
         "img_exp_nb": 4,
         "save_last_model": true,
-        "save_best_model": true,
-        "checkpoint_frequency": true
+        "save_best_val_model": true,
+        "save_best_train_model": true,
+        "checkpoint_frequency": 2
     },
     "eval": {
         "evaluator": "eval_loop.py",
