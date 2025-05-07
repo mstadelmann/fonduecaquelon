@@ -23,9 +23,6 @@ from scipy.ndimage import zoom
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
 
-from PIL import Image
-
-
 def compute_histo(image, nb_bins=100):
     bins = torch.linspace(image.min(), image.max(), nb_bins).cpu()
     return torch.histogram(image.cpu().float(), bins=bins)

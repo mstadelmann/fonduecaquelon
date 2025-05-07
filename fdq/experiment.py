@@ -15,7 +15,7 @@ import wandb
 
 from lossFunctions import createLoss
 from optimizer import createOptimizer, set_lr_schedule
-from testing import find_experiment_result_dirs, get_nb_exp_epochs
+
 from utils import (
     remove_file,
     store_processing_infos,

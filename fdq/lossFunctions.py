@@ -1,7 +1,6 @@
 import torch
 from monai.losses import DiceLoss
 from torchmetrics.image import StructuralSimilarityIndexMeasure
-from ui_functions import wprint
 
 
 class PSNR(torch.nn.Module):

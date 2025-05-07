@@ -7,10 +7,10 @@ import torch.nn.functional as F
 from PIL import Image
 
 
-from ui_functions import iprint, eprint, wprint, getIntInput
+from ui_functions import getIntInput
 from img_func import showImg, showImg_cv
 from ui_functions import startProgBar
-from experiment import FCQmode
+
 import matplotlib
 
 # import matplotlib
