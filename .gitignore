@@ -1,0 +1,9 @@
+# vscode
+.vscode/
+
+# complied python files
+*.pyc
+
+# test / cache outputs
+**/__pycache__/
+test/
