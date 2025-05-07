@@ -23,7 +23,7 @@ def get_nb_exp_epochs(path):
 
 
 def find_experiment_result_dirs(experiment):
-    if experiment.is_slurm and experiment.run_train:
+    if experiment.is_slurm and experiment.inargs.train_model:
         wprint(
             "WARNING: This is a slurm TRAINING session - looking only for results in cluster_results_path!"
         )
@@ -31,7 +31,7 @@ def find_experiment_result_dirs(experiment):
             "cluster_results_path", None
         )
 
-    elif experiment.is_slurm and not experiment.run_train:
+    elif experiment.is_slurm and not experiment.inargs.train_model:
         wprint(
             "WARNING: This is a slurm INFERENCE session - looking for results in regular path!"
         )

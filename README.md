@@ -7,7 +7,7 @@ MGMT of PyTorch training loops. Works best combined with chuchichaestli.
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
 - Create Python env (tested on PY3.8)
-- cd /vlf/
+- cd /fdq/
 - pip install -e .
 
 ## USAGE

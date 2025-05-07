@@ -7,10 +7,8 @@ import shutil
 import math
 from datetime import datetime
 from typing import List
-from pickle import dump
 import funkybob
-from enum import Enum
-import copy
+
 
 import torch
 import wandb
@@ -18,157 +16,25 @@ import wandb
 from lossFunctions import createLoss
 from optimizer import createOptimizer, set_lr_schedule
 from testing import find_experiment_result_dirs, get_nb_exp_epochs
-from utils import remove_file, store_processing_infos
+from utils import (
+    remove_file,
+    store_processing_infos,
+    FCQmode,
+    recursive_dict_update,
+    DictToObj,
+)
 from ui_functions import iprint, wprint
 
 from misc import save_train_history
 
-# from common import getYesNoInput, getIntInput
+
 from tqdm import tqdm
-
-
-class FCQmode:
-    def __init__(self) -> None:
-        self._op_mode = "init"
-        self.allowed_op_modes = [
-            "init",  # initial state
-            "train",  # training mode
-            "unittest",  # running unit tests
-            "test",  # testing
-        ]
-        self._test_mode = "best"
-        self.allowed_test_modes = [
-            "best",  # test best model from last experiment - DEFAULT!
-            "last",  # test last trained model from last experiment
-            "custom_last",  # test last model from selected experiment
-            "custom_best",  # test best model from selected experiment
-            "custom_path",  # test with manually defined model path
-        ]
-
-        # Dynamically create setter methods
-        for mode in self.allowed_op_modes:
-            setattr(self, mode, self._create_setter("_op_mode", mode))
-
-        for mode in self.allowed_test_modes:
-            setattr(self, mode, self._create_setter("_test_mode", mode))
-
-    def __repr__(self):
-        if self._op_mode == "test":
-            return f"<{self.__class__.__name__}: {self._op_mode} / {self._test_mode}>"
-        else:
-            return f"<{self.__class__.__name__}: {self._op_mode}>"
-
-    @property
-    def op_mode(self):
-        class OpMode:
-            def __init__(self, parent):
-                self.parent = parent
-
-            def __repr__(self):
-                return f"<{self.__class__.__name__}: {self.parent._op_mode}>"
-
-            def __getattr__(self, name):
-                if name in self.parent.allowed_op_modes:
-                    return self.parent._op_mode == name
-                raise AttributeError(f"'OpMode' object has no attribute '{name}'")
-
-        return OpMode(self)
-
-    @property
-    def test_mode(self):
-        class TestMode:
-            def __init__(self, parent):
-                self.parent = parent
-
-            def __repr__(self):
-                return f"<{self.__class__.__name__}: {self.parent._test_mode}>"
-
-            def __getattr__(self, name):
-                if name in self.parent.allowed_test_modes:
-                    return self.parent._test_mode == name
-                raise AttributeError(f"'TestMode' object has no attribute '{name}'")
-
-        return TestMode(self)
-
-    def _create_setter(self, attribute, value):
-        def setter():
-            setattr(self, attribute, value)
-
-        return setter
-
-
-def recursive_dict_update(d_parent, d_child):
-    for key, value in d_child.items():
-        if (
-            isinstance(value, dict)
-            and key in d_parent
-            and isinstance(d_parent[key], dict)
-        ):
-            recursive_dict_update(d_parent[key], value)
-        else:
-            d_parent[key] = value
-
-    return copy.deepcopy(d_parent)
-
-
-class DictToObj:
-    def __init__(self, dictionary):
-        for key, value in dictionary.items():
-            if isinstance(value, dict):
-                value = DictToObj(value)
-            setattr(self, key, value)
-
-    def __getattr__(self, name):
-        # if attribute not found
-        return None
-
-    def __repr__(self):
-        keys = ", ".join(self.__dict__.keys())
-        return f"<{self.__class__.__name__}: {keys}>"
-
-    def __str__(self):
-        return self.__repr__()
-
-    def __iter__(self):
-        return iter(self.__dict__.items())
-
-    def keys(self):
-        return self.__dict__.keys()
-
-    def items(self):
-        return self.__dict__.items()
-
-    def values(self):
-        return self.__dict__.values()
-
-    def to_dict(self):
-        result = {}
-        for key, value in self.__dict__.items():
-            if isinstance(value, DictToObj):
-                result[key] = value.to_dict()
-            else:
-                result[key] = value
-        return result
-
-    def get(self, key, default=None):
-        res = getattr(self, key)
-        if res is None:
-            return default
-        return res
 
 
 class fdqExperiment:
     def __init__(self, inargs: argparse.Namespace) -> None:
         self.inargs = inargs
         self.experiment_file_path = self.inargs.experimentfile
-        self.experiment_tag = self.inargs.tag
-        if self.experiment_tag is not None and "__" in self.experiment_tag:
-            raise ValueError("Error, tag cannot contain '__'.")
-
-        if not os.path.exists(self.experiment_file_path):
-            raise FileNotFoundError(
-                f"Error: File {self.experiment_file_path} not found."
-            )
 
         with open(self.experiment_file_path, "r", encoding="utf8") as fp:
             try:
@@ -213,68 +79,37 @@ class fdqExperiment:
 
         else:
             self.parent_file_path = None
-
         self.exp_def = DictToObj(self.exp_file)
+        # ------------- GLOBALS ------------------------------
+        self.project = self.exp_def.globals.project.replace(" ", "_")
+        self.experimentName = self.experiment_file_path.split("/")[-1].split(".json")[0]
+        self.funky_name = None
+        self.checkpoint_frequency = self.exp_def.store.checkpoint_frequency
+        self.mode = FCQmode()
+        self.creation_time = datetime.now()
+        self.finish_time = None
+        self.run_time = None
+        self.run_info = {}
+        # ------------- Train parameters ------------------------------
+        self.gradacc_iter = self.exp_def.train.args.get(
+            "accumulate_grad_batches", default=1
+        )
+        self.useAMP = bool(self.exp_def.train.args.use_AMP)
+        self.nb_epochs = self.exp_def.train.args.epochs
+        # ------------- Train variables ------------------------------
+        self.current_epoch = 0
+        self.start_epoch = 0
         self.data = {}
         self.models = {}
         self.inference_model_paths = {}
         self.optimizers = {}
         self.losses = {}
-
-        self.creation_time = datetime.now()
-        self.finish_time = None
-        self.run_time = None
-
-        self.mode = FCQmode()
-
-        self.run_info = {}
-
-        # INPUT PARSER SETTINGS
-        self.run_train = self.inargs.train_model
-        self.run_test = self.inargs.test_model_auto or self.inargs.test_model_ia
-
-        self.run_dump = self.inargs.dump_model
-        self.resume_training_path = self.inargs.resume_path
-
-        # EXP FILE SETTINGS
-        self.project = self.exp_def.globals.project.replace(" ", "_")
-        self.experimentName = self.experiment_file_path.split("/")[-1].split(".json")[0]
-        self.funky_name = None
-
-        self.checkpoint_frequency = self.exp_def.store.checkpoint_frequency
-        self.store_lastModel = self.exp_def.store.get("save_last_model", False)
-        self.store_bestValModel = self.exp_def.store.get("save_best_val_model", False)
-        self.store_bestTrainModel = self.exp_def.store.get(
-            "save_best_train_model", False
-        )
-
         self.last_model_path = {}
         self.best_val_model_path = {}
         self.best_train_model_path = {}
         self.checkpoint_path = None
         self._results_dir = None
-
         self._test_dir = None
-
-        self.useTensorboard = self.exp_file.get("store", {}).get("tensorboard", False)
-        self.useWandb = self.exp_file.get("store", {}).get("use_wandb", False)
-        self.wandb_project = self.exp_file.get("store", {}).get("wandb_project", None)
-        self.wandb_entity = self.exp_file.get("store", {}).get("wandb_entity", None)
-        self.wandb_key = self.exp_file.get("store", {}).get("wandb_key", None)
-        self.wandb_generate_image_grid = self.exp_file.get("store", {}).get(
-            "wandb_generate_image_grid", False
-        )
-        self.wandb_initialized = False
-        self.additional_outplots = self.exp_file.get("store", {}).get(
-            "additional_outplots", None
-        )
-        self.tb_writer = None
-
-        # VARIABLES COMPUTED/USED DURING TRAINING
-        self.model_input_shape = (
-            None  # stores the image size AFTER input transformation
-        )
-
         self._valLoss = float("inf")
         self._trainLoss = float("inf")
         self.bestValLoss = float("inf")
@@ -285,35 +120,25 @@ class fdqExperiment:
         self.new_best_train_loss_ep_id = None
         self.new_best_val_loss = False  # flag to indicate if a new best epoch was reached according to val loss
         self.new_best_val_loss_ep_id = None
-
-        # self.early_stop_val_loss = self.train_params.get("early_stop_val_loss", None)
-        # self.early_stop_train_loss = self.train_params.get(
-        #     "early_stop_train_loss", None
-        # )
-        # self.early_stop_nan = self.train_params.get("early_stop_nan", 5)
         self.early_stop_detected = False
-
-        self.nb_epochs = self.exp_def.train.args.epochs
-        self.current_epoch = 0
-        self.start_epoch = 0
-
-        self.gradacc_iter = self.exp_def.train.args.get(
-            "accumulate_grad_batches", default=1
-        )
-
+        # ------------- MGMT attributes ------------------------------
+        self.useTensorboard = self.exp_file.get("store", {}).get("tensorboard", False)
+        self.tb_writer = None
+        self.useWandb = self.exp_file.get("store", {}).get("use_wandb", False)
+        self.wandb_project = self.exp_file.get("store", {}).get("wandb_project", None)
+        self.wandb_entity = self.exp_file.get("store", {}).get("wandb_entity", None)
+        self.wandb_key = self.exp_file.get("store", {}).get("wandb_key", None)
+        self.wandb_initialized = False
         # ------------- SLURM ------------------------------
-
-        self.is_slurm = False
-        self.slurm_job_id = None
-        self.previous_slurm_job_id = None
-
         slurm_job_id = os.getenv("SLURM_JOB_ID")
         if isinstance(slurm_job_id, str) and slurm_job_id.isdigit():
             self.is_slurm = True
             self.slurm_job_id = slurm_job_id
-
+        else:
+            self.is_slurm = False
+            self.slurm_job_id = None
+        self.previous_slurm_job_id = None
         # ------------- CUDA / CPU -------------------------
-
         if torch.cuda.is_available() and bool(self.exp_def.train.args.use_GPU):
             torch.cuda.empty_cache()
             self.device = torch.device("cuda")
@@ -321,13 +146,10 @@ class fdqExperiment:
             iprint(
                 f"CUDA available: {torch.cuda.is_available()}. NB devices: {torch.cuda.device_count()}"
             )
-
         else:
             wprint("NO CUDA available - CPU mode")
             self.device = torch.device("cpu")
             self.is_cuda = False
-
-        self.useAMP = bool(self.exp_def.train.args.use_AMP)
 
     def setupData(self):
         for data_name, data_source in self.exp_def.data.items():
@@ -472,13 +294,13 @@ class fdqExperiment:
         if self.useAMP:
             self.scaler = torch.amp.GradScaler(device=self.device, enabled=True)
 
-        if self.resume_training_path is not None:
+        if self.inargs.resume_path is not None:
             iprint(
                 "--------------------------------------------------------------------------"
             )
-            iprint(f"Loading checkpoint: {self.resume_training_path}")
+            iprint(f"Loading checkpoint: {self.inargs.resume_pathh}")
 
-            self.load_checkpoint(self.resume_training_path)
+            self.load_checkpoint(self.inargs.resume_path)
 
         self.cp_to_res_dir(file_path=self.experiment_file_path)
 
@@ -495,9 +317,6 @@ class fdqExperiment:
                 self.funky_name = next(iter(funkybob.RandomNameGenerator()))
 
             folder_name = f"{dt_string}__{self.funky_name}"
-
-            if self.experiment_tag is not None:
-                folder_name += f"__{self.experiment_tag}"
 
             if self.is_slurm:
                 folder_name += f"__{self.slurm_job_id}"
@@ -621,7 +440,7 @@ class fdqExperiment:
 
         remove_file(self.checkpoint_path)
         self.checkpoint_path = os.path.join(
-            self.results_dir, f"checkpoint_e{self.current_epoch}.vlfcpt"
+            self.results_dir, f"checkpoint_e{self.current_epoch}.fdqcpt"
         )
 
         iprint(f"Saving checkpoint to {self.checkpoint_path}")
@@ -657,7 +476,7 @@ class fdqExperiment:
         """
 
         for model_name, model in self.models.items():
-            if self.store_lastModel:
+            if self.exp_def.store.get("save_last_model", False):
                 remove_file(self.last_model_path.get(model_name))
                 self.last_model_path[model_name] = os.path.join(
                     self.results_dir,
@@ -672,7 +491,7 @@ class fdqExperiment:
             )
             if (
                 self.current_epoch == self.start_epoch
-                or self.store_bestValModel
+                or self.exp_def.store.get("save_best_val_model", False)
                 and self.new_best_val_loss
             ):
                 remove_file(self.best_val_model_path.get(model_name))
@@ -687,7 +506,7 @@ class fdqExperiment:
             )
             if (
                 self.current_epoch == self.start_epoch
-                or self.store_bestTrainModel
+                or self.exp_def.store.get("save_best_train_model", False)
                 and self.new_best_train_loss
             ):
                 remove_file(self.best_train_model_path.get(model_name))
@@ -721,8 +540,8 @@ class fdqExperiment:
         # test_out = traced_script_module(example)
         # print(test_out)
 
-        iprint(f"Storing model to {os.path.join(res_folder, 'serialized_model.vlfpt')}")
-        traced_script_module.save(os.path.join(res_folder, "serialized_model.vlfpt"))
+        iprint(f"Storing model to {os.path.join(res_folder, 'serialized_model.fdqpt')}")
+        traced_script_module.save(os.path.join(res_folder, "serialized_model.fdqpt"))
 
     def get_next_export_fn(self, name=None, file_ending="jpg"):
         if self.mode.is_test():

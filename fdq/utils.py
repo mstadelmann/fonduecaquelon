@@ -13,6 +13,137 @@ import numpy as np
 import torch
 import inspect
 from ui_functions import iprint, wprint, eprint
+import copy
+
+
+class FCQmode:
+    def __init__(self) -> None:
+        self._op_mode = "init"
+        self.allowed_op_modes = [
+            "init",  # initial state
+            "train",  # training mode
+            "unittest",  # running unit tests
+            "test",  # testing
+        ]
+        self._test_mode = "best"
+        self.allowed_test_modes = [
+            "best",  # test best model from last experiment - DEFAULT!
+            "last",  # test last trained model from last experiment
+            "custom_last",  # test last model from selected experiment
+            "custom_best",  # test best model from selected experiment
+            "custom_path",  # test with manually defined model path
+        ]
+
+        # Dynamically create setter methods
+        for mode in self.allowed_op_modes:
+            setattr(self, mode, self._create_setter("_op_mode", mode))
+
+        for mode in self.allowed_test_modes:
+            setattr(self, mode, self._create_setter("_test_mode", mode))
+
+    def __repr__(self):
+        if self._op_mode == "test":
+            return f"<{self.__class__.__name__}: {self._op_mode} / {self._test_mode}>"
+        else:
+            return f"<{self.__class__.__name__}: {self._op_mode}>"
+
+    @property
+    def op_mode(self):
+        class OpMode:
+            def __init__(self, parent):
+                self.parent = parent
+
+            def __repr__(self):
+                return f"<{self.__class__.__name__}: {self.parent._op_mode}>"
+
+            def __getattr__(self, name):
+                if name in self.parent.allowed_op_modes:
+                    return self.parent._op_mode == name
+                raise AttributeError(f"'OpMode' object has no attribute '{name}'")
+
+        return OpMode(self)
+
+    @property
+    def test_mode(self):
+        class TestMode:
+            def __init__(self, parent):
+                self.parent = parent
+
+            def __repr__(self):
+                return f"<{self.__class__.__name__}: {self.parent._test_mode}>"
+
+            def __getattr__(self, name):
+                if name in self.parent.allowed_test_modes:
+                    return self.parent._test_mode == name
+                raise AttributeError(f"'TestMode' object has no attribute '{name}'")
+
+        return TestMode(self)
+
+    def _create_setter(self, attribute, value):
+        def setter():
+            setattr(self, attribute, value)
+
+        return setter
+
+
+def recursive_dict_update(d_parent, d_child):
+    for key, value in d_child.items():
+        if (
+            isinstance(value, dict)
+            and key in d_parent
+            and isinstance(d_parent[key], dict)
+        ):
+            recursive_dict_update(d_parent[key], value)
+        else:
+            d_parent[key] = value
+
+    return copy.deepcopy(d_parent)
+
+
+class DictToObj:
+    def __init__(self, dictionary):
+        for key, value in dictionary.items():
+            if isinstance(value, dict):
+                value = DictToObj(value)
+            setattr(self, key, value)
+
+    def __getattr__(self, name):
+        # if attribute not found
+        return None
+
+    def __repr__(self):
+        keys = ", ".join(self.__dict__.keys())
+        return f"<{self.__class__.__name__}: {keys}>"
+
+    def __str__(self):
+        return self.__repr__()
+
+    def __iter__(self):
+        return iter(self.__dict__.items())
+
+    def keys(self):
+        return self.__dict__.keys()
+
+    def items(self):
+        return self.__dict__.items()
+
+    def values(self):
+        return self.__dict__.values()
+
+    def to_dict(self):
+        result = {}
+        for key, value in self.__dict__.items():
+            if isinstance(value, DictToObj):
+                result[key] = value.to_dict()
+            else:
+                result[key] = value
+        return result
+
+    def get(self, key, default=None):
+        res = getattr(self, key)
+        if res is None:
+            return default
+        return res
 
 
 def print_nb_weights(experiment, show_details=False):
@@ -74,47 +205,47 @@ def store_processing_infos(experiment):
         json.dump(experiment.run_info, write_file, indent=4, sort_keys=True)
 
 
-def collect_vlf_git_hash():
+def collect_fdq_git_hash():
     """
-    Returns the git hash of the currently running VLF environment,
+    Returns the git hash of the currently running FDQ environment,
     and checks, if all files were committed.
     None committed files are printed to the console and stored in the
     experiment info file.
     """
     dirty_files = None
-    vlf_hash = None
-    vlf_dirty = True  # unless proved otherwise...
+    fdq_hash = None
+    fdq_dirty = True  # unless proved otherwise...
 
     try:
-        vlf_git = git.Repo(os.path.abspath(__file__), search_parent_directories=True)
+        fdq_git = git.Repo(os.path.abspath(__file__), search_parent_directories=True)
     except Exception:
-        wprint("Warning: Could not find git repo for VLF!")
-        vlf_git = None
-        vlf_hash = "UNABLE TO LOCALIZE GIT REPO!"
+        wprint("Warning: Could not find git repo for FDQ!")
+        fdq_git = None
+        fdq_hash = "UNABLE TO LOCALIZE GIT REPO!"
 
-    if vlf_git is not None:
+    if fdq_git is not None:
         try:
-            vlf_hash = vlf_git.head.object.hexsha
-            vlf_dirty = vlf_git.is_dirty()
+            fdq_hash = fdq_git.head.object.hexsha
+            fdq_dirty = fdq_git.is_dirty()
 
-            if vlf_dirty:
-                dirty_files = [f.b_path for f in vlf_git.index.diff(None)]
+            if fdq_dirty:
+                dirty_files = [f.b_path for f in fdq_git.index.diff(None)]
 
                 wprint("---------------------------------------------")
-                wprint("WARNING: vlf git repo is dirty!")
+                wprint("WARNING: fdq git repo is dirty!")
                 wprint(dirty_files)
                 wprint("---------------------------------------------")
                 time.sleep(5)
 
         except Exception:
-            wprint("Warning: Could not extract git hash for VLF!")
-            vlf_hash = "UNABLE TO LOCALIZE GIT REPO!"
+            wprint("Warning: Could not extract git hash for FDQ!")
+            fdq_hash = "UNABLE TO LOCALIZE GIT REPO!"
 
-    return vlf_hash, vlf_dirty, dirty_files
+    return fdq_hash, fdq_dirty, dirty_files
 
 
 def collect_processing_infos(experiment=None):
-    vlf_hash, vlf_dirty, dirty_files = collect_vlf_git_hash()
+    fdq_hash, fdq_dirty, dirty_files = collect_fdq_git_hash()
 
     try:
         sysname = os.uname()[1]
@@ -148,8 +279,8 @@ def collect_processing_infos(experiment=None):
         "Python V.": sys.version,
         "Torch V.": torch.__version__,
         "Cuda V.": torch.version.cuda,
-        "vlf-git": vlf_hash,
-        "git-is-dirty": vlf_dirty,
+        "fdq-git": fdq_hash,
+        "git-is-dirty": fdq_dirty,
         "dirty-files": dirty_files,
         "start_datetime": create_dt_string,
         "end_datetime": stop_dt_string,
@@ -166,9 +297,9 @@ def collect_processing_infos(experiment=None):
     if experiment.is_slurm:
         data["slurm_job_id"] = experiment.slurm_job_id
 
-    if experiment.resume_training_path is not None:
+    if experiment.inargs.resume_path is not None:
         data["job_continuation"] = True
-        data["job_continuation_chpt_path"] = experiment.resume_training_path
+        data["job_continuation_chpt_path"] = experiment.inargs.resume_path
         data["start_epoch"] = experiment.start_epoch
     else:
         data["job_continuation"] = False

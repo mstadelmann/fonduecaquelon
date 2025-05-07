@@ -101,7 +101,7 @@
     },
     "store": {
         "results_path": "~/data/ML_data/results",
-        "cluster_results_path": "/scratch/vlf_results",
+        "cluster_results_path": "/scratch/fdq_results",
         "save_last_model": true,
         "save_best_model": true
     },

@@ -52,14 +52,6 @@ def main() -> None:
     parser.add_argument(
         "-c", "-cleanup", dest="cleanup_results", default=False, action="store_true"
     )
-    parser.add_argument(
-        "-t",
-        "-tag",
-        dest="tag",
-        type=str,
-        default=None,
-        help="Add tag to results folder.",
-    )
 
     args = parser.parse_args()
     experiment = fdqExperiment(args)
@@ -101,7 +93,7 @@ def main() -> None:
     #         wprint("Failed to draw graph!")
     #         print(e)
 
-    if experiment.run_train:
+    if experiment.inargs.train_model:
         experiment.mode.train()
         experiment.prepareTraining()
 
@@ -109,11 +101,11 @@ def main() -> None:
 
         experiment.clean_up()
 
-    if experiment.run_test:
+    if experiment.inargs.test_model_auto or experiment.inargs.test_model_ia:
         experiment.mode.test()
         run_test(experiment)
 
-    # if experiment.run_dump:
+    # if experiment.inargs.dump_model:
     #     iprint("Dumping the best model of the last experiment")
     #     res_folder, net_name = find_model(experiment)
     #     experiment.load_models(os.path.join(res_folder, net_name))
