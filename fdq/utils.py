@@ -5,7 +5,6 @@ import os
 import subprocess as sp
 import sys
 import time
-from prettytable import PrettyTable
 from datetime import datetime
 
 import git

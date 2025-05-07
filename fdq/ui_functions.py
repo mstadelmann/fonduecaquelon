@@ -3,11 +3,6 @@ import progressbar
 import termplotlib as tpl  # this requires GNUplot!
 from colorama import init
 from termcolor import colored
-import os
-
-import numpy as np
-import torch
-from PIL import Image
 
 
 colorama_initialized = None

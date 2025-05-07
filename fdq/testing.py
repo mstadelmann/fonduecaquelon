@@ -207,6 +207,8 @@ def run_test(experiment):
     iprint("Starting Test...")
     iprint("-------------------------------------------")
 
+    experiment.mode.test()
+
     best_or_last = experiment.exp_def.test.get("test_model", "best")
 
     if experiment.mode.op_mode.unittest:

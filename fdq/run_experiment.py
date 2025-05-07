@@ -1,15 +1,13 @@
 import argparse
-import os
 import random
 import sys
 
 import numpy as np
 import torch
-from torchview import draw_graph
 
 from experiment import fdqExperiment
-from testing import run_test, find_model
-from ui_functions import iprint, wprint
+from testing import run_test
+from ui_functions import iprint
 
 
 def main() -> None:
@@ -49,9 +47,6 @@ def main() -> None:
         default=None,
         help="Path to checkpoint.",
     )
-    parser.add_argument(
-        "-c", "-cleanup", dest="cleanup_results", default=False, action="store_true"
-    )
 
     args = parser.parse_args()
     experiment = fdqExperiment(args)
@@ -64,9 +59,6 @@ def main() -> None:
         random.seed(random_seed)
         np.random.seed(random_seed)
         torch.manual_seed(random_seed)
-
-    # if experiment.inargs.cleanup_results:
-    #     experiment.cleanup_results()
 
     # if experiment.inargs.print_model:
     #     experiment.createModel()
@@ -94,15 +86,11 @@ def main() -> None:
     #         print(e)
 
     if experiment.inargs.train_model:
-        experiment.mode.train()
         experiment.prepareTraining()
-
         experiment.trainer.train(experiment)
-
         experiment.clean_up()
 
     if experiment.inargs.test_model_auto or experiment.inargs.test_model_ia:
-        experiment.mode.test()
         run_test(experiment)
 
     # if experiment.inargs.dump_model:

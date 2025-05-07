@@ -103,6 +103,7 @@ class fdqExperiment:
         self.models = {}
         self.inference_model_paths = {}
         self.optimizers = {}
+        self.lr_schedulers = {}
         self.losses = {}
         self.last_model_path = {}
         self.best_val_model_path = {}
@@ -284,11 +285,12 @@ class fdqExperiment:
         # self.copy_data_to_scratch()
 
     def prepareTraining(self):
+        self.mode.train()
         self.setupData()
         self.prepareTrainLoop()
         self.createModel()
         createOptimizer(self)
-        self.lr_scheduler = None  # set_lr_schedule(self)
+        set_lr_schedule(self)
         createLoss(self)
 
         if self.useAMP:
@@ -647,37 +649,6 @@ class fdqExperiment:
 
         return False
 
-    def cleanup_results(self):
-        """
-        Interactive function to remove experiments with low number of epochs.
-        """
-
-        epoch_th = getIntInput(
-            "Enter nb epochs threshold for cleanup.\n", drange=[0, 100]
-        )
-
-        experiment_res_path, subfolders = find_experiment_result_dirs(self)
-        subfolders_date_str = [s.split("__")[0] for s in subfolders]
-        subfolders_name = [
-            s.split("__")[1] if len(s.split("__")) > 1 else "" for s in subfolders
-        ]
-
-        for i, dir_date in enumerate(subfolders_date_str):
-            if subfolders_name[i] == "":
-                # works only for new naming scheme
-                continue
-            path = os.path.join(
-                experiment_res_path, dir_date + "__" + subfolders_name[i]
-            )
-
-            nb_epochs = get_nb_exp_epochs(path)
-            if nb_epochs <= epoch_th:
-                if getYesNoInput(
-                    f"Remove experiment \n{path}\nwith {nb_epochs} epochs? (y/n?)"
-                ):
-                    wprint(f"Removing {path}...")
-                    shutil.rmtree(path)
-
     def update_gradients(self, b_idx, loader_name, model_name):
         length_loader = self.data[loader_name].n_train_batches
 
@@ -692,15 +663,17 @@ class fdqExperiment:
 
     def finalize_epoch(self):
         # update learning rate
-        if self.lr_scheduler is not None:
-            current_LR = self.lr_scheduler.get_last_lr()
-            self.lr_scheduler.step()
-            new_LR = self.lr_scheduler.get_last_lr()
-            if current_LR != new_LR:
-                iprint(f"Updating LR. Old LR: {current_LR}, New LR: {new_LR}")
+        for model_name in self.models:
+            scheduler = self.lr_schedulers[model_name]
+            if scheduler is not None:
+                current_LR = scheduler.get_last_lr()
+                scheduler.step()
+                new_LR = scheduler.get_last_lr()
+                if current_LR != new_LR:
+                    iprint(f"Updating LR of {model_name} from {current_LR} to {new_LR}")
 
         # end of last epoch
-        elif self.current_epoch == self.nb_epochs - 1:
+        if self.current_epoch == self.nb_epochs - 1:
             self.finish_time = datetime.now()
             store_processing_infos(self)
 

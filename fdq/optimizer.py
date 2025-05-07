@@ -53,28 +53,29 @@ def createOptimizer(experiment):
 def set_lr_schedule(experiment):
     # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
     # https://towardsdatascience.com/a-visual-guide-to-learning-rate-schedulers-in-pytorch-24bbb262c863
-    targs = experiment.exp_def.train.args
 
-    if experiment.optimizer is None:
-        print("ERROR - optimizer must be set first!")
-        return None
+    for model_name, margs in experiment.exp_def.models:
+        if experiment.optimizers[model_name] is None:
+            raise ValueError(f"ERROR - optimizer for model {model_name} is not set!")
+        if margs.lr_scheduler is None:
+            experiment.lr_schedulers[model_name] = None
+            continue
 
-    lr_scheduler_name = oargs.get("lr_scheduler")
+        lr_scheduler_name = margs.lr_scheduler.name
 
-    if lr_scheduler_name is None:
-        return None
+        if lr_scheduler_name is None:
+            experiment.lr_schedulers[model_name] = None
+            continue
 
-    elif lr_scheduler_name == "step_lr":
-        # https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.StepLR.html#torch.optim.lr_scheduler.StepLR
-        # Period of learning rate decay.
-        step_size = oargs.get("lr_scheduler_step_size", 20)
-        # Multiplicative factor of learning rate decay.
-        gamma = oargs.get("lr_scheduler_gamma", 0.1)
-        return optim.lr_scheduler.StepLR(
-            experiment.optimizer, step_size=step_size, gamma=gamma
-        )
+        elif lr_scheduler_name == "step_lr":
+            # https://pytorch.org/docs/stable/generated/torch.optim.lr_scheduler.StepLR.html#torch.optim.lr_scheduler.StepLR
+            experiment.lr_schedulers[model_name] = optim.lr_scheduler.StepLR(
+                experiment.optimizers[model_name],
+                step_size=margs.lr_scheduler.step_size,
+                gamma=margs.lr_scheduler.gamma,
+            )
 
-    else:
-        raise NotImplementedError(
-            f"ERROR - LR scheduler {lr_scheduler_name} is currently not supported!"
-        )
+        else:
+            raise NotImplementedError(
+                f"ERROR - LR scheduler {lr_scheduler_name} is currently not supported!"
+            )

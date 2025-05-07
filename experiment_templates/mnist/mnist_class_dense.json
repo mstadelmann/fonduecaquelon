@@ -17,6 +17,11 @@
             "optimizer": {
                 "name": "adam",
                 "lr": 0.001
+            },
+            "lr_scheduler": {
+                "name": "step_lr",
+                "step_size": 2,
+                "gamma": 0.95
             }
         }
     },

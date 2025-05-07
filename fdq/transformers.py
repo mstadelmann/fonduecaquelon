@@ -248,7 +248,12 @@ def get_transformer(name):
         "Resize_HW": {"h": [int], "w": [int]},
         "CLAMP_abs": {"lower": [float, int], "upper": [float, int]},
         "CLAMP_perc": {"lower_perc": [float], "upper_perc": [float]},
-        "ReRange": {"in_min": [float, int], "in_max": [float, int], "out_min": [float, int], "out_max": [float, int]},
+        "ReRange": {
+            "in_min": [float, int],
+            "in_max": [float, int],
+            "out_min": [float, int],
+            "out_max": [float, int],
+        },
         "ReRange_minmax": {"out_min": [float, int], "out_max": [float, int]},
         "Rerange_log_squashed": {
             "in_min": [float, int],
@@ -263,7 +268,11 @@ def get_transformer(name):
             "out_max": [float, int],
         },
         "Gaussian_Blur": {"blur_kernel_size": int, "blur_sigma": float},
-        "Padding": {"padding_size": [list, int], "padding_mode": [str], "padding_value": [int]},
+        "Padding": {
+            "padding_size": [list, int],
+            "padding_mode": [str],
+            "padding_value": [int],
+        },
         "UnPadding": {"padding_size": [list, int]},
         "ADD": {"value": [float, int]},
         "MULT": {"value": [float, int]},
@@ -273,23 +282,31 @@ def get_transformer(name):
     if isinstance(name, dict):
         keys = list(name.keys())
         if len(keys) != 1:
-            raise ValueError(f"Transformation {name} does not correspond to the expected format!")
+            raise ValueError(
+                f"Transformation {name} does not correspond to the expected format!"
+            )
         transformer_name = keys[0]
         parameters = name[transformer_name]
     elif isinstance(name, str):
         transformer_name = name
         parameters = None
     else:
-        raise ValueError(f"Transformation {name} does not correspond to the expected format!")
+        raise ValueError(
+            f"Transformation {name} does not correspond to the expected format!"
+        )
 
     required_params = all_required_params.get(transformer_name, {})
 
     # check if all required parameters are present and datatypes are correct
     for req_param, req_type in required_params.items():
         if req_param not in parameters:
-            raise ValueError(f"Parameter {req_param} is missing for transformation {transformer_name}.")
+            raise ValueError(
+                f"Parameter {req_param} is missing for transformation {transformer_name}."
+            )
         if type(parameters[req_param]) not in req_type:
-            raise ValueError(f"Parameter {req_param} for transformation {transformer_name} is not correct.")
+            raise ValueError(
+                f"Parameter {req_param} for transformation {transformer_name} is not correct."
+            )
 
     if transformer_name == "Stack3D":
         stack_n = parameters.get("stack_n")
@@ -297,7 +314,9 @@ def get_transformer(name):
         transformer = transforms.Lambda(lambda t: torch.stack([t] * stack_n, dim=2))
 
     elif transformer_name == "Resize_HW":
-        transformer = transforms.Resize((parameters.get("h"), parameters.get("w")), antialias=True)
+        transformer = transforms.Resize(
+            (parameters.get("h"), parameters.get("w")), antialias=True
+        )
 
     elif transformer_name == "RandomHorizontalFlip":
         transformer = transforms.RandomHorizontalFlip()
@@ -336,10 +355,14 @@ def get_transformer(name):
         transformer = transforms.Lambda(lambda t: torch.exp(t))
 
     elif transformer_name == "RGB_Normalize":
-        transformer = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        transformer = transforms.Normalize(
+            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+        )
 
     elif transformer_name == "CLAMP_abs":
-        transformer = transforms.Lambda(lambda t: torch.clamp(t, parameters.get("lower"), parameters.get("upper")))
+        transformer = transforms.Lambda(
+            lambda t: torch.clamp(t, parameters.get("lower"), parameters.get("upper"))
+        )
 
     elif transformer_name == "CLAMP_perc":
 
@@ -366,47 +389,63 @@ def get_transformer(name):
         in_max = parameters.get("in_max")
         out_min = parameters.get("out_min")
         out_max = parameters.get("out_max")
-        transformer = transforms.Lambda(lambda t: ((t - in_min) * (out_max - out_min)) / (in_max - in_min) + out_min)
+        transformer = transforms.Lambda(
+            lambda t: ((t - in_min) * (out_max - out_min)) / (in_max - in_min) + out_min
+        )
 
     elif transformer_name == "Rerange_log_squashed":
         in_min = parameters.get("in_min")
         in_max = parameters.get("in_max")
         out_min = parameters.get("out_min")
         out_max = parameters.get("out_max")
-        transformer = transforms.Lambda(lambda t: rerange_log_squashed(t, in_min, in_max, out_min, out_max))
+        transformer = transforms.Lambda(
+            lambda t: rerange_log_squashed(t, in_min, in_max, out_min, out_max)
+        )
 
     elif transformer_name == "Inverse_Rerange_log_squashed":
         in_min = parameters.get("in_min")
         in_max = parameters.get("in_max")
         out_min = parameters.get("out_min")
         out_max = parameters.get("out_max")
-        transformer = transforms.Lambda(lambda t: inverse_rerange_log_squashed(t, in_min, in_max, out_min, out_max))
+        transformer = transforms.Lambda(
+            lambda t: inverse_rerange_log_squashed(t, in_min, in_max, out_min, out_max)
+        )
 
     elif transformer_name == "Rerange_log10_squashed":
         in_min = parameters.get("in_min")
         in_max = parameters.get("in_max")
         out_min = parameters.get("out_min")
         out_max = parameters.get("out_max")
-        transformer = transforms.Lambda(lambda t: rerange_log10_squashed(t, in_min, in_max, out_min, out_max))
+        transformer = transforms.Lambda(
+            lambda t: rerange_log10_squashed(t, in_min, in_max, out_min, out_max)
+        )
 
     elif transformer_name == "Inverse_Rerange_log10_squashed":
         in_min = parameters.get("in_min")
         in_max = parameters.get("in_max")
         out_min = parameters.get("out_min")
         out_max = parameters.get("out_max")
-        transformer = transforms.Lambda(lambda t: inverse_rerange_log10_squashed(t, in_min, in_max, out_min, out_max))
+        transformer = transforms.Lambda(
+            lambda t: inverse_rerange_log10_squashed(
+                t, in_min, in_max, out_min, out_max
+            )
+        )
 
     elif transformer_name == "ReRange_minmax":
         out_min = parameters.get("out_min")
         out_max = parameters.get("out_max")
-        transformer = transforms.Lambda(lambda t: ((t - t.min()) * (out_max - out_min)) / (t.max() - t.min()) + out_min)
+        transformer = transforms.Lambda(
+            lambda t: ((t - t.min()) * (out_max - out_min)) / (t.max() - t.min())
+            + out_min
+        )
 
     elif transformer_name == "RGB2GRAY":
         transformer = transforms.Grayscale(num_output_channels=1)
 
     elif transformer_name == "Gaussian_Blur":
         transformer = transforms.GaussianBlur(
-            kernel_size=parameters.get("blur_kernel_size"), sigma=parameters.get("blur_sigma")
+            kernel_size=parameters.get("blur_kernel_size"),
+            sigma=parameters.get("blur_sigma"),
         )
 
     elif transformer_name == "Padding":
@@ -431,7 +470,9 @@ def get_transformer(name):
         )
 
     elif transformer_name == "UnPadding":
-        transformer = transforms.Lambda(lambda t: remove_padding(t, pad=parameters.get("padding_size")))
+        transformer = transforms.Lambda(
+            lambda t: remove_padding(t, pad=parameters.get("padding_size"))
+        )
 
     elif transformer_name == "NOP":
         transformer = transforms.Lambda(lambda t: t)
@@ -439,24 +480,34 @@ def get_transformer(name):
     elif transformer_name == "FFT":
         # pylint: disable=W0108
         # fft and split real and imaginary parts into channel
-        transformer = transforms.Lambda(lambda t: torch.stack([torch.fft.fftn(t).real, torch.fft.fftn(t).imag], dim=0))
+        transformer = transforms.Lambda(
+            lambda t: torch.stack(
+                [torch.fft.fftn(t).real, torch.fft.fftn(t).imag], dim=0
+            )
+        )
 
     elif transformer_name == "IFFT":
         # pylint: disable=W0108
         # ifft transform from fourier space to real space
-        transformer = transforms.Lambda(lambda t: torch.abs(torch.fft.ifftn((t[0] + 1j * t[1]))))
+        transformer = transforms.Lambda(
+            lambda t: torch.abs(torch.fft.ifftn((t[0] + 1j * t[1])))
+        )
 
     elif transformer_name == "FFT_log":
         # pylint: disable=W0108
         # fft and split real and imaginary parts into channel
         transformer = transforms.Lambda(
-            lambda t: torch.stack([torch.fft.fftn(t).log().real, torch.fft.fftn(t).log().imag], dim=0)
+            lambda t: torch.stack(
+                [torch.fft.fftn(t).log().real, torch.fft.fftn(t).log().imag], dim=0
+            )
         )
 
     elif transformer_name == "IFFT_exp":
         # pylint: disable=W0108
         # ifft transform from fourier space to real space
-        transformer = transforms.Lambda(lambda t: torch.abs(torch.fft.ifftn((t[0] + 1j * t[1]).exp())))
+        transformer = transforms.Lambda(
+            lambda t: torch.abs(torch.fft.ifftn((t[0] + 1j * t[1]).exp()))
+        )
 
     else:
         raise ValueError(f"Transformation {name} is not supported!")
@@ -500,7 +551,9 @@ def create_transformers(experiment):
     # HDF loader specific:
     # the hdf loader allows to specify instead of a list also a dict of transformations for each group
     hdf_ds_key_request_all = experiment.data_params.get("hdf_ds_key_request", [])
-    hdf_ds_key_request_test = experiment.data_params.get("hdf_ds_key_request_test", None)
+    hdf_ds_key_request_test = experiment.data_params.get(
+        "hdf_ds_key_request_test", None
+    )
 
     if hdf_ds_key_request_test is None:
         hdf_ds_key_request_test = hdf_ds_key_request_all
@@ -522,16 +575,36 @@ def create_transformers(experiment):
         DEFAULT_TRANSFORM_TEST = DEFAULT_TRANSFORM
 
     transform_config = {
-        "train_a": experiment.data_params.get("dataset_transforms_train_a", DEFAULT_TRANSFORM_TRAIN),
-        "train_b": experiment.data_params.get("dataset_transforms_train_b", DEFAULT_TRANSFORM_TRAIN),
-        "val_a": experiment.data_params.get("dataset_transforms_val_a", DEFAULT_TRANSFORM_TRAIN),
-        "val_b": experiment.data_params.get("dataset_transforms_val_b", DEFAULT_TRANSFORM_TRAIN),
-        "test_a": experiment.data_params.get("dataset_transforms_test_a", DEFAULT_TRANSFORM_TEST),
-        "test_b": experiment.data_params.get("dataset_transforms_test_b", DEFAULT_TRANSFORM_TEST),
-        "eval_a": experiment.data_params.get("dataset_transforms_eval_a", DEFAULT_TRANSFORM),
-        "eval_b": experiment.data_params.get("dataset_transforms_eval_b", DEFAULT_TRANSFORM),
-        "export": experiment.data_params.get("dataset_transforms_export", DEFAULT_TRANSFORM),
-        "sampling": experiment.data_params.get("dataset_transforms_sampling", DEFAULT_TRANSFORM),
+        "train_a": experiment.data_params.get(
+            "dataset_transforms_train_a", DEFAULT_TRANSFORM_TRAIN
+        ),
+        "train_b": experiment.data_params.get(
+            "dataset_transforms_train_b", DEFAULT_TRANSFORM_TRAIN
+        ),
+        "val_a": experiment.data_params.get(
+            "dataset_transforms_val_a", DEFAULT_TRANSFORM_TRAIN
+        ),
+        "val_b": experiment.data_params.get(
+            "dataset_transforms_val_b", DEFAULT_TRANSFORM_TRAIN
+        ),
+        "test_a": experiment.data_params.get(
+            "dataset_transforms_test_a", DEFAULT_TRANSFORM_TEST
+        ),
+        "test_b": experiment.data_params.get(
+            "dataset_transforms_test_b", DEFAULT_TRANSFORM_TEST
+        ),
+        "eval_a": experiment.data_params.get(
+            "dataset_transforms_eval_a", DEFAULT_TRANSFORM
+        ),
+        "eval_b": experiment.data_params.get(
+            "dataset_transforms_eval_b", DEFAULT_TRANSFORM
+        ),
+        "export": experiment.data_params.get(
+            "dataset_transforms_export", DEFAULT_TRANSFORM
+        ),
+        "sampling": experiment.data_params.get(
+            "dataset_transforms_sampling", DEFAULT_TRANSFORM
+        ),
     }
 
     experiment.transform_config = transform_config
@@ -559,8 +632,12 @@ def create_transformers(experiment):
 
         if mode in ["sampling", "export", "eval_a", "eval_b"]:
             if isinstance(transform_def, dict):
-                raise ValueError(f"dataset_transforms_{mode} has to be defined as a list (not per dataset key)!")
-            transformers[mode] = transforms.Compose([get_transformer(t) for t in transform_def])
+                raise ValueError(
+                    f"dataset_transforms_{mode} has to be defined as a list (not per dataset key)!"
+                )
+            transformers[mode] = transforms.Compose(
+                [get_transformer(t) for t in transform_def]
+            )
 
         elif len(hdf_ds_key_request) == 0:
             if isinstance(transform_def, dict):
@@ -569,17 +646,23 @@ def create_transformers(experiment):
                     "but the transformations are defined per hdf_ds_key!"
                     f"current mode: {mode}"
                 )
-            transformers[mode] = transforms.Compose([get_transformer(t) for t in transform_def])
+            transformers[mode] = transforms.Compose(
+                [get_transformer(t) for t in transform_def]
+            )
 
         else:
             if not isinstance(transform_def, dict):
-                raise ValueError(f"Transformations have to be written as dict per hdf_ds_key_request. (Mode: {mode})")
+                raise ValueError(
+                    f"Transformations have to be written as dict per hdf_ds_key_request. (Mode: {mode})"
+                )
 
             transforms_dict = {}
             for ds_key in hdf_ds_key_request:
                 ds_transform = transform_def.get(ds_key, [])
                 if len(ds_transform) > 0:
-                    transforms_dict[ds_key] = transforms.Compose([get_transformer(t) for t in ds_transform])
+                    transforms_dict[ds_key] = transforms.Compose(
+                        [get_transformer(t) for t in ds_transform]
+                    )
             transformers[mode] = transforms_dict
 
     experiment.trainTransformer_a = transformers.get("train_a", None)
