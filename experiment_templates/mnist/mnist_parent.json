@@ -17,7 +17,7 @@
                 "num_workers": 4,
                 "train_batch_size": 32,
                 "val_batch_size": 32,
-                "test_batch_size": 32,
+                "test_batch_size": 1,
                 "shuffle_train": true,
                 "shuffle_val": false,
                 "shuffle_test": false
@@ -33,13 +33,12 @@
         "save_best_train_model": true,
         "checkpoint_frequency": 2
     },
-    "eval": {
-        "evaluator": "eval_loop.py",
+    "test": {
+        "evaluator": "/home/marc/dev/fonduecaquelon/experiment_templates/mnist/mnist_test.py",
+        "test_model": "best",
         "args": {
-            "val_batch_size": 1,
             "metrics": {
-                "METRIC_NAME_1": "dice",
-                "METRIC_NAME_2": "hausdorff"
+                "nb_test_samples": "100"
             }
         }
     }

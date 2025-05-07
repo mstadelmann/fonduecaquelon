@@ -7,8 +7,8 @@ import numpy as np
 import torch
 from torchview import draw_graph
 
-from experiment import fdqExperiment, FCQmode
-from testing import run_test, find_model_and_weights
+from experiment import fdqExperiment
+from testing import run_test, find_model
 from ui_functions import iprint, wprint
 
 
@@ -102,7 +102,7 @@ def main() -> None:
     #         print(e)
 
     if experiment.run_train:
-        experiment.mode = FCQmode.TRAIN
+        experiment.mode.train()
         experiment.prepareTraining()
 
         experiment.trainer.train(experiment)
@@ -110,14 +110,14 @@ def main() -> None:
         experiment.clean_up()
 
     if experiment.run_test:
-        experiment.mode = FCQmode.TEST
+        experiment.mode.test()
         run_test(experiment)
 
-    if experiment.run_dump:
-        iprint("Dumping the best model of the last experiment")
-        res_folder, net_name = find_model_and_weights(experiment)
-        experiment.load_model(os.path.join(res_folder, net_name))
-        experiment.dump_model(res_folder)
+    # if experiment.run_dump:
+    #     iprint("Dumping the best model of the last experiment")
+    #     res_folder, net_name = find_model(experiment)
+    #     experiment.load_models(os.path.join(res_folder, net_name))
+    #     experiment.dump_model(res_folder)
 
     iprint("done")
 

@@ -105,7 +105,7 @@
         "save_last_model": true,
         "save_best_model": true
     },
-    "eval": {
+    "test": {
         "evaluator": "eval_loop.py",
         "args": {
             "val_batch_size": 1,

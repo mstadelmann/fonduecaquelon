@@ -27,15 +27,74 @@ from misc import save_train_history
 from tqdm import tqdm
 
 
-class FCQmode(Enum):
-    """
-    Defines the current operating modus.
-    """
+class FCQmode:
+    def __init__(self) -> None:
+        self._op_mode = "init"
+        self.allowed_op_modes = [
+            "init",  # initial state
+            "train",  # training mode
+            "unittest",  # running unit tests
+            "test",  # testing
+        ]
+        self._test_mode = "best"
+        self.allowed_test_modes = [
+            "best",  # test best model from last experiment - DEFAULT!
+            "last",  # test last trained model from last experiment
+            "custom_last",  # test last model from selected experiment
+            "custom_best",  # test best model from selected experiment
+            "custom_path",  # test with manually defined model path
+        ]
 
-    TRAIN = "train"
-    TEST = "test"
-    NONE = "none"
-    UNITTEST = "unittest"
+        # Dynamically create setter methods
+        for mode in self.allowed_op_modes:
+            setattr(self, mode, self._create_setter("_op_mode", mode))
+
+        for mode in self.allowed_test_modes:
+            setattr(self, mode, self._create_setter("_test_mode", mode))
+
+    def __repr__(self):
+        if self._op_mode == "test":
+            return f"<{self.__class__.__name__}: {self._op_mode} / {self._test_mode}>"
+        else:
+            return f"<{self.__class__.__name__}: {self._op_mode}>"
+
+    @property
+    def op_mode(self):
+        class OpMode:
+            def __init__(self, parent):
+                self.parent = parent
+
+            def __repr__(self):
+                return f"<{self.__class__.__name__}: {self.parent._op_mode}>"
+
+            def __getattr__(self, name):
+                if name in self.parent.allowed_op_modes:
+                    return self.parent._op_mode == name
+                raise AttributeError(f"'OpMode' object has no attribute '{name}'")
+
+        return OpMode(self)
+
+    @property
+    def test_mode(self):
+        class TestMode:
+            def __init__(self, parent):
+                self.parent = parent
+
+            def __repr__(self):
+                return f"<{self.__class__.__name__}: {self.parent._test_mode}>"
+
+            def __getattr__(self, name):
+                if name in self.parent.allowed_test_modes:
+                    return self.parent._test_mode == name
+                raise AttributeError(f"'TestMode' object has no attribute '{name}'")
+
+        return TestMode(self)
+
+    def _create_setter(self, attribute, value):
+        def setter():
+            setattr(self, attribute, value)
+
+        return setter
 
 
 def recursive_dict_update(d_parent, d_child):
@@ -158,6 +217,7 @@ class fdqExperiment:
         self.exp_def = DictToObj(self.exp_file)
         self.data = {}
         self.models = {}
+        self.inference_model_paths = {}
         self.optimizers = {}
         self.losses = {}
 
@@ -165,33 +225,19 @@ class fdqExperiment:
         self.finish_time = None
         self.run_time = None
 
-        self.mode = FCQmode.NONE
-        self.test_mode = None
+        self.mode = FCQmode()
 
         self.run_info = {}
 
         # INPUT PARSER SETTINGS
         self.run_train = self.inargs.train_model
-        self.run_test = False
-        self.run_test_auto = False
-
-        # self.run_test = bool(
-        #     self.inargs.test_model_auto
-        #     or self.inargs.test_model
-        #     or self.inargs.test_model_auto_last
-        # )
-        # self.run_test_auto = (
-        #     self.inargs.test_model_auto or self.inargs.test_model_auto_last
-        # )
-        # self.test_model_auto_last = (
-        #     self.inargs.test_model_auto_last
-        # )  # run auto test with last instead best model
+        self.run_test = self.inargs.test_model_auto or self.inargs.test_model_ia
 
         self.run_dump = self.inargs.dump_model
         self.resume_training_path = self.inargs.resume_path
 
         # EXP FILE SETTINGS
-        self.project = self.exp_def.globals.project
+        self.project = self.exp_def.globals.project.replace(" ", "_")
         self.experimentName = self.experiment_file_path.split("/")[-1].split(".json")[0]
         self.funky_name = None
 
@@ -207,6 +253,8 @@ class fdqExperiment:
         self.best_train_model_path = {}
         self.checkpoint_path = None
         self._results_dir = None
+
+        self._test_dir = None
 
         self.useTensorboard = self.exp_file.get("store", {}).get("tensorboard", False)
         self.useWandb = self.exp_file.get("store", {}).get("use_wandb", False)
@@ -297,14 +345,22 @@ class fdqExperiment:
             self.data[data_name] = DictToObj(processor.createDatasets(self))
 
     def runEvaluator(self):
-        if self.evaluatorName is None:
-            raise ValueError("ERROR, no valid evaluator defined.")
+        evaluator_path = self.exp_def.test.evaluator
 
-        currentEvaluator = importlib.import_module(f"evaluator.{self.evaluatorName}")
+        if not os.path.exists(evaluator_path):
+            raise FileNotFoundError(f"Evaluator file not found: {evaluator_path}")
+
+        parent_dir = os.path.dirname(evaluator_path)
+        if parent_dir not in sys.path:
+            sys.path.append(parent_dir)
+
+        module_name = os.path.splitext(os.path.basename(evaluator_path))[0]
+        currentEvaluator = importlib.import_module(module_name)
+
         return currentEvaluator.createEvaluator(self)
 
-    def createModel(self):
-        for model_name, model_source in self.exp_def.models.items():
+    def createModel(self, instantiate=True):
+        for model_name, model_source in self.exp_def.models:
             model_path = model_source.name
 
             if not os.path.exists(model_path):
@@ -323,7 +379,8 @@ class fdqExperiment:
 
             module_name = os.path.splitext(os.path.basename(model_path))[0]
             model = importlib.import_module(module_name)
-            self.models[model_name] = model.createNetwork(self).to(self.device)
+            if instantiate:
+                self.models[model_name] = model.createNetwork(self).to(self.device)
 
     def copy_data_to_scratch(self):
         """
@@ -516,39 +573,6 @@ class fdqExperiment:
             self.new_best_train_loss = self.bestTrainLoss == value
             self.new_best_train_loss_ep_id = self.current_epoch
 
-    @property
-    def mode(self):
-        return self._mode
-
-    @mode.setter
-    def mode(self, new_mode):
-        self._mode = FCQmode(new_mode)
-
-    @property
-    def img_export_dims(self):
-        return self._img_export_dims
-
-    @img_export_dims.setter
-    def img_export_dims(self, value):
-        if isinstance(value, str):
-            if value not in ["D", "W", "H"]:
-                raise ValueError(
-                    f"Error, img_export_dims has to be D, W, H, or a list of these. Provided value: {value}"
-                )
-            self._img_export_dims = [value]
-
-        elif isinstance(value, list):
-            if not all(s in ["D", "W", "H"] for s in value):
-                raise ValueError(f"Error, img_export_dims {value} is not supported.")
-            self._img_export_dims = value
-        else:
-            raise ValueError(
-                "Error, img_export_dims has to be an char or a list of chars"
-            )
-
-        if not self.data_is_3d and self._img_export_dims != ["D"]:
-            raise ValueError("Custom slicing is not supported in 2D experiments!")
-
     def cp_to_res_dir(self, file_path):
         fn = file_path.split("/")[-1]
         iprint(f"Saving {fn} to {self.results_dir}...")
@@ -637,7 +661,7 @@ class fdqExperiment:
                 remove_file(self.last_model_path.get(model_name))
                 self.last_model_path[model_name] = os.path.join(
                     self.results_dir,
-                    f"last_model_{model_name}_e{self.current_epoch}.fdqm",
+                    f"last_{model_name}_e{self.current_epoch}.fdqm",
                 )
                 torch.save(model, self.last_model_path[model_name])
 
@@ -659,7 +683,7 @@ class fdqExperiment:
             # this might be useful if we use dummy validation losses like in diffusion
             best_train_model_path = os.path.join(
                 self.results_dir,
-                f"best_train_{model_name}_e{self.current_epoch}.fdq",
+                f"best_train_{model_name}_e{self.current_epoch}.fdqm",
             )
             if (
                 self.current_epoch == self.start_epoch
@@ -670,15 +694,15 @@ class fdqExperiment:
                 self.best_train_model_path[model_name] = best_train_model_path
                 torch.save(model, best_train_model_path)
 
-    def load_model(self, path):
-        iprint(f"Loading model from {path}")
-        self.model = torch.load(path).to(self.device)
-        self.model.eval()
-
-    def load_weights(self, path):
-        iprint(f"Loading weights from {path}")
-        self.model.load_state_dict(torch.load(path))
-        self.model.eval()
+    def load_models(self):
+        self.createModel(instantiate=False)
+        for model_name, _ in self.exp_def.models:
+            path = self.inference_model_paths[model_name]
+            iprint(f"Loading model {model_name} from {path}")
+            self.models[model_name] = torch.load(path, weights_only=False).to(
+                self.device
+            )
+            self.models[model_name].eval()
 
     def dump_model(self, res_folder=None):
         # https://pytorch.org/tutorials/advanced/cpp_export.html
@@ -701,20 +725,7 @@ class fdqExperiment:
         traced_script_module.save(os.path.join(res_folder, "serialized_model.vlfpt"))
 
     def get_next_export_fn(self, name=None, file_ending="jpg"):
-        if self.mode in (FCQmode.TRAIN, FCQmode.UNITTEST):
-            if name is None:
-                path = os.path.join(
-                    self.results_output_dir,
-                    f"out_e{self.current_epoch:02}_{self.train_output_id:02}.{file_ending}",
-                )
-            else:
-                path = os.path.join(
-                    self.results_output_dir,
-                    f"out_e{self.current_epoch:02}_{self.train_output_id:02}__{name}.{file_ending}",
-                )
-            self.train_output_id += 1
-
-        elif self.mode == FCQmode.TEST:
+        if self.mode.is_test():
             if name is None:
                 path = os.path.join(
                     self.test_dir, f"test_image_{self.test_output_id:02}.{file_ending}"
@@ -728,7 +739,17 @@ class fdqExperiment:
             self.test_output_id += 1
 
         else:
-            raise ValueError("Error, unknown FCQmode.")
+            if name is None:
+                path = os.path.join(
+                    self.results_output_dir,
+                    f"out_e{self.current_epoch:02}_{self.train_output_id:02}.{file_ending}",
+                )
+            else:
+                path = os.path.join(
+                    self.results_output_dir,
+                    f"out_e{self.current_epoch:02}_{self.train_output_id:02}__{name}.{file_ending}",
+                )
+            self.train_output_id += 1
 
         return path
 
