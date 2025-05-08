@@ -7,7 +7,7 @@ from img_func import (
     save_wandb_loss,
 )
 from ui_functions import show_train_progress, startProgBar, iprint
-from utils import print_nb_weights
+from misc import print_nb_weights
 
 
 def train(experiment: fdqExperiment) -> None:

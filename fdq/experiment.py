@@ -1,35 +1,28 @@
-import argparse
-import importlib
-import json
 import os
 import sys
-import shutil
+import json
 import math
-from datetime import datetime
-from typing import List
-import funkybob
-
-
 import torch
 import wandb
-
+import shutil
+import argparse
+import importlib
+import funkybob
+from tqdm import tqdm
+from typing import List
+from datetime import datetime
 from lossFunctions import createLoss
+from ui_functions import iprint, wprint
 from optimizer import createOptimizer, set_lr_schedule
-
-from utils import (
+from misc import (
     remove_file,
     store_processing_infos,
     FCQmode,
     recursive_dict_update,
     DictToObj,
     replace_tilde_with_abs_path,
+    save_train_history,
 )
-from ui_functions import iprint, wprint
-
-from misc import save_train_history
-
-
-from tqdm import tqdm
 
 
 class fdqExperiment:
