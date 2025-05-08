@@ -35,53 +35,7 @@ from tqdm import tqdm
 class fdqExperiment:
     def __init__(self, inargs: argparse.Namespace) -> None:
         self.inargs = inargs
-        self.experiment_file_path = self.inargs.experimentfile
-
-        with open(self.experiment_file_path, "r", encoding="utf8") as fp:
-            try:
-                self.exp_file = json.load(fp)
-            except Exception as exc:
-                raise ValueError(
-                    f"Error loading experiment file {self.experiment_file_path} (check syntax?)."
-                ) from exc
-
-        self.globals = self.exp_file.get("globals")
-        if self.globals is None:
-            raise ValueError(
-                f"Error: experiment file does not comply - please check template! {self.experiment_file_path}."
-            )
-
-        parent = self.globals.get("parent", {})
-        # parent must be in same directory or defined with absolute path
-        if parent is not None:
-            if parent[0] == "/":
-                self.parent_file_path = parent
-            else:
-                self.parent_file_path = os.path.abspath(
-                    os.path.join(os.path.split(self.experiment_file_path)[0], parent)
-                )
-
-            if not os.path.exists(self.parent_file_path):
-                raise FileNotFoundError(
-                    f"Error: File {self.parent_file_path} not found."
-                )
-
-            with open(self.parent_file_path, "r", encoding="utf8") as fp:
-                try:
-                    parent_expfile = json.load(fp)
-                except Exception as exc:
-                    raise ValueError(
-                        f"Error loading experiment file {self.parent_file_path} (check syntax?)."
-                    ) from exc
-
-            self.exp_file = recursive_dict_update(
-                d_parent=parent_expfile, d_child=self.exp_file
-            )
-
-        else:
-            self.parent_file_path = None
-        replace_tilde_with_abs_path(self.exp_file)
-        self.exp_def = DictToObj(self.exp_file)
+        self.parse_and_clean_args()
         # ------------- GLOBALS ------------------------------
         self.project = self.exp_def.globals.project.replace(" ", "_")
         self.experimentName = self.experiment_file_path.split("/")[-1].split(".json")[0]
@@ -153,6 +107,55 @@ class fdqExperiment:
             wprint("NO CUDA available - CPU mode")
             self.device = torch.device("cpu")
             self.is_cuda = False
+
+    def parse_and_clean_args(self):
+        self.experiment_file_path = self.inargs.experimentfile
+
+        with open(self.experiment_file_path, "r", encoding="utf8") as fp:
+            try:
+                self.exp_file = json.load(fp)
+            except Exception as exc:
+                raise ValueError(
+                    f"Error loading experiment file {self.experiment_file_path} (check syntax?)."
+                ) from exc
+
+        self.globals = self.exp_file.get("globals")
+        if self.globals is None:
+            raise ValueError(
+                f"Error: experiment file does not comply - please check template! {self.experiment_file_path}."
+            )
+
+        parent = self.globals.get("parent", {})
+        # parent must be in same directory or defined with absolute path
+        if parent is not None:
+            if parent[0] == "/":
+                self.parent_file_path = parent
+            else:
+                self.parent_file_path = os.path.abspath(
+                    os.path.join(os.path.split(self.experiment_file_path)[0], parent)
+                )
+
+            if not os.path.exists(self.parent_file_path):
+                raise FileNotFoundError(
+                    f"Error: File {self.parent_file_path} not found."
+                )
+
+            with open(self.parent_file_path, "r", encoding="utf8") as fp:
+                try:
+                    parent_expfile = json.load(fp)
+                except Exception as exc:
+                    raise ValueError(
+                        f"Error loading experiment file {self.parent_file_path} (check syntax?)."
+                    ) from exc
+
+            self.exp_file = recursive_dict_update(
+                d_parent=parent_expfile, d_child=self.exp_file
+            )
+
+        else:
+            self.parent_file_path = None
+        replace_tilde_with_abs_path(self.exp_file)
+        self.exp_def = DictToObj(self.exp_file)
 
     def setupData(self):
         for data_name, data_source in self.exp_def.data.items():

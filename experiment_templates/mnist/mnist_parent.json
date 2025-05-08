@@ -6,7 +6,7 @@
     },
     "data": {
         "MNIST": {
-            "processor": " ~/dev/fonduecaquelon/experiment_templates/mnist/mnist_preparator.py",
+            "processor": "~/dev/fonduecaquelon/experiment_templates/mnist/mnist_preparator.py",
             "args": {
                 "preparatorName": "mnist_class_preparator",
                 "base_path": "~/data/ML_data/mnist_from_torchvision/",
@@ -34,7 +34,7 @@
         "checkpoint_frequency": 2
     },
     "test": {
-        "evaluator": " ~/dev/fonduecaquelon/experiment_templates/mnist/mnist_test.py",
+        "evaluator": "~/dev/fonduecaquelon/experiment_templates/mnist/mnist_test.py",
         "test_model": "best",
         "args": {
             "metrics": {
