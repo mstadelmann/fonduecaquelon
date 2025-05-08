@@ -22,6 +22,7 @@ from utils import (
     FCQmode,
     recursive_dict_update,
     DictToObj,
+    replace_tilde_with_abs_path,
 )
 from ui_functions import iprint, wprint
 
@@ -79,6 +80,7 @@ class fdqExperiment:
 
         else:
             self.parent_file_path = None
+        replace_tilde_with_abs_path(self.exp_file)
         self.exp_def = DictToObj(self.exp_file)
         # ------------- GLOBALS ------------------------------
         self.project = self.exp_def.globals.project.replace(" ", "_")

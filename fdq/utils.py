@@ -145,6 +145,18 @@ class DictToObj:
         return res
 
 
+def replace_tilde_with_abs_path(d):
+    """
+    Recursively traverse a dictionary and replace string values starting with "~/"
+    with their absolute paths.
+    """
+    for key, value in d.items():
+        if isinstance(value, dict):
+            replace_tilde_with_abs_path(value)
+        elif isinstance(value, str) and value.startswith("~/"):
+            d[key] = os.path.expanduser(value)
+
+
 def print_nb_weights(experiment, show_details=False):
     for model_name, model in experiment.models.items():
         iprint("----------------------------------")
