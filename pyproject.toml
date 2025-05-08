@@ -1,0 +1,59 @@
+[project]
+name = "fonduecaquelon"
+dynamic = ["version"]
+license = { file = "LICENSE" }
+authors = [
+  { name = "Marc Stadelmann", email = "stdma@pm.me" },
+]
+maintainers = [{ name = "Marc Stadelmann", email = "stdma@pm.me" }]
+description = "ML runtime (https://pypi.org/project/fonduecaquelon/)"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "chuchichaestli==0.2.7",
+  "torch==2.7.0",
+  "torchvision==0.22.0",
+  "torchview==0.2.7",
+  "funkybob==2023.12.0",
+  "wandb==0.19.10",
+  "monai==1.4.0",
+  "progressbar==2.5",
+  "tpl==0.10",
+  "termplotlib==0.3.9",
+  "colorama==0.4.6",
+  "termcolor==3.1.0",
+  "matplotlib==3.10.1",
+  "scikit-learn==1.6.1",
+  "tensorboard==2.19.0",
+  "opencv-python==4.11.0.86",
+  "ruff==0.11.8",
+]
+[project.optional-dependencies]
+dev = ["ruff==0.11.8", "pre-commit==3.7.0", "pytest==8.1.1"]
+
+[dependency-groups]
+dev = ["ruff==0.11.8", "pre-commit==3.7.0", "pytest==8.1.1"]
+
+[project.urls]
+Homepage = "https://github.com/mstadelmann/fonduecaquelon"
+Repository = "https://github.com/mstadelmann/fonduecaquelon.git"
+Issues = "https://github.com/mstadelmann/fonduecaquelon/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/fdq/__about__.py"
+
+[tool.hatch.envs.test]
+dependencies = ["pytest", "pytest-cov"]
+
+[tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+
