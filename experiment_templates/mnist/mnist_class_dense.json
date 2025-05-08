@@ -7,7 +7,7 @@
     },
     "models": {
         "simpleNet": {
-            "name": "simpleNet.py",
+            "name": "/home/marc/dev/fonduecaquelon/src/networks/simpleNet.py",
             "nb_in_channels": 1,
             "nb_out_channels": 10,
             "input_shape": [
