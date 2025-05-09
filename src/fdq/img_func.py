@@ -13,9 +13,9 @@ from torchvision.utils import make_grid, save_image
 import cv2
 
 # from evaluator.evaluator_common import compute_histo
-from ui_functions import iprint, wprint, eprint
+from fdq.ui_functions import iprint, wprint, eprint
 
-import transformers
+import fdq.transformers
 
 from typing import Sequence
 from PIL import Image

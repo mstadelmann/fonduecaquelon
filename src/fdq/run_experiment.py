@@ -5,9 +5,9 @@ import sys
 import numpy as np
 import torch
 
-from experiment import fdqExperiment
-from testing import run_test
-from ui_functions import iprint
+from fdq.experiment import fdqExperiment
+from fdq.testing import run_test
+from fdq.ui_functions import iprint
 
 
 def main() -> None:

@@ -11,7 +11,7 @@ import copy
 import matplotlib.pyplot as plt
 import subprocess as sp
 from matplotlib.ticker import MaxNLocator
-from ui_functions import iprint, wprint, eprint
+from fdq.ui_functions import iprint, wprint, eprint
 from datetime import datetime
 
 

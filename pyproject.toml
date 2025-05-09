@@ -1,12 +1,12 @@
 [project]
-name = "fonduecaquelon"
+name = "fdq"
 dynamic = ["version"]
 license = { file = "LICENSE" }
 authors = [
   { name = "Marc Stadelmann", email = "stdma@pm.me" },
 ]
 maintainers = [{ name = "Marc Stadelmann", email = "stdma@pm.me" }]
-description = "ML runtime (https://pypi.org/project/fonduecaquelon/)"
+description = "ML runtime (https://pypi.org/project/fdq/)"
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 classifiers = [
@@ -65,3 +65,6 @@ extend-select = [
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[project.scripts]
+fdq = "fdq.run_experiment:main"

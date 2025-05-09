@@ -1,23 +1,26 @@
+"""This module defines the training procedure for the MNIST test experiment."""
+
 import torch
-
-from experiment import fdqExperiment
-
-from img_func import (
+from fdq.experiment import fdqExperiment
+from fdq.ui_functions import show_train_progress, startProgBar, iprint
+from fdq.misc import print_nb_weights
+from fdq.img_func import (
     save_tensorboard_loss,
     save_wandb_loss,
 )
-from ui_functions import show_train_progress, startProgBar, iprint
-from misc import print_nb_weights
 
 
 def train(experiment: fdqExperiment) -> None:
+    """Train the model using the provided experiment configuration.
+
+    Args:
+        experiment (fdqExperiment): The experiment object containing data loaders, models, and training configurations.
+    """
     iprint("Default training")
     print_nb_weights(experiment)
 
-    train_loader = experiment.data["MNIST"].train_data_loader
-    val_loader = experiment.data["MNIST"].val_data_loader
-    n_train_samples = experiment.data["MNIST"].n_train_samples
-    n_val_samples = experiment.data["MNIST"].n_val_samples
+    data = experiment.data["MNIST"]
+    model = experiment.models["simpleNet"]
 
     for epoch in range(experiment.start_epoch, experiment.nb_epochs):
         experiment.current_epoch = epoch
@@ -25,10 +28,10 @@ def train(experiment: fdqExperiment) -> None:
 
         training_loss_value = 0.0
         valid_loss_value = 0.0
-        experiment.models["simpleNet"].train()
-        pbar = startProgBar(n_train_samples, "training...")
+        model.train()
+        pbar = startProgBar(data.n_train_samples, "training...")
 
-        for nb_tbatch, batch in enumerate(train_loader):
+        for nb_tbatch, batch in enumerate(data.train_data_loader):
             pbar.update(nb_tbatch * experiment.exp_def.data.MNIST.args.train_batch_size)
 
             inputs, targets = batch
@@ -36,15 +39,10 @@ def train(experiment: fdqExperiment) -> None:
             inputs = inputs.to(experiment.device).type(torch.float32)
             targets = targets.to(experiment.device)
 
-            # this can be written without code repetition, however, goal is to keep both options flexible...
-            # following: https://pytorch.org/tutorials/recipes/recipes/amp_recipe.html
             if experiment.useAMP:
                 device_type = (
                     "cuda" if experiment.device == torch.device("cuda") else "cpu"
                 )
-                # torch.autocast(dtype=torch.float16) does not work on CPU
-                # torch.autocast(dtype=torch.bfloat16) does not work on V100
-                # torch.autocast(NO DTYPE) on V100 uses the same amount of mem as torch.float16
 
                 with torch.autocast(device_type=device_type, enabled=True):
                     output = experiment.model(inputs)
@@ -56,7 +54,7 @@ def train(experiment: fdqExperiment) -> None:
                 experiment.scaler.scale(train_loss_tensor).backward()
 
             else:
-                output = experiment.models["simpleNet"](inputs)
+                output = model(inputs)
                 train_loss_tensor = (
                     experiment.losses["cp"](output, targets) / experiment.gradacc_iter
                 )
@@ -69,14 +67,14 @@ def train(experiment: fdqExperiment) -> None:
 
             training_loss_value += train_loss_tensor.data.item() * inputs.size(0)
 
-        experiment.trainLoss = training_loss_value / len(train_loader.dataset)
+        experiment.trainLoss = training_loss_value / len(data.train_data_loader.dataset)
         pbar.finish()
 
-        experiment.models["simpleNet"].eval()
+        model.eval()
 
-        pbar = startProgBar(n_val_samples, "validation...")
+        pbar = startProgBar(data.n_val_samples, "validation...")
 
-        for nb_vbatch, batch in enumerate(val_loader):
+        for nb_vbatch, batch in enumerate(data.val_data_loader):
             experiment.current_val_batch = nb_vbatch
             pbar.update(nb_vbatch * experiment.exp_def.data.MNIST.args.val_batch_size)
 
@@ -84,14 +82,14 @@ def train(experiment: fdqExperiment) -> None:
 
             with torch.no_grad():
                 inputs = inputs.to(experiment.device)
-                output = experiment.models["simpleNet"](inputs)
+                output = model(inputs)
                 targets = targets.to(experiment.device)
                 val_loss_tensor = experiment.losses["cp"](output, targets)
 
             valid_loss_value += val_loss_tensor.data.item() * inputs.size(0)
 
         pbar.finish()
-        experiment.valLoss = valid_loss_value / len(val_loader.dataset)
+        experiment.valLoss = valid_loss_value / len(data.val_data_loader.dataset)
 
         save_wandb_loss(experiment)
 

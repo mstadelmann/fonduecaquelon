@@ -7,9 +7,9 @@ import torch.nn.functional as F
 from PIL import Image
 
 
-from ui_functions import getIntInput
-from img_func import showImg, showImg_cv
-from ui_functions import startProgBar
+from fdq.ui_functions import getIntInput, startProgBar
+from fdq.img_func import showImg, showImg_cv
+
 
 import matplotlib
 

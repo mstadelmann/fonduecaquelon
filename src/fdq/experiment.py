@@ -9,12 +9,11 @@ import argparse
 import importlib
 import funkybob
 from tqdm import tqdm
-from typing import List
 from datetime import datetime
-from lossFunctions import createLoss
-from ui_functions import iprint, wprint
-from optimizer import createOptimizer, set_lr_schedule
-from misc import (
+from fdq.lossFunctions import createLoss
+from fdq.ui_functions import iprint, wprint
+from fdq.optimizer import createOptimizer, set_lr_schedule
+from fdq.misc import (
     remove_file,
     store_processing_infos,
     FCQmode,
@@ -26,7 +25,17 @@ from misc import (
 
 
 class fdqExperiment:
+    """This class defines the fdqExperiment.
+
+    It manages the setup, training, evaluation, and management of machine learning experiments.
+    """
+
     def __init__(self, inargs: argparse.Namespace) -> None:
+        """Initialize the fdqExperiment class with the provided arguments.
+
+        Args:
+            inargs (argparse.Namespace): The input arguments containing experiment configurations.
+        """
         self.inargs = inargs
         self.parse_and_clean_args()
         # ------------- GLOBALS ------------------------------
@@ -64,8 +73,8 @@ class fdqExperiment:
         self._trainLoss = float("inf")
         self.bestValLoss = float("inf")
         self.bestTrainLoss = float("inf")
-        self.valLoss_per_ep: List[float] = []
-        self.trainLoss_per_ep: List[float] = []
+        self.valLoss_per_ep: list[float] = []
+        self.trainLoss_per_ep: list[float] = []
         self.new_best_train_loss = False  # flag to indicate if a new best epoch was reached according to train loss
         self.new_best_train_loss_ep_id = None
         self.new_best_val_loss = False  # flag to indicate if a new best epoch was reached according to val loss
@@ -204,9 +213,7 @@ class fdqExperiment:
                 self.models[model_name] = model.createNetwork(self).to(self.device)
 
     def copy_data_to_scratch(self):
-        """
-        Copy all datasets to scratch dir, and update the paths
-        """
+        """Copy all datasets to scratch dir, and update the paths."""
 
         def _mkdir(path):
             if not os.path.exists(path):
