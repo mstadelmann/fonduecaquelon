@@ -237,19 +237,20 @@ class fdqExperiment:
         replace_tilde_with_abs_path(self.exp_file)
         self.exp_def = DictToObj(self.exp_file)
 
+    def load_class(self, path):
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"File {path} not found.")
+
+        parent_dir = os.path.dirname(path)
+        if parent_dir not in sys.path:
+            sys.path.append(parent_dir)
+
+        module_name = os.path.splitext(os.path.basename(path))[0]
+        return importlib.import_module(module_name)
+
     def setupData(self):
         for data_name, data_source in self.exp_def.data.items():
-            processor_path = data_source.processor
-
-            if not os.path.exists(processor_path):
-                raise FileNotFoundError(f"Processor file not found: {processor_path}")
-
-            parent_dir = os.path.dirname(processor_path)
-            if parent_dir not in sys.path:
-                sys.path.append(parent_dir)
-
-            module_name = os.path.splitext(os.path.basename(processor_path))[0]
-            processor = importlib.import_module(module_name)
+            processor = self.load_class(data_source.processor)
             self.data[data_name] = DictToObj(processor.createDatasets(self))
 
     def init_models(self, instantiate=True):
@@ -263,15 +264,7 @@ class fdqExperiment:
                 )
                 model_path = os.path.join(networks_dir, model_path)
 
-                if not os.path.exists(model_path):
-                    raise FileNotFoundError(f"Model file not found: {model_path}")
-
-            parent_dir = os.path.dirname(model_path)
-            if parent_dir not in sys.path:
-                sys.path.append(parent_dir)
-
-            module_name = os.path.splitext(os.path.basename(model_path))[0]
-            model = importlib.import_module(module_name)
+            model = self.load_class(model_path)
             if instantiate:
                 self.models[model_name] = model.createNetwork(self).to(self.device)
 
@@ -349,34 +342,10 @@ class fdqExperiment:
         iprint(f"Storing model to {os.path.join(res_folder, 'serialized_model.fdqpt')}")
         traced_script_module.save(os.path.join(res_folder, "serialized_model.fdqpt"))
 
-    def load_train_loop(self):
-        train_path = self.exp_def.train.train_loop
-
-        if not os.path.exists(train_path):
-            raise FileNotFoundError(f"Training file not found: {train_path}")
-
-        parent_dir = os.path.dirname(train_path)
-        if parent_dir not in sys.path:
-            sys.path.append(parent_dir)
-
-        module_name = os.path.splitext(os.path.basename(train_path))[0]
-        self.trainer = importlib.import_module(module_name)
-
-        # try:
-        #     self.train_function = importlib.import_module(
-        #         f"trainings.{self.training_strategy}"
-        #     )
-        # except Exception as exc:
-        #     raise ImportError(
-        #         f"Error loading training strategy {self.training_strategy}."
-        #     ) from exc
-
-        # self.copy_data_to_scratch()
-
     def prepareTraining(self):
         self.mode.train()
         self.setupData()
-        self.load_train_loop()
+        self.trainer = self.load_class(self.exp_def.train.train_loop)
         self.init_models()
         createOptimizer(self)
         set_lr_schedule(self)
@@ -401,9 +370,7 @@ class fdqExperiment:
         store_processing_infos(self)
 
     def load_checkpoint(self, path):
-        """
-        Load checkpoint to resume training.
-        """
+        """Load checkpoint to resume training."""
         if not os.path.exists(path):
             raise FileNotFoundError(f"Error, checkpoint file {path} not found.")
 
