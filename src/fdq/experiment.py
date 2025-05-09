@@ -279,11 +279,10 @@ class fdqExperiment:
             self.models[model_name].eval()
 
     def save_current_model(self):
-        """
-        Store model including weights.
+        """Store model including weights.
+
         This is run at the end of every epoch.
         """
-
         for model_name, model in self.models.items():
             if self.exp_def.store.get("save_last_model", False):
                 remove_file(self.last_model_path.get(model_name))

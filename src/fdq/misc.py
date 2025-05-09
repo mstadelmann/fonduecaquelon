@@ -13,6 +13,7 @@ import subprocess as sp
 from matplotlib.ticker import MaxNLocator
 from fdq.ui_functions import iprint, wprint, eprint
 from datetime import datetime
+from torch.utils.data import random_split
 
 
 class FCQmode:
@@ -161,6 +162,15 @@ def replace_tilde_with_abs_path(d):
             replace_tilde_with_abs_path(value)
         elif isinstance(value, str) and value.startswith("~/"):
             d[key] = os.path.expanduser(value)
+
+
+def get_subset(dataset, subset_ratio):
+    if subset_ratio >= 1:
+        return dataset
+    n_dataset = len(dataset)
+    n_subset = int(n_dataset * subset_ratio)
+    new_set, _ = random_split(dataset, [n_subset, n_dataset - n_subset])
+    return new_set
 
 
 def print_nb_weights(experiment, show_details=False):

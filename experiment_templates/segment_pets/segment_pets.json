@@ -1,36 +1,27 @@
 {
     "globals": {
-        "project": "Testexperiment MNIST classifier",
-        "author": "Marc",
-        "set_random_seed": 33
+        "project": "Segment OXPET classifier",
+        "author": "Marc"
     },
     "data": {
-        "MNIST": {
-            "processor": "~/dev/fonduecaquelon/experiment_templates/mnist/mnist_preparator.py",
+        "OXPET": {
+            "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxfordpet_preparator.py",
             "args": {
-                "base_path": "~/dev/fonduecaquelon/test/test_data",
-                "subset_train": 0.1,
-                "subset_test": 0.1,
-                "val_ratio": 0.2,
+                "base_path": "~/data/ML_data/oxford_pets/",
+                "subset_train": 0.2,
+                "subset_val": 0.2,
+                "subset_test": 0.2,
                 "pin_memory": true,
                 "num_workers": 4,
-                "train_batch_size": 16,
-                "val_batch_size": 16,
+                "train_batch_size": 32,
+                "val_batch_size": 32,
                 "test_batch_size": 1,
                 "shuffle_train": true,
                 "shuffle_val": false,
-                "shuffle_test": false
+                "shuffle_test": false,
+                "max_img_size": 256
             }
         }
-    },
-    "store": {
-        "results_path": "~/dev/fonduecaquelon/test/test_data/results",
-        "cluster_results_path": "/scratch/fdq_results",
-        "img_exp_nb": 4,
-        "save_last_model": true,
-        "save_best_val_model": true,
-        "save_best_train_model": true,
-        "checkpoint_frequency": 2
     },
     "models": {
         "simpleNet": {
@@ -55,7 +46,7 @@
     "train": {
         "train_loop": "~/dev/fonduecaquelon/experiment_templates/mnist/train.py",
         "args": {
-            "epochs": 2,
+            "epochs": 8,
             "use_GPU": false,
             "use_AMP": false,
             "accumulate_grad_batches": 1,
@@ -69,6 +60,15 @@
             "name": "crossentropy",
             "reduction": "mean"
         }
+    },
+    "store": {
+        "results_path": "~/data/ML_data/results",
+        "cluster_results_path": "/scratch/fdq_results",
+        "img_exp_nb": 4,
+        "save_last_model": true,
+        "save_best_val_model": true,
+        "save_best_train_model": true,
+        "checkpoint_frequency": 2
     },
     "test": {
         "evaluator": "~/dev/fonduecaquelon/experiment_templates/mnist/mnist_test.py",
