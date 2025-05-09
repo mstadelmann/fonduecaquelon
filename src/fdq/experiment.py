@@ -110,6 +110,84 @@ class fdqExperiment:
             self.device = torch.device("cpu")
             self.is_cuda = False
 
+    @property
+    def results_dir(self):
+        if self._results_dir is None:
+            dt_string = self.creation_time.strftime("%Y%m%d_%H_%M_%S")
+            if self.funky_name is None:
+                self.funky_name = next(iter(funkybob.RandomNameGenerator()))
+
+            folder_name = f"{dt_string}__{self.funky_name}"
+
+            if self.is_slurm:
+                folder_name += f"__{self.slurm_job_id}"
+                res_base_path = self.exp_file.get("store", {}).get(
+                    "cluster_results_path", None
+                )
+                if res_base_path is None:
+                    raise ValueError("Error, cluster_results_path was not defined.")
+
+            else:
+                res_base_path = self.exp_file.get("store", {}).get("results_path", None)
+                if res_base_path is None:
+                    raise ValueError("Error, result path was not defined.")
+
+            self._results_dir = os.path.join(
+                res_base_path, self.project, self.experimentName, folder_name
+            )
+
+            if not os.path.exists(self._results_dir):
+                os.makedirs(self._results_dir)
+
+        return self._results_dir
+
+    @property
+    def results_output_dir(self):
+        if self._results_output_dir is None:
+            self._results_output_dir = os.path.join(
+                self.results_dir, "training_outputs"
+            )
+            if not os.path.exists(self._results_output_dir):
+                os.makedirs(self._results_output_dir)
+        return self._results_output_dir
+
+    @property
+    def test_dir(self):
+        if self._test_dir is None:
+            folder_name = self.creation_time.strftime("%Y%m%d_%H_%M_%S")
+            if self.is_slurm:
+                folder_name += f"__{self.slurm_job_id}"
+            self._test_dir = os.path.join(self.results_dir, "test", folder_name)
+            if not os.path.exists(self._test_dir):
+                os.makedirs(self._test_dir)
+        return self._test_dir
+
+    @property
+    def valLoss(self):
+        return self._valLoss
+
+    @valLoss.setter
+    def valLoss(self, value):
+        self._valLoss = value
+        self.valLoss_per_ep.append(value)
+        if not math.isnan(value):
+            self.bestValLoss = min(self.bestValLoss, self._valLoss)
+            self.new_best_val_loss = self.bestValLoss == value
+            self.new_best_val_loss_ep_id = self.current_epoch
+
+    @property
+    def trainLoss(self):
+        return self._trainLoss
+
+    @trainLoss.setter
+    def trainLoss(self, value):
+        self._trainLoss = value
+        self.trainLoss_per_ep.append(value)
+        if not math.isnan(value):
+            self.bestTrainLoss = min(self.bestTrainLoss, self._trainLoss)
+            self.new_best_train_loss = self.bestTrainLoss == value
+            self.new_best_train_loss_ep_id = self.current_epoch
+
     def parse_and_clean_args(self):
         self.experiment_file_path = self.inargs.experimentfile
 
@@ -174,22 +252,7 @@ class fdqExperiment:
             processor = importlib.import_module(module_name)
             self.data[data_name] = DictToObj(processor.createDatasets(self))
 
-    def runEvaluator(self):
-        evaluator_path = self.exp_def.test.evaluator
-
-        if not os.path.exists(evaluator_path):
-            raise FileNotFoundError(f"Evaluator file not found: {evaluator_path}")
-
-        parent_dir = os.path.dirname(evaluator_path)
-        if parent_dir not in sys.path:
-            sys.path.append(parent_dir)
-
-        module_name = os.path.splitext(os.path.basename(evaluator_path))[0]
-        currentEvaluator = importlib.import_module(module_name)
-
-        return currentEvaluator.createEvaluator(self)
-
-    def createModel(self, instantiate=True):
+    def init_models(self, instantiate=True):
         for model_name, model_source in self.exp_def.models:
             model_path = model_source.name
 
@@ -212,60 +275,81 @@ class fdqExperiment:
             if instantiate:
                 self.models[model_name] = model.createNetwork(self).to(self.device)
 
-    def copy_data_to_scratch(self):
-        """Copy all datasets to scratch dir, and update the paths."""
+    def load_models(self):
+        self.init_models(instantiate=False)
+        for model_name, _ in self.exp_def.models:
+            path = self.inference_model_paths[model_name]
+            iprint(f"Loading model {model_name} from {path}")
+            self.models[model_name] = torch.load(path, weights_only=False).to(
+                self.device
+            )
+            self.models[model_name].eval()
 
-        def _mkdir(path):
-            if not os.path.exists(path):
-                os.makedirs(path)
+    def save_current_model(self):
+        """
+        Store model including weights.
+        This is run at the end of every epoch.
+        """
 
-        def _cp_files(paths, name):
-            if paths is not None:
-                if not isinstance(paths, list):
-                    raise ValueError(f"{name} must be defined as a list!")
+        for model_name, model in self.models.items():
+            if self.exp_def.store.get("save_last_model", False):
+                remove_file(self.last_model_path.get(model_name))
+                self.last_model_path[model_name] = os.path.join(
+                    self.results_dir,
+                    f"last_{model_name}_e{self.current_epoch}.fdqm",
+                )
+                torch.save(model, self.last_model_path[model_name])
 
-                try:
-                    dst_path = os.path.join(self.clusterDataBasePath, name + "/")
-                    _mkdir(dst_path)
+            # new best val loss (default!)
+            best_model_path = os.path.join(
+                self.results_dir,
+                f"best_val_{model_name}_e{self.current_epoch}.fdqm",
+            )
+            if (
+                self.current_epoch == self.start_epoch
+                or self.exp_def.store.get("save_best_val_model", False)
+                and self.new_best_val_loss
+            ):
+                remove_file(self.best_val_model_path.get(model_name))
+                self.best_val_model_path[model_name] = best_model_path
+                torch.save(model, best_model_path)
 
-                    for i, pf in enumerate(tqdm(paths, desc=f"Copying {name} files")):
-                        new_path = os.path.join(dst_path, os.path.basename(pf))
-                        os.system(f"rsync -au {pf} {new_path}")
-                        paths[i] = new_path
+            # save best model according to train loss
+            # this might be useful if we use dummy validation losses like in diffusion
+            best_train_model_path = os.path.join(
+                self.results_dir,
+                f"best_train_{model_name}_e{self.current_epoch}.fdqm",
+            )
+            if (
+                self.current_epoch == self.start_epoch
+                or self.exp_def.store.get("save_best_train_model", False)
+                and self.new_best_train_loss
+            ):
+                remove_file(self.best_train_model_path.get(model_name))
+                self.best_train_model_path[model_name] = best_train_model_path
+                torch.save(model, best_train_model_path)
 
-                except Exception as exc:
-                    raise ValueError(
-                        f"Unable to copy {pf} to scratch location!"
-                    ) from exc
+    def dump_model(self, res_folder=None):
+        # https://pytorch.org/tutorials/advanced/cpp_export.html
+        iprint("Start model dumping")
 
-        if self.clusterDataBasePath is None:
-            return
+        example = torch.rand(
+            1, self.nb_in_channels, self.net_input_size[0], self.net_input_size[1]
+        ).to(self.device)
 
-        _mkdir(self.clusterDataBasePath)
+        # jit tracer to serialize model using example
+        # this only works if there is no flow control applied in the model.
+        # otherwise, the model has to be annotated and the torch script compiler applied.
+        traced_script_module = torch.jit.trace(self.model, example)
 
-        if self.dataBasePath is not None:
-            try:
-                dst_path = os.path.join(self.clusterDataBasePath, "base_path/")
-                if os.path.exists(dst_path):
-                    shutil.rmtree(dst_path)
-                shutil.copytree(self.dataBasePath, dst_path)
-                self.dataBasePath = dst_path
-            except Exception as exc:
-                raise ValueError(
-                    f"Unable to copy {self.dataBasePath} to scratch location!"
-                ) from exc
+        # test network
+        # test_out = traced_script_module(example)
+        # print(test_out)
 
-        # if self.run_train: TODO
-        _cp_files(self.trainFilesPath, "train_files_path")
-        _cp_files(self.valFilesPath, "val_files_path")
-        # if self.run_test or self.run_test_auto:
-        _cp_files(self.testFilesPath, "test_files_path")
+        iprint(f"Storing model to {os.path.join(res_folder, 'serialized_model.fdqpt')}")
+        traced_script_module.save(os.path.join(res_folder, "serialized_model.fdqpt"))
 
-        iprint("----------------------------------------------------")
-        iprint("Copy datasets to temporary scratch location... Done!")
-        iprint("----------------------------------------------------")
-
-    def prepareTrainLoop(self):
+    def load_train_loop(self):
         train_path = self.exp_def.train.train_loop
 
         if not os.path.exists(train_path):
@@ -292,8 +376,8 @@ class fdqExperiment:
     def prepareTraining(self):
         self.mode.train()
         self.setupData()
-        self.prepareTrainLoop()
-        self.createModel()
+        self.load_train_loop()
+        self.init_models()
         createOptimizer(self)
         set_lr_schedule(self)
         createLoss(self)
@@ -315,99 +399,6 @@ class fdqExperiment:
             self.cp_to_res_dir(file_path=self.parent_file_path)
 
         store_processing_infos(self)
-
-    @property
-    def results_dir(self):
-        if self._results_dir is None:
-            dt_string = self.creation_time.strftime("%Y%m%d_%H_%M_%S")
-            if self.funky_name is None:
-                self.funky_name = next(iter(funkybob.RandomNameGenerator()))
-
-            folder_name = f"{dt_string}__{self.funky_name}"
-
-            if self.is_slurm:
-                folder_name += f"__{self.slurm_job_id}"
-
-            if self.is_slurm:
-                res_base_path = self.exp_file.get("store", {}).get(
-                    "cluster_results_path", None
-                )
-                if res_base_path is None:
-                    raise ValueError("Error, cluster_results_path was not defined.")
-
-            else:
-                res_base_path = self.exp_file.get("store", {}).get("results_path", None)
-                if res_base_path is None:
-                    raise ValueError("Error, result path was not defined.")
-
-                if res_base_path[0] == "~":
-                    res_base_path = os.path.expanduser(res_base_path)
-
-            self._results_dir = os.path.join(
-                res_base_path, self.project, self.experimentName, folder_name
-            )
-
-            if not os.path.exists(self._results_dir):
-                os.makedirs(self._results_dir)
-
-        return self._results_dir
-
-    @property
-    def results_output_dir(self):
-        if self._results_output_dir is None:
-            self._results_output_dir = os.path.join(
-                self.results_dir, "training_outputs"
-            )
-            if not os.path.exists(self._results_output_dir):
-                os.makedirs(self._results_output_dir)
-        return self._results_output_dir
-
-    @property
-    def test_dir(self):
-        if self._test_dir is None:
-            folder_name = self.creation_time.strftime("%Y%m%d_%H_%M_%S")
-            if self.is_slurm:
-                folder_name += f"__{self.slurm_job_id}"
-            self._test_dir = os.path.join(self.results_dir, "test", folder_name)
-            if not os.path.exists(self._test_dir):
-                os.makedirs(self._test_dir)
-        return self._test_dir
-
-    @property
-    def valLoss(self):
-        return self._valLoss
-
-    @valLoss.setter
-    def valLoss(self, value):
-        self._valLoss = value
-        self.valLoss_per_ep.append(value)
-        if not math.isnan(value):
-            self.bestValLoss = min(self.bestValLoss, self._valLoss)
-            self.new_best_val_loss = self.bestValLoss == value
-            self.new_best_val_loss_ep_id = self.current_epoch
-
-    @property
-    def trainLoss(self):
-        return self._trainLoss
-
-    @trainLoss.setter
-    def trainLoss(self, value):
-        self._trainLoss = value
-        self.trainLoss_per_ep.append(value)
-        if not math.isnan(value):
-            self.bestTrainLoss = min(self.bestTrainLoss, self._trainLoss)
-            self.new_best_train_loss = self.bestTrainLoss == value
-            self.new_best_train_loss_ep_id = self.current_epoch
-
-    def cp_to_res_dir(self, file_path):
-        fn = file_path.split("/")[-1]
-        iprint(f"Saving {fn} to {self.results_dir}...")
-        shutil.copyfile(file_path, f"{self.results_dir}/{fn}")
-
-    def copy_files_to_test_dir(self, file_path):
-        fn = file_path.split("/")[-1]
-        iprint(f"Saving {fn} to {self.test_dir}...")
-        shutil.copyfile(file_path, f"{self.test_dir}/{fn}")
 
     def load_checkpoint(self, path):
         """
@@ -475,80 +466,6 @@ class fdqExperiment:
         }
 
         torch.save(checkpoint, self.checkpoint_path)
-
-    def save_current_model(self):
-        """
-        Store model including weights.
-        This is run at the end of every epoch.
-        """
-
-        for model_name, model in self.models.items():
-            if self.exp_def.store.get("save_last_model", False):
-                remove_file(self.last_model_path.get(model_name))
-                self.last_model_path[model_name] = os.path.join(
-                    self.results_dir,
-                    f"last_{model_name}_e{self.current_epoch}.fdqm",
-                )
-                torch.save(model, self.last_model_path[model_name])
-
-            # new best val loss (default!)
-            best_model_path = os.path.join(
-                self.results_dir,
-                f"best_val_{model_name}_e{self.current_epoch}.fdqm",
-            )
-            if (
-                self.current_epoch == self.start_epoch
-                or self.exp_def.store.get("save_best_val_model", False)
-                and self.new_best_val_loss
-            ):
-                remove_file(self.best_val_model_path.get(model_name))
-                self.best_val_model_path[model_name] = best_model_path
-                torch.save(model, best_model_path)
-
-            # save best model according to train loss
-            # this might be useful if we use dummy validation losses like in diffusion
-            best_train_model_path = os.path.join(
-                self.results_dir,
-                f"best_train_{model_name}_e{self.current_epoch}.fdqm",
-            )
-            if (
-                self.current_epoch == self.start_epoch
-                or self.exp_def.store.get("save_best_train_model", False)
-                and self.new_best_train_loss
-            ):
-                remove_file(self.best_train_model_path.get(model_name))
-                self.best_train_model_path[model_name] = best_train_model_path
-                torch.save(model, best_train_model_path)
-
-    def load_models(self):
-        self.createModel(instantiate=False)
-        for model_name, _ in self.exp_def.models:
-            path = self.inference_model_paths[model_name]
-            iprint(f"Loading model {model_name} from {path}")
-            self.models[model_name] = torch.load(path, weights_only=False).to(
-                self.device
-            )
-            self.models[model_name].eval()
-
-    def dump_model(self, res_folder=None):
-        # https://pytorch.org/tutorials/advanced/cpp_export.html
-        iprint("Start model dumping")
-
-        example = torch.rand(
-            1, self.nb_in_channels, self.net_input_size[0], self.net_input_size[1]
-        ).to(self.device)
-
-        # jit tracer to serialize model using example
-        # this only works if there is no flow control applied in the model.
-        # otherwise, the model has to be annotated and the torch script compiler applied.
-        traced_script_module = torch.jit.trace(self.model, example)
-
-        # test network
-        # test_out = traced_script_module(example)
-        # print(test_out)
-
-        iprint(f"Storing model to {os.path.join(res_folder, 'serialized_model.fdqpt')}")
-        traced_script_module.save(os.path.join(res_folder, "serialized_model.fdqpt"))
 
     def get_next_export_fn(self, name=None, file_ending="jpg"):
         if self.mode.is_test():
@@ -694,3 +611,81 @@ class fdqExperiment:
         save_train_history(self)
         self.save_checkpoint()
         self.save_current_model()
+
+    def cp_to_res_dir(self, file_path):
+        fn = file_path.split("/")[-1]
+        iprint(f"Saving {fn} to {self.results_dir}...")
+        shutil.copyfile(file_path, f"{self.results_dir}/{fn}")
+
+    def copy_files_to_test_dir(self, file_path):
+        fn = file_path.split("/")[-1]
+        iprint(f"Saving {fn} to {self.test_dir}...")
+        shutil.copyfile(file_path, f"{self.test_dir}/{fn}")
+
+    def runEvaluator(self):
+        evaluator_path = self.exp_def.test.evaluator
+
+        if not os.path.exists(evaluator_path):
+            raise FileNotFoundError(f"Evaluator file not found: {evaluator_path}")
+
+        parent_dir = os.path.dirname(evaluator_path)
+        if parent_dir not in sys.path:
+            sys.path.append(parent_dir)
+
+        module_name = os.path.splitext(os.path.basename(evaluator_path))[0]
+        currentEvaluator = importlib.import_module(module_name)
+
+        return currentEvaluator.createEvaluator(self)
+
+    def copy_data_to_scratch(self):
+        """Copy all datasets to scratch dir, and update the paths."""
+
+        def _mkdir(path):
+            if not os.path.exists(path):
+                os.makedirs(path)
+
+        def _cp_files(paths, name):
+            if paths is not None:
+                if not isinstance(paths, list):
+                    raise ValueError(f"{name} must be defined as a list!")
+
+                try:
+                    dst_path = os.path.join(self.clusterDataBasePath, name + "/")
+                    _mkdir(dst_path)
+
+                    for i, pf in enumerate(tqdm(paths, desc=f"Copying {name} files")):
+                        new_path = os.path.join(dst_path, os.path.basename(pf))
+                        os.system(f"rsync -au {pf} {new_path}")
+                        paths[i] = new_path
+
+                except Exception as exc:
+                    raise ValueError(
+                        f"Unable to copy {pf} to scratch location!"
+                    ) from exc
+
+        if self.clusterDataBasePath is None:
+            return
+
+        _mkdir(self.clusterDataBasePath)
+
+        if self.dataBasePath is not None:
+            try:
+                dst_path = os.path.join(self.clusterDataBasePath, "base_path/")
+                if os.path.exists(dst_path):
+                    shutil.rmtree(dst_path)
+                shutil.copytree(self.dataBasePath, dst_path)
+                self.dataBasePath = dst_path
+            except Exception as exc:
+                raise ValueError(
+                    f"Unable to copy {self.dataBasePath} to scratch location!"
+                ) from exc
+
+        # if self.run_train: TODO
+        _cp_files(self.trainFilesPath, "train_files_path")
+        _cp_files(self.valFilesPath, "val_files_path")
+        # if self.run_test or self.run_test_auto:
+        _cp_files(self.testFilesPath, "test_files_path")
+
+        iprint("----------------------------------------------------")
+        iprint("Copy datasets to temporary scratch location... Done!")
+        iprint("----------------------------------------------------")

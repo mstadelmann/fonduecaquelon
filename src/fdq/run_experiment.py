@@ -61,7 +61,7 @@ def main() -> None:
         torch.manual_seed(random_seed)
 
     # if experiment.inargs.print_model:
-    #     experiment.createModel()
+    #     experiment.init_models()
     #     iprint("\n-----------------------------------------------------------")
     #     iprint(experiment.model)
     #     iprint("-----------------------------------------------------------\n")
@@ -93,11 +93,14 @@ def main() -> None:
     if experiment.inargs.test_model_auto or experiment.inargs.test_model_ia:
         run_test(experiment)
 
-    # if experiment.inargs.dump_model:
-    #     iprint("Dumping the best model of the last experiment")
-    #     res_folder, net_name = find_model(experiment)
-    #     experiment.load_models(os.path.join(res_folder, net_name))
-    #     experiment.dump_model(res_folder)
+    if experiment.inargs.dump_model:
+        iprint("Dumping the best model of the last experiment")
+        raise NotImplementedError(
+            "Model dumping is not implemented yet. Please implement it in the fdqExperiment class."
+        )
+        # res_folder, net_name = find_model_path(experiment)
+        # experiment.load_models(os.path.join(res_folder, net_name))
+        # experiment.dump_model(res_folder)
 
     iprint("done")
 

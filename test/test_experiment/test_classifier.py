@@ -5,7 +5,7 @@ import unittest
 import glob
 
 from fdq.experiment import fdqExperiment
-from fdq.testing import run_test, find_model, find_experiment_result_dirs
+from fdq.testing import run_test, find_model_path, find_experiment_result_dirs
 
 
 class TestMNISTClassifier(unittest.TestCase):
@@ -44,7 +44,7 @@ class TestMNISTClassifier(unittest.TestCase):
 
         run_test(experiment)
 
-        res_d, _ = find_model(experiment)
+        res_d, _ = find_model_path(experiment)
 
         # check if test results file exists
         res_paths = glob.glob(res_d + "/test/*/00_test_results_*")

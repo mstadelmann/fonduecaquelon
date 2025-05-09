@@ -8,10 +8,7 @@ from fdq.ui_functions import iprint, eprint, wprint, getIntInput
 
 
 def get_nb_exp_epochs(path):
-    """
-    Returns the number of epochs of the experiment stored at 'path'.
-    """
-
+    """Returns the number of epochs of the experiment stored at 'path'."""
     path = os.path.join(path, "history.json")
 
     try:
@@ -62,10 +59,7 @@ def find_experiment_result_dirs(experiment):
 
 
 def manual_experiment_selection(subfolders_dict, res_root_path):
-    """
-    UI to select experiment manually.
-    """
-
+    """UI to manually select experiment ."""
     subfolders_datetime = [
         datetime.strptime(s, "%Y%m%d_%H_%M_%S") for s in subfolders_dict.keys()
     ]
@@ -88,11 +82,8 @@ def manual_experiment_selection(subfolders_dict, res_root_path):
     return sorted_keys[exp_idx]
 
 
-def find_model(experiment):
-    """
-    Returns the path to the model or weights file of a previous experiment.
-    """
-
+def find_model_path(experiment):
+    """Returns the path to the model file of a previous experiment."""
     experiment_res_path, subfolders = find_experiment_result_dirs(experiment)
 
     subfolders_date_str = []
@@ -178,10 +169,8 @@ def save_test_string(experiment, model=None, weights=None):
         )
 
 
-def set_test_mode(experiment):
-    """
-    UI to select test mode.
-    """
+def ui_ask_test_mode(experiment):
+    """UI to select test mode."""
     exp_mode = getIntInput(
         "\nExperiment Selection:\n1: Last, 2: From List, 3: Path to model\n", [1, 3]
     )
@@ -222,7 +211,7 @@ def run_test(experiment):
         iprint(f"Auto test: Loading {best_or_last} model.")
 
     else:
-        set_test_mode(experiment)
+        ui_ask_test_mode(experiment)
 
     for model_name, _ in experiment.exp_def.models:
         if experiment.mode.test_mode.custom_path:
@@ -239,7 +228,7 @@ def run_test(experiment):
                     eprint(f"Error: File {model_path} not found.")
 
         else:
-            experiment._results_dir, net_name = find_model(experiment)
+            experiment._results_dir, net_name = find_model_path(experiment)
             experiment.inference_model_paths[model_name] = os.path.join(
                 experiment._results_dir, net_name
             )
