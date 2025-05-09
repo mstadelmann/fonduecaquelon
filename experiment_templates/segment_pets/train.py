@@ -19,8 +19,8 @@ def train(experiment: fdqExperiment) -> None:
     iprint("Default training")
     print_nb_weights(experiment)
 
-    data = experiment.data["MNIST"]
-    model = experiment.models["simpleNet"]
+    data = experiment.data["OXPET"]
+    model = experiment.models["ccUNET"]
 
     for epoch in range(experiment.start_epoch, experiment.nb_epochs):
         experiment.current_epoch = epoch
