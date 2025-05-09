@@ -237,15 +237,16 @@ class fdqExperiment:
         replace_tilde_with_abs_path(self.exp_file)
         self.exp_def = DictToObj(self.exp_file)
 
-    def load_class(self, path):
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"File {path} not found.")
+    def load_class(self, path=None, module_name=None):
+        if module_name is None:
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"File {path} not found.")
 
-        parent_dir = os.path.dirname(path)
-        if parent_dir not in sys.path:
-            sys.path.append(parent_dir)
+            parent_dir = os.path.dirname(path)
+            if parent_dir not in sys.path:
+                sys.path.append(parent_dir)
 
-        module_name = os.path.splitext(os.path.basename(path))[0]
+            module_name = os.path.splitext(os.path.basename(path))[0]
         return importlib.import_module(module_name)
 
     def setupData(self):
@@ -257,16 +258,27 @@ class fdqExperiment:
         for model_name, model_source in self.exp_def.models:
             model_path = model_source.name
 
-            if not os.path.exists(model_path):
-                current_file_path = os.path.abspath(__file__)
-                networks_dir = os.path.abspath(
-                    os.path.join(os.path.dirname(current_file_path), "../networks/")
-                )
-                model_path = os.path.join(networks_dir, model_path)
+            if model_path is not None:
+                if not os.path.exists(model_path):
+                    current_file_path = os.path.abspath(__file__)
+                    networks_dir = os.path.abspath(
+                        os.path.join(os.path.dirname(current_file_path), "../networks/")
+                    )
+                    model_path = os.path.join(networks_dir, model_path)
 
-            model = self.load_class(model_path)
-            if instantiate:
-                self.models[model_name] = model.createNetwork(self).to(self.device)
+                model = self.load_class(path=model_path)
+                if instantiate:
+                    self.models[model_name] = model.create(self).to(self.device)
+
+            elif (
+                model_source.module_name is not None
+                and model_source.class_name is not None
+            ):
+                cc = getattr(
+                    self.load_class(module_name=model_source.module_name),
+                    model_source.class_name,
+                )
+                self.models[model_name] = cc(**model_source.args.to_dict())
 
     def load_models(self):
         self.init_models(instantiate=False)

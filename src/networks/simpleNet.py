@@ -8,7 +8,7 @@ class simpleNet(nn.Module):
     def __init__(self, experiment, nodes_per_layer):
         super().__init__()
 
-        margs = experiment.exp_def.models.simpleNet
+        margs = experiment.exp_def.models.simpleNet.args
 
         self.inch = margs.nb_in_channels
         self.in_shape_flat = margs.input_shape[0] * margs.input_shape[1] * self.inch
@@ -40,7 +40,7 @@ class simpleNet(nn.Module):
         return torch.rand(1, self.inch, 165, 270)
 
 
-def createNetwork(experiment):
+def create(experiment):
     nodes_per_layer = experiment.exp_file.get("net_conf", {}).get("fc_Layers", [84, 50])
 
     return simpleNet(experiment, nodes_per_layer)
