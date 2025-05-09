@@ -54,7 +54,7 @@
         }
     },
     "train": {
-        "train_loop": "~/dev/fonduecaquelon/experiment_templates/mnist/default.py",
+        "train_loop": "~/dev/fonduecaquelon/experiment_templates/mnist/train.py",
         "args": {
             "epochs": 2,
             "use_GPU": false,
