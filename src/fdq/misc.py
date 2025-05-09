@@ -21,8 +21,8 @@ class FCQmode:
         self.allowed_op_modes = [
             "init",  # initial state
             "train",  # training mode
-            "unittest",  # running unit tests
             "test",  # testing
+            "unittest",  # running unit tests
         ]
         self._test_mode = "best"
         self.allowed_test_modes = [
@@ -32,6 +32,7 @@ class FCQmode:
             "custom_best",  # test best model from selected experiment
             "custom_path",  # test with manually defined model path
         ]
+        self._locked = False  # Flag to lock the mode when set to unittest
 
         # Dynamically create setter methods
         for mode in self.allowed_op_modes:
@@ -45,6 +46,17 @@ class FCQmode:
             return f"<{self.__class__.__name__}: {self._op_mode} / {self._test_mode}>"
         else:
             return f"<{self.__class__.__name__}: {self._op_mode}>"
+
+    def _create_setter(self, attribute, value):
+        def setter():
+            if self._locked and attribute == "_op_mode":
+                wprint("Unittest mode is locked. Cannot change mode.")
+            else:
+                if value == "unittest" and attribute == "_op_mode":
+                    self._locked = True
+                setattr(self, attribute, value)
+
+        return setter
 
     @property
     def op_mode(self):
@@ -77,12 +89,6 @@ class FCQmode:
                 raise AttributeError(f"'TestMode' object has no attribute '{name}'")
 
         return TestMode(self)
-
-    def _create_setter(self, attribute, value):
-        def setter():
-            setattr(self, attribute, value)
-
-        return setter
 
 
 def recursive_dict_update(d_parent, d_child):

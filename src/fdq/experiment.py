@@ -129,7 +129,7 @@ class fdqExperiment:
 
         parent = self.globals.get("parent", {})
         # parent must be in same directory or defined with absolute path
-        if parent is not None:
+        if parent != {}:
             if parent[0] == "/":
                 self.parent_file_path = parent
             else:

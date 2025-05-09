@@ -6,4 +6,8 @@
 
 # test / cache outputs
 **/__pycache__/
-test/
+test_old/
+
+# Distribution / packaging
+dist/
+build.txt

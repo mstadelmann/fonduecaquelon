@@ -1,6 +1,6 @@
 [project]
 name = "fdq"
-dynamic = ["version"]
+version = "0.0.2"
 license = { file = "LICENSE" }
 authors = [
   { name = "Marc Stadelmann", email = "stdma@pm.me" },
