@@ -25,7 +25,7 @@
     },
     "models": {
         "ccUNET": {
-            "module": "chuchichaestli.models.unet.unet.UNet",
+            "class_name": "chuchichaestli.models.unet.unet.UNet",
             "args": {
                 "dimensions": 2,
                 "in_channels": 3,
@@ -45,13 +45,13 @@
                 "time_embedding": false
             },
             "optimizer": {
-                "module": "torch.optim.Adam",
+                "class_name": "torch.optim.Adam",
                 "args": {
                     "lr": 0.001
                 }
             },
             "lr_scheduler": {
-                "module": "torch.optim.lr_scheduler.StepLR",
+                "class_name": "torch.optim.lr_scheduler.StepLR",
                 "args": {
                     "step_size": 2,
                     "gamma": 0.95
@@ -73,7 +73,7 @@
     },
     "losses": {
         "cp": {
-            "module": "torch.nn.CrossEntropyLoss",
+            "class_name": "torch.nn.CrossEntropyLoss",
             "args": {
                 "reduction": "mean"
             }

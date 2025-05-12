@@ -288,10 +288,10 @@ class fdqExperiment:
         for model_name, model_def in self.exp_def.models:
             if model_def.path is not None:
                 cls = self.instantiate_class(
-                    file_path=model_def.path, class_name=model_def.module
+                    file_path=model_def.path, class_name=model_def.class_name
                 )
-            elif model_def.module is not None:
-                cls = self.instantiate_class(class_path=model_def.module)
+            elif model_def.class_name is not None:
+                cls = self.instantiate_class(class_path=model_def.class_name)
             else:
                 raise ValueError(
                     f"Error, model {model_name} must have a path or module defined."
@@ -304,13 +304,13 @@ class fdqExperiment:
             #     module_name = os.path.basename(model_def.path).split(".")[0]
 
             # module = importlib.import_module(module_name)
-            # cls = getattr(module, model_def.module)
+            # cls = getattr(module, model_def.class_name)
 
             # cls = self.instantiate_class()
             if instantiate:
                 self.models[model_name] = cls(**model_def.args.to_dict())
 
-            # cls = self.instantiate_class(model_def.module)
+            # cls = self.instantiate_class(model_def.class_name)
 
             # if model_path is not None:
             #     if not os.path.exists(model_path):
@@ -438,7 +438,7 @@ class fdqExperiment:
 
     def createOptimizer(self):
         for model_name, margs in self.exp_def.models:
-            cls = self.instantiate_class(margs.optimizer.module)
+            cls = self.instantiate_class(margs.optimizer.class_name)
 
             optimizer = cls(
                 self.models[model_name].parameters(), **margs.optimizer.args.to_dict()
@@ -462,7 +462,7 @@ class fdqExperiment:
                 self.lr_schedulers[model_name] = None
                 continue
 
-            lr_scheduler_module = margs.lr_scheduler.module
+            lr_scheduler_module = margs.lr_scheduler.class_name
 
             if lr_scheduler_module is None:
                 self.lr_schedulers[model_name] = None
@@ -476,7 +476,12 @@ class fdqExperiment:
 
     def createLosses(self):
         for loss_name, largs in self.exp_def.losses:
-            cls = self.instantiate_class(largs.module)
+            if largs.path is not None:
+                cls = self.instantiate_class(
+                    file_path=largs.path, class_name=largs.class_name
+                )
+            elif largs.class_name is not None:
+                cls = self.instantiate_class(class_path=largs.class_name)
             self.losses[loss_name] = cls(**largs.args.to_dict())
 
     def load_checkpoint(self, path):
