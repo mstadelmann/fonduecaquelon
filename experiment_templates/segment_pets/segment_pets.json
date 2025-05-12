@@ -8,9 +8,9 @@
             "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxfordpet_preparator.py",
             "args": {
                 "base_path": "~/data/ML_data/oxford_pets/",
-                "subset_train": 0.2,
-                "subset_val": 0.2,
-                "subset_test": 0.2,
+                "subset_train": 0.05,
+                "subset_val": 0.05,
+                "subset_test": 0.05,
                 "pin_memory": true,
                 "num_workers": 4,
                 "train_batch_size": 8,
@@ -25,8 +25,7 @@
     },
     "models": {
         "ccUNET": {
-            "module_name": "chuchichaestli.models.unet.unet",
-            "class_name": "UNet",
+            "module_name": "chuchichaestli.models.unet.unet.UNet",
             "args": {
                 "dimensions": 2,
                 "in_channels": 3,

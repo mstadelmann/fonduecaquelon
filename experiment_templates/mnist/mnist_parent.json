@@ -33,7 +33,7 @@
         "checkpoint_frequency": 2
     },
     "test": {
-        "evaluator": "~/dev/fonduecaquelon/experiment_templates/mnist/mnist_test.py",
+        "processor": "~/dev/fonduecaquelon/experiment_templates/mnist/mnist_test.py",
         "test_model": "best",
         "args": {
             "metrics": {

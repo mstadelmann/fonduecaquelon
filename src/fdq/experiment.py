@@ -10,9 +10,7 @@ import importlib
 import funkybob
 from tqdm import tqdm
 from datetime import datetime
-from fdq.lossFunctions import createLoss
 from fdq.ui_functions import iprint, wprint
-from fdq.optimizer import createOptimizer, set_lr_schedule
 from fdq.misc import (
     remove_file,
     store_processing_infos,
@@ -237,6 +235,16 @@ class fdqExperiment:
         replace_tilde_with_abs_path(self.exp_file)
         self.exp_def = DictToObj(self.exp_file)
 
+    def import_class(self, class_path, *args, **kwargs):
+        module_path, class_name = class_path.rsplit(".", 1)
+
+        module = importlib.import_module(module_path)
+
+        return getattr(module, class_name)
+        # cls = getattr(module, class_name)
+
+        # return cls(*args, **kwargs)
+
     def load_class(self, path=None, module_name=None):
         if module_name is None:
             if not os.path.exists(path):
@@ -256,7 +264,7 @@ class fdqExperiment:
 
     def init_models(self, instantiate=True):
         for model_name, model_source in self.exp_def.models:
-            model_path = model_source.name
+            model_path = model_source.path
 
             if model_path is not None:
                 if not os.path.exists(model_path):
@@ -270,10 +278,7 @@ class fdqExperiment:
                 if instantiate:
                     self.models[model_name] = model.create(self).to(self.device)
 
-            elif (
-                model_source.module_name is not None
-                and model_source.class_name is not None
-            ):
+            elif model_source.module_name is not None:
                 cc = getattr(
                     self.load_class(module_name=model_source.module_name),
                     model_source.class_name,
@@ -356,11 +361,11 @@ class fdqExperiment:
     def prepareTraining(self):
         self.mode.train()
         self.setupData()
-        self.trainer = self.load_class(self.exp_def.train.train_loop)
+        self.trainer = self.load_class(self.exp_def.train.path)
         self.init_models()
-        createOptimizer(self)
-        set_lr_schedule(self)
-        createLoss(self)
+        self.createOptimizer()
+        self.set_lr_schedule()
+        self.createLosses()
 
         if self.useAMP:
             self.scaler = torch.amp.GradScaler(device=self.device, enabled=True)
@@ -379,6 +384,49 @@ class fdqExperiment:
             self.cp_to_res_dir(file_path=self.parent_file_path)
 
         store_processing_infos(self)
+
+    def createOptimizer(self):
+        for model_name, margs in self.exp_def.models:
+            cls = self.import_class(margs.optimizer.module)
+
+            optimizer = cls(
+                self.models[model_name].parameters(), **margs.optimizer.args.to_dict()
+            )
+
+            if optimizer is not None:
+                optimizer.zero_grad()
+
+            self.optimizers[model_name] = optimizer
+
+    def set_lr_schedule(self):
+        # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+        # https://towardsdatascience.com/a-visual-guide-to-learning-rate-schedulers-in-pytorch-24bbb262c863
+
+        for model_name, margs in self.exp_def.models:
+            if self.optimizers[model_name] is None:
+                raise ValueError(
+                    f"ERROR - optimizer for model {model_name} is not set!"
+                )
+            if margs.lr_scheduler is None:
+                self.lr_schedulers[model_name] = None
+                continue
+
+            lr_scheduler_module = margs.lr_scheduler.module
+
+            if lr_scheduler_module is None:
+                self.lr_schedulers[model_name] = None
+                continue
+
+            cls = self.import_class(lr_scheduler_module)
+
+            self.lr_schedulers[model_name] = cls(
+                self.optimizers[model_name], **margs.lr_scheduler.args.to_dict()
+            )
+
+    def createLosses(self):
+        for loss_name, largs in self.exp_def.losses:
+            cls = self.import_class(largs.module)
+            self.losses[loss_name] = cls(**largs.args.to_dict())
 
     def load_checkpoint(self, path):
         """Load checkpoint to resume training."""
@@ -601,7 +649,7 @@ class fdqExperiment:
         shutil.copyfile(file_path, f"{self.test_dir}/{fn}")
 
     def runEvaluator(self):
-        evaluator_path = self.exp_def.test.evaluator
+        evaluator_path = self.exp_def.test.processor
 
         if not os.path.exists(evaluator_path):
             raise FileNotFoundError(f"Evaluator file not found: {evaluator_path}")

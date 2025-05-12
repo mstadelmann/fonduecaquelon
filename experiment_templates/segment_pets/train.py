@@ -32,12 +32,10 @@ def train(experiment: fdqExperiment) -> None:
         pbar = startProgBar(data.n_train_samples, "training...")
 
         for nb_tbatch, batch in enumerate(data.train_data_loader):
-            pbar.update(nb_tbatch * experiment.exp_def.data.MNIST.args.train_batch_size)
+            pbar.update(nb_tbatch * len(batch["image"]))
 
-            inputs, targets = batch
-
-            inputs = inputs.to(experiment.device).type(torch.float32)
-            targets = targets.to(experiment.device)
+            inputs = batch["image"].to(experiment.device).type(torch.float32)
+            targets = batch["mask"].to(experiment.device).type(torch.float32)
 
             if experiment.useAMP:
                 device_type = (
@@ -62,7 +60,7 @@ def train(experiment: fdqExperiment) -> None:
                 train_loss_tensor.backward()
 
             experiment.update_gradients(
-                b_idx=nb_tbatch, loader_name="MNIST", model_name="simpleNet"
+                b_idx=nb_tbatch, loader_name="OXPET", model_name="ccUNET"
             )
 
             training_loss_value += train_loss_tensor.data.item() * inputs.size(0)
@@ -76,9 +74,10 @@ def train(experiment: fdqExperiment) -> None:
 
         for nb_vbatch, batch in enumerate(data.val_data_loader):
             experiment.current_val_batch = nb_vbatch
-            pbar.update(nb_vbatch * experiment.exp_def.data.MNIST.args.val_batch_size)
+            pbar.update(nb_vbatch * len(batch["image"]))
 
-            inputs, targets = batch
+            inputs = batch["image"].to(experiment.device).type(torch.float32)
+            targets = batch["mask"].to(experiment.device).type(torch.float32)
 
             with torch.no_grad():
                 inputs = inputs.to(experiment.device)
