@@ -8,6 +8,7 @@
     "models": {
         "simpleNet": {
             "path": "/home/marc/dev/fonduecaquelon/src/networks/simpleNet.py",
+            "module": "simpleNet",
             "args": {
                 "nb_in_channels": 1,
                 "nb_out_channels": 10,

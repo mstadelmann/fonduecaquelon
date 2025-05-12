@@ -5,13 +5,19 @@ from torch import nn
 
 
 class simpleNet(nn.Module):
-    def __init__(self, experiment, nodes_per_layer):
+    def __init__(
+        self,
+        nb_in_channels=1,
+        input_shape=[28, 28],
+        nodes_per_layer=[84, 50],
+        nb_out_channels=10,
+    ):
         super().__init__()
 
-        margs = experiment.exp_def.models.simpleNet.args
-
-        self.inch = margs.nb_in_channels
-        self.in_shape_flat = margs.input_shape[0] * margs.input_shape[1] * self.inch
+        self.nb_in_channels = nb_in_channels
+        self.nb_out_channels = nb_out_channels
+        self.input_shape = input_shape
+        self.in_shape_flat = input_shape[0] * input_shape[1] * self.nb_in_channels
 
         self.fc_start = nn.Linear(self.in_shape_flat, nodes_per_layer[0])
 
@@ -22,7 +28,7 @@ class simpleNet(nn.Module):
 
         self.fcvar = nn.ModuleList(self.fcvar)
 
-        self.fc_end = nn.Linear(nodes_per_layer[-1], margs.nb_out_channels)
+        self.fc_end = nn.Linear(nodes_per_layer[-1], self.nb_out_channels)
 
     def forward(self, x):
         # can we rewrite this as = x.view(-1).unsqueeze(0) ?
@@ -37,13 +43,13 @@ class simpleNet(nn.Module):
         return x
 
     def example(self):
-        return torch.rand(1, self.inch, 165, 270)
+        return torch.rand(1, self.nb_in_channels, 165, 270)
 
 
-def create(experiment):
-    nodes_per_layer = experiment.exp_file.get("net_conf", {}).get("fc_Layers", [84, 50])
+# def create(experiment):
+#     nodes_per_layer = experiment.exp_file.get("net_conf", {}).get("fc_Layers", [84, 50])
 
-    return simpleNet(experiment, nodes_per_layer)
+#     return simpleNet(experiment, nodes_per_layer)
 
 
 ###########
@@ -58,8 +64,8 @@ def create(experiment):
 
 #         margs = experiment.exp_def.models.simpleNet.args
 
-#         self.inch = margs.nb_in_channels
-#         self.in_shape_flat = margs.input_shape[0] * margs.input_shape[1] * self.inch
+#         self.nb_in_channels = margs.nb_in_channels
+#         self.in_shape_flat = margs.input_shape[0] * margs.input_shape[1] * self.nb_in_channels
 
 #         layers = [nn.Flatten(), nn.Linear(self.in_shape_flat, nodes_per_layer[0]), nn.ReLU()]
 #         for in_features, out_features in zip(nodes_per_layer[:-1], nodes_per_layer[1:]):
@@ -75,4 +81,4 @@ def create(experiment):
 #         return self.model(x)
 
 #     def example(self):
-#         return torch.rand(1, self.inch, 165, 270)
+#         return torch.rand(1, self.nb_in_channels, 165, 270)

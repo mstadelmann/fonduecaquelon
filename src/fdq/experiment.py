@@ -235,55 +235,101 @@ class fdqExperiment:
         replace_tilde_with_abs_path(self.exp_file)
         self.exp_def = DictToObj(self.exp_file)
 
-    def import_class(self, class_path, *args, **kwargs):
-        module_path, class_name = class_path.rsplit(".", 1)
+    def add_module_to_syspath(self, path):
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"File {path} not found.")
 
-        module = importlib.import_module(module_path)
+        parent_dir = os.path.dirname(path)
+        if parent_dir not in sys.path:
+            sys.path.append(parent_dir)
 
-        return getattr(module, class_name)
-        # cls = getattr(module, class_name)
-
-        # return cls(*args, **kwargs)
-
-    def load_class(self, path=None, module_name=None):
+    def import_class(self, file_path=None, module_name=None):
         if module_name is None:
-            if not os.path.exists(path):
-                raise FileNotFoundError(f"File {path} not found.")
-
-            parent_dir = os.path.dirname(path)
-            if parent_dir not in sys.path:
-                sys.path.append(parent_dir)
-
-            module_name = os.path.splitext(os.path.basename(path))[0]
+            if file_path is None or not file_path.endswith(".py"):
+                raise ValueError(
+                    f"Error, path must be a string with the module name and class name separated by a dot. Got: {file_path}"
+                )
+            self.add_module_to_syspath(file_path)
+            module_name = os.path.splitext(os.path.basename(file_path))[0]
         return importlib.import_module(module_name)
 
-    def setupData(self):
-        for data_name, data_source in self.exp_def.data.items():
-            processor = self.load_class(data_source.processor)
-            self.data[data_name] = DictToObj(processor.createDatasets(self))
+    def instantiate_class(
+        self, class_path=None, file_path=None, class_name=None, *args, **kwargs
+    ):
+        if class_path is None and file_path is None:
+            raise ValueError(
+                f"Error, class_path or file_path must be defined. Got: {class_path}, {file_path}"
+            )
+
+        elif class_path is not None:
+            if "." not in class_path:
+                raise ValueError(
+                    f"Error, class_path must be a string with the module name and class name separated by a dot. Got: {class_path}"
+                )
+            module_path, class_name = class_path.rsplit(".", 1)
+            module = self.import_class(module_name=module_path)
+
+        elif file_path is not None:
+            if not file_path.endswith(".py"):
+                raise ValueError(
+                    f"Error, path must be a string with the module name and class name separated by a dot. Got: {file_path}"
+                )
+            elif class_name is None:
+                raise ValueError(
+                    f"Error, class_name must be defined if file_path is used. Got: {class_name}"
+                )
+            self.add_module_to_syspath(file_path)
+            module_name = os.path.basename(file_path).split(".")[0]
+            module = importlib.import_module(module_name)
+
+        return getattr(module, class_name)
 
     def init_models(self, instantiate=True):
-        for model_name, model_source in self.exp_def.models:
-            model_path = model_source.path
-
-            if model_path is not None:
-                if not os.path.exists(model_path):
-                    current_file_path = os.path.abspath(__file__)
-                    networks_dir = os.path.abspath(
-                        os.path.join(os.path.dirname(current_file_path), "../networks/")
-                    )
-                    model_path = os.path.join(networks_dir, model_path)
-
-                model = self.load_class(path=model_path)
-                if instantiate:
-                    self.models[model_name] = model.create(self).to(self.device)
-
-            elif model_source.module_name is not None:
-                cc = getattr(
-                    self.load_class(module_name=model_source.module_name),
-                    model_source.class_name,
+        for model_name, model_def in self.exp_def.models:
+            if model_def.path is not None:
+                cls = self.instantiate_class(
+                    file_path=model_def.path, class_name=model_def.module
                 )
-                self.models[model_name] = cc(**model_source.args.to_dict())
+            elif model_def.module is not None:
+                cls = self.instantiate_class(class_path=model_def.module)
+            else:
+                raise ValueError(
+                    f"Error, model {model_name} must have a path or module defined."
+                )
+
+                # if not os.path.exists(model_def.path):
+                #     raise FileNotFoundError(f"File {model_def.path} not found.")
+
+            #     self.add_module_to_syspath(model_def.path)
+            #     module_name = os.path.basename(model_def.path).split(".")[0]
+
+            # module = importlib.import_module(module_name)
+            # cls = getattr(module, model_def.module)
+
+            # cls = self.instantiate_class()
+            if instantiate:
+                self.models[model_name] = cls(**model_def.args.to_dict())
+
+            # cls = self.instantiate_class(model_def.module)
+
+            # if model_path is not None:
+            #     if not os.path.exists(model_path):
+            #         current_file_path = os.path.abspath(__file__)
+            #         networks_dir = os.path.abspath(
+            #             os.path.join(os.path.dirname(current_file_path), "../networks/")
+            #         )
+            #         model_path = os.path.join(networks_dir, model_path)
+
+            # model = self.import_class(path=model_path)
+            # if instantiate:
+            #     self.models[model_name] = model.create(self).to(self.device)
+
+            # elif model_def.module_name is not None:
+            #     cc = getattr(
+            #         self.import_class(module_name=model_def.module_name),
+            #         model_def.class_name,
+            #     )
+            # self.models[model_name] = cls(**model_def.args.to_dict())
 
     def load_models(self):
         self.init_models(instantiate=False)
@@ -294,6 +340,11 @@ class fdqExperiment:
                 self.device
             )
             self.models[model_name].eval()
+
+    def setupData(self):
+        for data_name, data_source in self.exp_def.data.items():
+            processor = self.import_class(file_path=data_source.processor)
+            self.data[data_name] = DictToObj(processor.createDatasets(self))
 
     def save_current_model(self):
         """Store model including weights.
@@ -361,7 +412,7 @@ class fdqExperiment:
     def prepareTraining(self):
         self.mode.train()
         self.setupData()
-        self.trainer = self.load_class(self.exp_def.train.path)
+        self.trainer = self.import_class(file_path=self.exp_def.train.path)
         self.init_models()
         self.createOptimizer()
         self.set_lr_schedule()
@@ -387,7 +438,7 @@ class fdqExperiment:
 
     def createOptimizer(self):
         for model_name, margs in self.exp_def.models:
-            cls = self.import_class(margs.optimizer.module)
+            cls = self.instantiate_class(margs.optimizer.module)
 
             optimizer = cls(
                 self.models[model_name].parameters(), **margs.optimizer.args.to_dict()
@@ -417,7 +468,7 @@ class fdqExperiment:
                 self.lr_schedulers[model_name] = None
                 continue
 
-            cls = self.import_class(lr_scheduler_module)
+            cls = self.instantiate_class(lr_scheduler_module)
 
             self.lr_schedulers[model_name] = cls(
                 self.optimizers[model_name], **margs.lr_scheduler.args.to_dict()
@@ -425,7 +476,7 @@ class fdqExperiment:
 
     def createLosses(self):
         for loss_name, largs in self.exp_def.losses:
-            cls = self.import_class(largs.module)
+            cls = self.instantiate_class(largs.module)
             self.losses[loss_name] = cls(**largs.args.to_dict())
 
     def load_checkpoint(self, path):
