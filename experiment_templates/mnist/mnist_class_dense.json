@@ -7,7 +7,9 @@
     },
     "models": {
         "simpleNet": {
-            "path": "/home/marc/dev/fonduecaquelon/src/networks/simpleNet.py",
+            "comment": "You can either selected an installed module, define a custom path and class name, or select a model from fdq defining just the file name.",
+            "path": "simpleNet.py",
+            "path_": "/home/marc/dev/fonduecaquelon/src/networks/simpleNet.py",
             "class_name": "simpleNet",
             "args": {
                 "nb_in_channels": 1,
@@ -46,6 +48,7 @@
     },
     "losses": {
         "cp_dummy": {
+            "comment": "You can either selected an installed module or define a custom path and class name.",
             "path": "~/dev/fonduecaquelon/experiment_templates/mnist/dummy_crossentropy_loss.py",
             "class_name": "DummyCrossEntropyLoss",
             "args": {

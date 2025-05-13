@@ -287,9 +287,21 @@ class fdqExperiment:
     def init_models(self, instantiate=True):
         for model_name, model_def in self.exp_def.models:
             if model_def.path is not None:
-                cls = self.instantiate_class(
-                    file_path=model_def.path, class_name=model_def.class_name
-                )
+                if os.path.exists(model_def.path):
+                    cls = self.instantiate_class(
+                        file_path=model_def.path, class_name=model_def.class_name
+                    )
+                else:
+                    # if path does not exist, it might be a a fdq model specified by the file name only.
+                    current_file_path = os.path.abspath(__file__)
+                    networks_dir = os.path.abspath(
+                        os.path.join(os.path.dirname(current_file_path), "../networks/")
+                    )
+                    model_path = os.path.join(networks_dir, model_def.path)
+                    cls = self.instantiate_class(
+                        file_path=model_path, class_name=model_def.class_name
+                    )
+
             elif model_def.class_name is not None:
                 cls = self.instantiate_class(class_path=model_def.class_name)
             else:
@@ -297,39 +309,15 @@ class fdqExperiment:
                     f"Error, model {model_name} must have a path or module defined."
                 )
 
-                # if not os.path.exists(model_def.path):
-                #     raise FileNotFoundError(f"File {model_def.path} not found.")
-
-            #     self.add_module_to_syspath(model_def.path)
-            #     module_name = os.path.basename(model_def.path).split(".")[0]
-
-            # module = importlib.import_module(module_name)
-            # cls = getattr(module, model_def.class_name)
-
-            # cls = self.instantiate_class()
             if instantiate:
                 self.models[model_name] = cls(**model_def.args.to_dict())
 
-            # cls = self.instantiate_class(model_def.class_name)
-
-            # if model_path is not None:
-            #     if not os.path.exists(model_path):
-            #         current_file_path = os.path.abspath(__file__)
-            #         networks_dir = os.path.abspath(
-            #             os.path.join(os.path.dirname(current_file_path), "../networks/")
-            #         )
-            #         model_path = os.path.join(networks_dir, model_path)
-
-            # model = self.import_class(path=model_path)
-            # if instantiate:
-            #     self.models[model_name] = model.create(self).to(self.device)
-
-            # elif model_def.module_name is not None:
-            #     cc = getattr(
-            #         self.import_class(module_name=model_def.module_name),
-            #         model_def.class_name,
-            #     )
-            # self.models[model_name] = cls(**model_def.args.to_dict())
+                if not os.path.exists(model_path):
+                    current_file_path = os.path.abspath(__file__)
+                    networks_dir = os.path.abspath(
+                        os.path.join(os.path.dirname(current_file_path), "../networks/")
+                    )
+                    model_path = os.path.join(networks_dir, model_path)
 
     def load_models(self):
         self.init_models(instantiate=False)
