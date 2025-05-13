@@ -6,7 +6,7 @@ from PIL import Image
 from fdq.misc import get_subset
 from torch.utils.data import DataLoader
 from torchvision import transforms
-
+import torch.nn.functional as F
 
 from tqdm import tqdm
 from urllib.request import urlretrieve
@@ -17,11 +17,19 @@ from fdq.transformers import ResizeMax, ResizeMaxDimPad
 
 
 class OxfordPetDataset(torch.utils.data.Dataset):
-    def __init__(self, root, mode="train", transform_image=None, transform_mask=None):
+    def __init__(
+        self,
+        root,
+        mode="train",
+        transform_image=None,
+        transform_mask=None,
+        binary=False,
+    ):
         assert mode in {"train", "valid", "test"}
 
         self.root = root
         self.mode = mode
+        self.binary = binary
         self.to_tensor = transforms.ToTensor()
         self.transform_img = transform_image
         self.transform_mask = transform_mask
@@ -42,12 +50,17 @@ class OxfordPetDataset(torch.utils.data.Dataset):
         image = self.to_tensor(Image.open(image_path))
         # image = Image.open(image_path)
         mask = torch.from_numpy(np.array(Image.open(mask_path)))
-        mask = torch.where(mask == 2.0, torch.tensor(0.0, dtype=mask.dtype), mask)
-        mask = torch.where(
-            (mask == 1.0) | (mask == 3.0), torch.tensor(1.0, dtype=mask.dtype), mask
-        )
-        # add channel dimension
-        mask = mask.unsqueeze(0)
+
+        if self.binary:
+            mask = torch.where(mask == 2.0, torch.tensor(0.0, dtype=mask.dtype), mask)
+            mask = torch.where(
+                (mask == 1.0) | (mask == 3.0), torch.tensor(1.0, dtype=mask.dtype), mask
+            )
+            # add channel dimension
+            mask = mask.unsqueeze(0)
+        else:
+            # one hot encoding
+            mask = F.one_hot((mask - 1).long(), num_classes=3).permute(2, 0, 1).float()
 
         if self.transform_img is not None:
             image = self.transform_img(image)
@@ -103,16 +116,30 @@ def createDatasets(experiment):
     max_img_size = experiment.exp_def.data.OXPET.args.get("max_img_size", 256)
 
     # transform = transforms.Compose([ResizeMax(max_img_size)])
-    transform = transforms.Compose([ResizeMaxDimPad(max_dim=max_img_size)])
+    transform_img = transforms.Compose(
+        [ResizeMaxDimPad(max_dim=max_img_size, interpol_mode="bilinear")]
+    )
+    transform_mask = transforms.Compose(
+        [ResizeMaxDimPad(max_dim=max_img_size, interpol_mode="nearest")]
+    )
 
     train_set = OxfordPetDataset(
-        dargs.base_path, "train", transform_image=transform, transform_mask=transform
+        dargs.base_path,
+        "train",
+        transform_image=transform_img,
+        transform_mask=transform_mask,
     )
     val_set = OxfordPetDataset(
-        dargs.base_path, "valid", transform_image=transform, transform_mask=transform
+        dargs.base_path,
+        "valid",
+        transform_image=transform_img,
+        transform_mask=transform_mask,
     )
     test_set = OxfordPetDataset(
-        dargs.base_path, "test", transform_image=transform, transform_mask=transform
+        dargs.base_path,
+        "test",
+        transform_image=transform_img,
+        transform_mask=transform_mask,
     )
 
     # subsets

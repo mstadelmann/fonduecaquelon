@@ -312,13 +312,6 @@ class fdqExperiment:
             if instantiate:
                 self.models[model_name] = cls(**model_def.args.to_dict())
 
-                if not os.path.exists(model_path):
-                    current_file_path = os.path.abspath(__file__)
-                    networks_dir = os.path.abspath(
-                        os.path.join(os.path.dirname(current_file_path), "../networks/")
-                    )
-                    model_path = os.path.join(networks_dir, model_path)
-
     def load_models(self):
         self.init_models(instantiate=False)
         for model_name, _ in self.exp_def.models:

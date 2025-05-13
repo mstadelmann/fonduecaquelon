@@ -6,9 +6,13 @@ from torchvision.transforms.v2 import Transform
 
 
 class ResizeMaxDimPad(Transform):
-    def __init__(self, max_dim: int):
+    def __init__(self, max_dim: int, interpol_mode="bilinear"):
         super().__init__()
         self.max_dim = max_dim
+        self.interpol_mode = interpol_mode
+
+        if interpol_mode not in ["nearest", "linear", "bilinear", "bicubic"]:
+            raise ValueError("Mode must be 'bilinear' or 'nearest'")
 
     def transform(self, inpt: torch.Tensor, params=None):
         if not isinstance(inpt, torch.Tensor):
@@ -23,7 +27,10 @@ class ResizeMaxDimPad(Transform):
 
         # Resize
         inpt = F.interpolate(
-            inpt.unsqueeze(0), size=(new_h, new_w), mode="bilinear", align_corners=False
+            inpt.unsqueeze(0),
+            size=(new_h, new_w),
+            mode=self.interpol_mode,
+            # align_corners=False,
         ).squeeze(0)
 
         # Padding
