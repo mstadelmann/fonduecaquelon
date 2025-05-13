@@ -25,8 +25,8 @@ def train(experiment: fdqExperiment) -> None:
         experiment.current_epoch = epoch
         iprint(f"\nEpoch: {epoch + 1} / {experiment.nb_epochs}")
 
-        training_loss_value = 0.0
-        valid_loss_value = 0.0
+        train_loss_sum = 0.0
+        val_loss_sum = 0.0
         model.train()
         pbar = startProgBar(data.n_train_samples, "training...")
 
@@ -64,9 +64,9 @@ def train(experiment: fdqExperiment) -> None:
                 b_idx=nb_tbatch, loader_name="MNIST", model_name="simpleNet"
             )
 
-            training_loss_value += train_loss_tensor.data.item() * inputs.size(0)
+            train_loss_sum += train_loss_tensor.detach().item()
 
-        experiment.trainLoss = training_loss_value / len(data.train_data_loader.dataset)
+        experiment.trainLoss = train_loss_sum / len(data.train_data_loader.dataset)
         pbar.finish()
 
         model.eval()
@@ -85,19 +85,10 @@ def train(experiment: fdqExperiment) -> None:
                 targets = targets.to(experiment.device)
                 val_loss_tensor = experiment.losses["cp"](output, targets)
 
-            valid_loss_value += val_loss_tensor.data.item() * inputs.size(0)
+            val_loss_sum += val_loss_tensor.detach().item()
+        experiment.valLoss = val_loss_sum / len(data.val_data_loader.dataset)
 
         pbar.finish()
-        experiment.valLoss = valid_loss_value / len(data.val_data_loader.dataset)
-
-        save_wandb_loss(experiment)
-
-        # save_tensorboard_loss(experiment=experiment)
-        show_train_progress(experiment)
-
-        iprint(
-            f"Training Loss: {experiment.trainLoss:.4f}, Validation Loss: {experiment.valLoss:.4f}"
-        )
 
         experiment.finalize_epoch()
 

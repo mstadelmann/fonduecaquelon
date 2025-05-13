@@ -113,6 +113,10 @@ def show_train_progress(experiment):
     except Exception:
         print("GNUplot is not available, loss is not plotted.")
 
+    iprint(
+        f"Training Loss: {experiment.trainLoss:.4f}, Validation Loss: {experiment.valLoss:.4f}"
+    )
+
 
 def iprint(msg):
     """

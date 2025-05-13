@@ -10,7 +10,7 @@ import importlib
 import funkybob
 from tqdm import tqdm
 from datetime import datetime
-from fdq.ui_functions import iprint, wprint
+from fdq.ui_functions import iprint, wprint, show_train_progress
 from fdq.misc import (
     remove_file,
     store_processing_infos,
@@ -20,6 +20,7 @@ from fdq.misc import (
     replace_tilde_with_abs_path,
     save_train_history,
 )
+from fdq.img_func import save_tensorboard
 
 
 class fdqExperiment:
@@ -646,7 +647,13 @@ class fdqExperiment:
 
             self.optimizers[model_name].zero_grad()
 
-    def finalize_epoch(self):
+    def finalize_epoch(self, log_scalars=None, log_images=None):
+        show_train_progress(self)
+        save_tensorboard(
+            experiment=self, images=log_images, scalars=log_scalars, max_batch_size=4
+        )
+        # save_wandb_loss(experiment)
+
         # update learning rate
         for model_name in self.models:
             scheduler = self.lr_schedulers[model_name]

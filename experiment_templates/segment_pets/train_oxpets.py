@@ -2,12 +2,9 @@
 
 import torch
 from fdq.experiment import fdqExperiment
-from fdq.ui_functions import show_train_progress, startProgBar, iprint
+from fdq.ui_functions import startProgBar, iprint
 from fdq.misc import print_nb_weights
-from fdq.img_func import (
-    save_tensorboard,
-    save_wandb_loss,
-)
+from fdq.img_func import save_wandb_loss
 
 
 def train(experiment: fdqExperiment) -> None:
@@ -26,8 +23,8 @@ def train(experiment: fdqExperiment) -> None:
         experiment.current_epoch = epoch
         iprint(f"\nEpoch: {epoch + 1} / {experiment.nb_epochs}")
 
-        training_loss_value = 0.0
-        valid_loss_value = 0.0
+        train_loss_sum = 0.0
+        val_loss_sum = 0.0
         model.train()
         pbar = startProgBar(data.n_train_samples, "training...")
 
@@ -63,9 +60,9 @@ def train(experiment: fdqExperiment) -> None:
                 b_idx=nb_tbatch, loader_name="OXPET", model_name="ccUNET"
             )
 
-            training_loss_value += train_loss_tensor.data.item() * inputs.size(0)
+            train_loss_sum += train_loss_tensor.detach().item()
 
-        experiment.trainLoss = training_loss_value / len(data.train_data_loader.dataset)
+        experiment.trainLoss = train_loss_sum / len(data.train_data_loader.dataset)
         pbar.finish()
 
         model.eval()
@@ -85,9 +82,11 @@ def train(experiment: fdqExperiment) -> None:
                 targets = targets.to(experiment.device)
                 val_loss_tensor = experiment.losses["cp"](output, targets)
 
-            valid_loss_value += val_loss_tensor.data.item() * inputs.size(0)
+            val_loss_sum += val_loss_tensor.detach().item()
 
-        experiment.valLoss = valid_loss_value / len(data.val_data_loader.dataset)
+        experiment.valLoss = val_loss_sum / len(data.val_data_loader.dataset)
+
+        pbar.finish()
 
         img = [
             {"name": "input", "data": inputs, "dataformats": "NCHW"},
@@ -95,18 +94,7 @@ def train(experiment: fdqExperiment) -> None:
             {"name": "target", "data": targets, "dataformats": "NCHW"},
         ]
 
-        save_tensorboard(experiment=experiment, images=img, max_batch_size=4)
-
-        pbar.finish()
-
-        save_wandb_loss(experiment)
-        show_train_progress(experiment)
-
-        iprint(
-            f"Training Loss: {experiment.trainLoss:.4f}, Validation Loss: {experiment.valLoss:.4f}"
-        )
-
-        experiment.finalize_epoch()
+        experiment.finalize_epoch(log_images=img)
 
         if experiment.check_early_stop():
             break
