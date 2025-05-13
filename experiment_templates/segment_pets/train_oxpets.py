@@ -5,6 +5,7 @@ from fdq.experiment import fdqExperiment
 from fdq.ui_functions import show_train_progress, startProgBar, iprint
 from fdq.misc import print_nb_weights
 from fdq.img_func import (
+    save_tensorboard,
     save_tensorboard_loss,
     save_wandb_loss,
 )
@@ -87,8 +88,17 @@ def train(experiment: fdqExperiment) -> None:
 
             valid_loss_value += val_loss_tensor.data.item() * inputs.size(0)
 
-        pbar.finish()
         experiment.valLoss = valid_loss_value / len(data.val_data_loader.dataset)
+
+        img = [
+            {"name": "input", "data": inputs, "dataformats": "NCHW"},
+            {"name": "output", "data": output, "dataformats": "NCHW"},
+            {"name": "target", "data": targets, "dataformats": "NCHW"},
+        ]
+
+        save_tensorboard(experiment=experiment, images=img, max_batch_size=4)
+
+        pbar.finish()
 
         save_wandb_loss(experiment)
 

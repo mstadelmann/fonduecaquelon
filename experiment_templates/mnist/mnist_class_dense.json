@@ -35,7 +35,7 @@
         }
     },
     "train": {
-        "path": "~/dev/fonduecaquelon/experiment_templates/mnist/train.py",
+        "path": "~/dev/fonduecaquelon/experiment_templates/mnist/train_mnist.py",
         "args": {
             "epochs": 4,
             "use_GPU": false,

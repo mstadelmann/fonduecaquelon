@@ -481,106 +481,33 @@ def extract_2d_slices(
         return torch.squeeze(image_list[-1]).cpu()
 
 
-@no_grad_decorator
-def save_checkpoint_img(experiment, images):
-    """
-    Store first N images of during validation.
-    This is called in every step in case one wants to export more
-    images than the validation batch size.
-    """
-    store_this_epoch = experiment.current_epoch % experiment.img_exp_freq == 0
-    store_more_images = (
-        experiment.current_val_batch * experiment.val_batch_size < experiment.img_exp_nb
-    )
-
-    if not (store_this_epoch and store_more_images):
+def init_tensorboard(experiment):
+    if not experiment.useTensorboard:
         return
-
-    img_path = os.path.join(experiment.results_dir, "images")
-    if not os.path.exists(img_path):
-        os.makedirs(img_path)
-
-    for image in images:
-        image_name = image[0]
-        image_data = extract_2d_slices(images=image[1], experiment=experiment)
-
-        for i, img in enumerate(image_data):
-            if img is None:
-                continue
-
-            nb_idx = min(img.shape[0], experiment.img_exp_nb)
-            for B, img in enumerate(img[:nb_idx, ...]):
-                fn = f"e{experiment.current_epoch}_b{B + experiment.current_val_batch}_{image_name}_{i}.jpg"
-                saveImg(img, os.path.join(img_path, fn))
-
-
-def init_tensorboard(experiment, inputs):
     experiment.tb_writer = SummaryWriter(f"{experiment.results_dir}/tb/")
+    experiment.tb_graph_stored = False
     iprint("-------------------------------------------------------")
     iprint("Start tensorboard typing:")
     iprint(f"tensorboard --logdir={experiment.results_dir}/tb/ --bind_all")
     iprint("-------------------------------------------------------")
+
+
+def add_graph(experiment, inputs):
+    if experiment.tb_graph_stored:
+        return
     try:
         experiment.tb_writer.add_graph(experiment.model, inputs)
+        experiment.tb_graph_stored = True
     except Exception:
         wprint("Unable to add graph to Tensorboard.")
 
 
-@no_grad_decorator
-def save_tensorboard(experiment, images):
-    """
-    Prepare data for tensorboard
-    add_images expects (N,3,H,W)
-    """
-    store_more_images = (
-        experiment.current_val_batch * experiment.val_batch_size < experiment.img_exp_nb
-    )
-    # pylint: disable=R1702
-    if not (experiment.useTensorboard and store_more_images):
-        return
-
-    for image in images:
-        image_name = image[0]
-        image_data = extract_2d_slices(images=image[1], experiment=experiment)
-
-        if experiment.tb_writer is None:
-            init_tensorboard(experiment, image_data)
-
-        for i, img in enumerate(image_data):
-            if img is None:
-                continue
-
-            nb_idx = min(img.shape[0], experiment.img_exp_nb)
-            nb_channels = img.shape[1]
-
-            if nb_channels in (1, 3):
-                name = f"{image_name}_VB{experiment.current_val_batch}_{i}"
-                img_to_upload = torch.squeeze(img[:nb_idx, ...])
-                while img_to_upload.dim() < 4:
-                    img_to_upload = img_to_upload.unsqueeze(0)
-                experiment.tb_writer.add_images(
-                    name, img_to_upload, experiment.current_epoch
-                )
-            else:
-                for C in list(range(img.shape[1])):
-                    name = f"{image_name}_VB{experiment.current_val_batch}_C{C}_{i}"
-                    experiment.tb_writer.add_images(
-                        name,
-                        torch.unsqueeze(img[:nb_idx, C, ...], 1),
-                        experiment.current_epoch,
-                    )
-
-
 def save_tensorboard_loss(experiment, inputs=None):
-    """
-    Prepare data for tensorboard
-    """
-    # pylint: disable=R1702
     if not experiment.useTensorboard:
         return
 
     if experiment.tb_writer is None:
-        init_tensorboard(experiment, inputs)
+        init_tensorboard(experiment)
 
     experiment.tb_writer.add_scalar(
         "train_loss", experiment.trainLoss, experiment.current_epoch
@@ -588,6 +515,44 @@ def save_tensorboard_loss(experiment, inputs=None):
     experiment.tb_writer.add_scalar(
         "val_loss", experiment.valLoss, experiment.current_epoch
     )
+
+
+@no_grad_decorator
+def save_tensorboard(experiment, images=None, scalars=None, max_batch_size=None):
+    """Log images and scalars to tensorboard.
+
+    Scalars: {name: value}
+    Train and Val loss are logged automatically.
+    Images are expected to be in shape [B,C,D,H,W]
+    """
+    if not experiment.useTensorboard:
+        return
+
+    if experiment.tb_writer is None:
+        init_tensorboard(experiment)
+
+    if scalars is None:
+        scalars = {}
+    scalars["train_loss"] = experiment.trainLoss
+    scalars["val_loss"] = experiment.valLoss
+
+    for scalar_name, scalar_value in scalars.items():
+        experiment.tb_writer.add_scalar(
+            scalar_name, scalar_value, experiment.current_epoch
+        )
+
+    for image in images:
+        img = image["data"]
+        dataformat = image.get("dataformats", "NCHW")
+        if max_batch_size is not None:
+            img = img[:max_batch_size, ...]
+
+        experiment.tb_writer.add_images(
+            tag=image["name"],
+            img_tensor=img,
+            global_step=experiment.current_epoch,
+            dataformats=dataformat,
+        )
 
 
 def init_wandb(experiment):

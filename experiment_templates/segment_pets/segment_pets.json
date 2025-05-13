@@ -8,9 +8,9 @@
             "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxfordpet_preparator.py",
             "args": {
                 "base_path": "~/data/ML_data/oxford_pets/",
-                "subset_train": 0.05,
-                "subset_val": 0.05,
-                "subset_test": 0.05,
+                "subset_train": 0.02,
+                "subset_val": 0.02,
+                "subset_test": 0.02,
                 "pin_memory": true,
                 "num_workers": 4,
                 "train_batch_size": 8,
@@ -60,7 +60,7 @@
         }
     },
     "train": {
-        "path": "~/dev/fonduecaquelon/experiment_templates/segment_pets/train.py",
+        "path": "~/dev/fonduecaquelon/experiment_templates/segment_pets/train_oxpets.py",
         "args": {
             "epochs": 8,
             "use_GPU": false,
@@ -86,7 +86,8 @@
         "save_last_model": true,
         "save_best_val_model": true,
         "save_best_train_model": true,
-        "checkpoint_frequency": 2
+        "checkpoint_frequency": 2,
+        "tensorboard": true
     },
     "test": {
         "evaluator": "~/dev/fonduecaquelon/experiment_templates/mnist/mnist_test.py",

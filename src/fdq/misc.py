@@ -222,9 +222,7 @@ def get_nvidia_smi_memory():
 
 
 def store_processing_infos(experiment):
-    """
-    Store experiment information to results directory.
-    """
+    """Store experiment information to results directory."""
     experiment.run_info = collect_processing_infos(experiment=experiment)
     info_path = os.path.join(experiment.results_dir, "info.json")
 
@@ -233,8 +231,7 @@ def store_processing_infos(experiment):
 
 
 def collect_fdq_git_hash():
-    """
-    Returns the git hash of the currently running FDQ environment,
+    """Returns the git hash of the currently running FDQ environment,
     and checks, if all files were committed.
     None committed files are printed to the console and stored in the
     experiment info file.
@@ -378,9 +375,7 @@ def get_model_git(model):
 
 
 def check_model_git_hash(experiment, current_model):
-    """
-    This function allows to check and checkout the correct version of external models.
-    """
+    """This function allows to check and checkout the correct version of external models."""
 
     # TODO: this does currently not work in a docker environment!
 
@@ -426,8 +421,7 @@ def check_model_git_hash(experiment, current_model):
 
 
 def avoid_nondeterministic(experiment, seed_overwrite=0):
-    """
-    Avoid nondeterministic behavior.
+    """Avoid nondeterministic behavior.
     https://pytorch.org/docs/stable/notes/randomness.html
 
     The cuDNN library, used by CUDA convolution operations, can be a source of

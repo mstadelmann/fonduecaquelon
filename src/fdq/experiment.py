@@ -79,7 +79,7 @@ class fdqExperiment:
         self.new_best_val_loss_ep_id = None
         self.early_stop_detected = False
         # ------------- MGMT attributes ------------------------------
-        self.useTensorboard = self.exp_file.get("store", {}).get("tensorboard", False)
+        self.useTensorboard = self.exp_def.store.tensorboard
         self.tb_writer = None
         self.useWandb = self.exp_file.get("store", {}).get("use_wandb", False)
         self.wandb_project = self.exp_file.get("store", {}).get("wandb_project", None)
