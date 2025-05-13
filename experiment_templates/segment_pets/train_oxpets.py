@@ -4,7 +4,6 @@ import torch
 from fdq.experiment import fdqExperiment
 from fdq.ui_functions import startProgBar, iprint
 from fdq.misc import print_nb_weights
-from fdq.img_func import save_wandb_loss
 
 
 def train(experiment: fdqExperiment) -> None:

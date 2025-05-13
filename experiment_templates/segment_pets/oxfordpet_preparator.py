@@ -175,8 +175,6 @@ def createDatasets(experiment):
         pin_memory=pin_mem,
     )
 
-    # experiment.print_dataset_infos()
-
     return {
         "train_data_loader": train_loader,
         "val_data_loader": val_loader,

@@ -327,6 +327,7 @@ class fdqExperiment:
         for data_name, data_source in self.exp_def.data.items():
             processor = self.import_class(file_path=data_source.processor)
             self.data[data_name] = DictToObj(processor.createDatasets(self))
+        self.print_dataset_infos()
 
     def save_current_model(self):
         """Store model including weights.
@@ -562,15 +563,14 @@ class fdqExperiment:
 
     def print_dataset_infos(self):
         iprint("-------------------------------------------")
-        if self.valset_is_train_subset:
-            iprint("Validation set is a subset of the training set.")
-            iprint(f"Validation subset ratio: {self.val_from_train_ratio}")
-        iprint(f"Nb samples train: {self.trainset_size}")
-        iprint(f"Train subset: {self.train_subset}")
-        iprint(f"Nb samples val: {self.valset_size}")
-        iprint(f"Validation subset: {self.val_subset}")
-        iprint(f"Nb samples test: {self.testset_size}")
-        iprint(f"Test subset: {self.test_subset}")
+        for data_name, data_source in self.exp_def.data.items():
+            iprint(f"Dataset: {data_name}")
+            iprint(f"Train batch size: {data_source.args.train_batch_size}")
+            iprint(f"Validation batch size: {data_source.args.val_batch_size}")
+            iprint(f"Test batch size: {data_source.args.test_batch_size}")
+            iprint(f"Nb samples train: {self.data[data_name].n_train_samples}")
+            iprint(f"Nb samples val: {self.data[data_name].n_val_samples}")
+            iprint(f"Nb samples test: {self.data[data_name].n_test_samples}")
         iprint("-------------------------------------------")
 
     def clean_up(self):

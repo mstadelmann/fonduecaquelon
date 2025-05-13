@@ -1,3 +1,9 @@
+"""This module contains unit tests for the MNIST classifier experiment.
+
+It verifies the training process, checks the existence of result files,
+and ensures that the test results meet the expected criteria.
+"""
+
 import argparse
 import json
 import os
@@ -5,7 +11,7 @@ import unittest
 import glob
 
 from fdq.experiment import fdqExperiment
-from fdq.testing import run_test, find_model_path, find_experiment_result_dirs
+from fdq.testing import run_test, find_model_path
 
 
 class TestMNISTClassifier(unittest.TestCase):
