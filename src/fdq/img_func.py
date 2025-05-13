@@ -493,28 +493,12 @@ def init_tensorboard(experiment):
 
 
 def add_graph(experiment, inputs):
-    if experiment.tb_graph_stored:
-        return
-    try:
-        experiment.tb_writer.add_graph(experiment.model, inputs)
-        experiment.tb_graph_stored = True
-    except Exception:
-        wprint("Unable to add graph to Tensorboard.")
-
-
-def save_tensorboard_loss(experiment, inputs=None):
-    if not experiment.useTensorboard:
-        return
-
-    if experiment.tb_writer is None:
-        init_tensorboard(experiment)
-
-    experiment.tb_writer.add_scalar(
-        "train_loss", experiment.trainLoss, experiment.current_epoch
-    )
-    experiment.tb_writer.add_scalar(
-        "val_loss", experiment.valLoss, experiment.current_epoch
-    )
+    for model_name, _ in experiment.exp_def.models:
+        try:
+            experiment.tb_writer.add_graph(experiment.models[model_name], inputs)
+            experiment.tb_graph_stored = True
+        except Exception:
+            wprint("Unable to add graph to Tensorboard.")
 
 
 @no_grad_decorator
@@ -541,18 +525,23 @@ def save_tensorboard(experiment, images=None, scalars=None, max_batch_size=None)
             scalar_name, scalar_value, experiment.current_epoch
         )
 
-    for image in images:
-        img = image["data"]
-        dataformat = image.get("dataformats", "NCHW")
-        if max_batch_size is not None:
-            img = img[:max_batch_size, ...]
+    if images is not None:
+        # add model to tensorboard
+        if not experiment.tb_graph_stored:
+            add_graph(experiment, images[0]["data"])
 
-        experiment.tb_writer.add_images(
-            tag=image["name"],
-            img_tensor=img,
-            global_step=experiment.current_epoch,
-            dataformats=dataformat,
-        )
+        for image in images:
+            img = image["data"]
+            dataformat = image.get("dataformats", "NCHW")
+            if max_batch_size is not None:
+                img = img[:max_batch_size, ...]
+
+            experiment.tb_writer.add_images(
+                tag=image["name"],
+                img_tensor=img,
+                global_step=experiment.current_epoch,
+                dataformats=dataformat,
+            )
 
 
 def init_wandb(experiment):

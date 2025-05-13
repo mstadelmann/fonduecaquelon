@@ -6,7 +6,6 @@ from fdq.ui_functions import show_train_progress, startProgBar, iprint
 from fdq.misc import print_nb_weights
 from fdq.img_func import (
     save_tensorboard,
-    save_tensorboard_loss,
     save_wandb_loss,
 )
 
@@ -101,8 +100,6 @@ def train(experiment: fdqExperiment) -> None:
         pbar.finish()
 
         save_wandb_loss(experiment)
-
-        save_tensorboard_loss(experiment=experiment)
         show_train_progress(experiment)
 
         iprint(
