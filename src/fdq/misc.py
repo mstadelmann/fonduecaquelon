@@ -564,14 +564,17 @@ def init_wandb(experiment):
             name=exp_name,
             config=experiment.exp_file,
         )
+        experiment.wandb_initialized = True
+        iprint(f"Init Wandb -  log path: {wandb.run.dir}")
+        return True
+
     except Exception as e:
         eprint("Unable to initialize wandb!")
         eprint(f"Error: {e}")
         experiment.useWandb = False
-        return
+        return False
+        
 
-    experiment.wandb_initialized = True
-    iprint(f"Init Wandb -  log path: {wandb.run.dir}")
 
 
 @torch.no_grad()
@@ -589,7 +592,8 @@ def save_wandb(experiment, images=None, scalars=None):
         return
 
     if experiment.wandb_initialized is False:
-        init_wandb(experiment)
+        if not init_wandb(experiment):
+            return
 
     if scalars is None:
         scalars = {}
