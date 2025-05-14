@@ -12,6 +12,7 @@ def createDatasets(experiment):
     dargs = experiment.exp_def.data.MNIST.args
 
     pin_mem = False if not experiment.is_cuda else dargs.get("pin_memory", False)
+    drop_last = dargs.get("drop_last", True)
 
     if not os.path.exists(dargs.base_path):
         os.makedirs(dargs.base_path)
@@ -64,6 +65,7 @@ def createDatasets(experiment):
         shuffle=dargs.shuffle_train,
         num_workers=dargs.num_workers,
         pin_memory=pin_mem,
+        drop_last=drop_last
     )
 
     test_loader = DataLoader(
@@ -72,6 +74,7 @@ def createDatasets(experiment):
         shuffle=dargs.shuffle_test,
         num_workers=dargs.num_workers,
         pin_memory=pin_mem,
+        drop_last=drop_last
     )
 
     if n_val_samples > 0:
@@ -81,6 +84,7 @@ def createDatasets(experiment):
             shuffle=dargs.shuffle_val,
             num_workers=dargs.num_workers,
             pin_memory=pin_mem,
+            drop_last=drop_last
         )
     else:
         val_loader = None

@@ -68,20 +68,16 @@ def train(experiment: fdqExperiment) -> None:
 
         pbar = startProgBar(data.n_val_samples, "validation...")
 
-        for nb_vbatch, batch in enumerate(data.val_data_loader):
-            experiment.current_val_batch = nb_vbatch
-            pbar.update(nb_vbatch * len(batch["image"]))
+        with torch.no_grad():
+            for nb_vbatch, batch in enumerate(data.val_data_loader):
+                experiment.current_val_batch = nb_vbatch
+                pbar.update(nb_vbatch * len(batch["image"]))
 
-            inputs = batch["image"].to(experiment.device).type(torch.float32)
-            targets = batch["mask"].to(experiment.device).type(torch.float32)
-
-            with torch.no_grad():
-                inputs = inputs.to(experiment.device)
+                inputs = batch["image"].to(experiment.device).type(torch.float32)
+                targets = batch["mask"].to(experiment.device).type(torch.float32)
                 output = model(inputs)
-                targets = targets.to(experiment.device)
                 val_loss_tensor = experiment.losses["cp"](output, targets)
-
-            val_loss_sum += val_loss_tensor.detach().item()
+                val_loss_sum += val_loss_tensor.detach().item()
 
         experiment.valLoss = val_loss_sum / len(data.val_data_loader.dataset)
 

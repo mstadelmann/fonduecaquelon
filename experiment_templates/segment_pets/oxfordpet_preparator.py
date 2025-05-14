@@ -104,6 +104,7 @@ def createDatasets(experiment):
     dargs = experiment.exp_def.data.OXPET.args
 
     pin_mem = False if not experiment.is_cuda else dargs.get("pin_memory", False)
+    drop_last = dargs.get("drop_last", True)
 
     if not os.path.exists(dargs.base_path):
         os.makedirs(dargs.base_path)
@@ -157,6 +158,7 @@ def createDatasets(experiment):
         shuffle=dargs.shuffle_train,
         num_workers=dargs.num_workers,
         pin_memory=pin_mem,
+        drop_last=drop_last
     )
 
     test_loader = DataLoader(
@@ -165,6 +167,7 @@ def createDatasets(experiment):
         shuffle=dargs.shuffle_test,
         num_workers=dargs.num_workers,
         pin_memory=pin_mem,
+        drop_last=drop_last
     )
 
     val_loader = DataLoader(
@@ -173,6 +176,7 @@ def createDatasets(experiment):
         shuffle=dargs.shuffle_val,
         num_workers=dargs.num_workers,
         pin_memory=pin_mem,
+        drop_last=drop_last
     )
 
     return {

@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --time=1400
-#SBATCH --job-name=vlf-runner
+#SBATCH --job-name=fdq-runner
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --nodes=1
-#SBATCH --gpus=1
+#SBATCH --gres=gpus:1
 #SBATCH --mem=200G 
 #SBATCH --partition=gpu_top
 #SBATCH --account=cai_ivs
@@ -43,7 +43,7 @@ DEBUG=false
 script_start=$(date +%s.%N)
 
 # vlf writes all outputs to this dir
-SCRATCH_PATH="/scratch/vlf_results/"
+SCRATCH_PATH="/scratch/fdq_results/"
 
 # at job termination, everything is moved here:
 RESULTS_PATH=#RESULTS_PATH#

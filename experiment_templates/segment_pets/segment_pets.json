@@ -8,9 +8,9 @@
             "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxfordpet_preparator.py",
             "args": {
                 "base_path": "~/data/ML_data/oxford_pets/",
-                "subset_train": 0.02,
-                "subset_val": 0.02,
-                "subset_test": 0.02,
+                "subset_train": 0.2,
+                "subset_val": 0.2,
+                "subset_test": 0.2,
                 "pin_memory": true,
                 "num_workers": 4,
                 "train_batch_size": 8,
@@ -63,7 +63,7 @@
         "path": "~/dev/fonduecaquelon/experiment_templates/segment_pets/train_oxpets.py",
         "args": {
             "epochs": 8,
-            "use_GPU": false,
+            "use_GPU": true,
             "use_AMP": false,
             "accumulate_grad_batches": 1,
             "early_stop_val_loss": 5,
@@ -102,10 +102,12 @@
         }
     },
     "slurm_cluster": {
-        "use_cluster": false,
+        "python_env_mod": "python/3.12.4",
+        "uv_env_mod": "uv/0.6.12",
         "temp_results_path": "/scratch/fdq_results",
-        "log_path": "/scratch/fdq_logs",
-        "max_time_min": 1400,
+        "cluster_data_path": "/scratch/fdq_data",
+        "log_path": "~/slurm_logs/",
+        "time": 1400,
         "ntasks": 1,
         "cpus-per-task": 8,
         "gres": "gpu:1",

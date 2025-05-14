@@ -25,7 +25,6 @@
     },
     "store": {
         "results_path": "~/data/ML_data/results",
-        "cluster_results_path": "/scratch/fdq_results",
         "img_exp_nb": 4,
         "save_last_model": true,
         "save_best_val_model": true,
