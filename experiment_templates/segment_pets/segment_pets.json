@@ -81,7 +81,6 @@
     },
     "store": {
         "results_path": "~/data/ML_data/results",
-        "cluster_results_path": "/scratch/fdq_results",
         "img_exp_nb": 4,
         "save_last_model": true,
         "save_best_val_model": true,
@@ -101,5 +100,16 @@
                 "nb_test_samples": "100"
             }
         }
+    },
+    "slurm_cluster": {
+        "use_cluster": false,
+        "temp_results_path": "/scratch/fdq_results",
+        "log_path": "/scratch/fdq_logs",
+        "max_time_min": 1400,
+        "ntasks": 1,
+        "cpus-per-task": 8,
+        "gres": "gpu:1",
+        "partition": "gpu",
+        "account": "admin"
     }
 }

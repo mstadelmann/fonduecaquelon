@@ -118,7 +118,7 @@ class fdqExperiment:
 
             if self.is_slurm:
                 folder_name += f"__{self.slurm_job_id}"
-                res_base_path = self.exp_file.get("store", {}).get(
+                res_base_path = self.exp_file.get("slurm_cluster", {}).get(
                     "cluster_results_path", None
                 )
                 if res_base_path is None:
