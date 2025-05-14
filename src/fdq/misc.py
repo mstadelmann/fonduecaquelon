@@ -1,5 +1,6 @@
 import json
 import os
+import cv2
 import torch
 import random
 import git
@@ -8,12 +9,14 @@ import time
 import numpy as np
 import inspect
 import copy
+import wandb
 import matplotlib.pyplot as plt
 import subprocess as sp
 from matplotlib.ticker import MaxNLocator
 from fdq.ui_functions import iprint, wprint, eprint
 from datetime import datetime
 from torch.utils.data import random_split
+from torch.utils.tensorboard import SummaryWriter
 
 
 class FCQmode:
@@ -385,3 +388,231 @@ def save_train_history(experiment):
 
     except Exception:
         wprint("Error - unable to store training history!")
+
+
+def showImg_cv(tensor_image, window_name="Image"):
+    """
+    Displays a PyTorch tensor image using OpenCV.
+
+    Supports:
+    - [H, W]  (2D grayscale)
+    - [1, H, W] (grayscale)
+    - [3, H, W] (RGB)
+    """
+    # Detach and move to CPU just in case
+    tensor_image = tensor_image.detach().cpu()
+
+    if tensor_image.ndim == 2:
+        # [H, W] grayscale
+        np_img = tensor_image.numpy()
+    elif tensor_image.ndim == 3:
+        if tensor_image.shape[0] == 1:
+            # [1, H, W] grayscale
+            np_img = tensor_image[0].numpy()
+        elif tensor_image.shape[0] == 3:
+            # [3, H, W] RGB → HWC and convert to BGR for OpenCV
+            np_img = tensor_image.mul(255).byte().numpy()
+            np_img = np.transpose(np_img, (1, 2, 0))  # [H, W, C]
+            np_img = cv2.cvtColor(np_img, cv2.COLOR_RGB2BGR)
+        else:
+            raise ValueError("Expected 1 or 3 channels in [C, H, W] tensor.")
+    else:
+        raise ValueError("Tensor must be 2D or 3D (C x H x W or H x W).")
+
+    # Normalize grayscale if float
+    if np_img.dtype in [np.float32, np.float64]:
+        np_img = np.clip(np_img, 0, 1)
+        np_img = (np_img * 255).astype(np.uint8)
+
+    cv2.imshow(window_name, np_img)
+    # cv2.waitKey(0)
+
+    # Wait for a key press or window closure
+    while True:
+        key = cv2.waitKey(1) & 0xFF
+        if key != 255:  # A key was pressed
+            break
+        if cv2.getWindowProperty(window_name, cv2.WND_PROP_VISIBLE) < 1:
+            break
+
+    cv2.destroyAllWindows()
+
+
+def init_tensorboard(experiment):
+    if not experiment.useTensorboard:
+        return
+    experiment.tb_writer = SummaryWriter(f"{experiment.results_dir}/tb/")
+    experiment.tb_graph_stored = False
+    iprint("-------------------------------------------------------")
+    iprint("Start tensorboard typing:")
+    iprint(f"tensorboard --logdir={experiment.results_dir}/tb/ --bind_all")
+    iprint("-------------------------------------------------------")
+
+
+def add_graph(experiment):
+    sample = next(iter(experiment.data[list(experiment.data)[0]].train_data_loader))
+    if isinstance(sample, tuple) or isinstance(sample, list):
+        dummy_imput = sample[0]
+    elif isinstance(sample, dict):
+        dummy_imput = next(iter(sample.values()))
+
+    for model_name, _ in experiment.exp_def.models:
+        try:
+            experiment.tb_writer.add_graph(experiment.models[model_name], dummy_imput)
+            experiment.tb_graph_stored = True
+        except Exception:
+            wprint("Unable to add graph to Tensorboard.")
+
+
+@torch.no_grad()
+def save_tensorboard(experiment, images=None, scalars=None, text=None):
+    """Log images and scalars to tensorboard.
+
+    Scalars: {name: value}
+    Train and Val loss are logged automatically.
+    Images are expected to be in shape [B,C,D,H,W]
+    """
+
+    if not experiment.useTensorboard:
+        return
+
+    if experiment.tb_writer is None:
+        init_tensorboard(experiment)
+
+    # add model to tensorboard
+    if not experiment.tb_graph_stored:
+        add_graph(experiment)
+
+    if scalars is None:
+        scalars = {}
+    elif not isinstance(scalars, dict):
+        raise ValueError("Scalars must be a dictionary.")
+    scalars["train_loss"] = experiment.trainLoss
+    scalars["val_loss"] = experiment.valLoss
+
+    for scalar_name, scalar_value in scalars.items():
+        experiment.tb_writer.add_scalar(
+            scalar_name, scalar_value, experiment.current_epoch
+        )
+
+    if text is not None:
+        if not isinstance(text, dict):
+            raise ValueError("Text must be a dictionary.")
+        for text_name, text_value in text.items():
+            experiment.tb_writer.add_text(
+                text_name, text_value, experiment.current_epoch
+            )
+
+    if images is not None:
+        if not isinstance(images, list):
+            if isinstance(images, dict):
+                images = [images]
+            else:
+                raise ValueError(
+                    "Images must be a dictionary or a list of dictionaries."
+                )
+
+        for image in images:
+            img = image["data"]
+            dataformat = image.get("dataformats", "NCHW")
+
+            experiment.tb_writer.add_images(
+                tag=image["name"],
+                img_tensor=img,
+                global_step=experiment.current_epoch,
+                dataformats=dataformat,
+            )
+
+
+def init_wandb(experiment):
+    """Initialize weights and biases"""
+
+    if experiment.exp_def.store.wandb_project is None:
+        raise ValueError(
+            "Wandb project name is not set. Please set it in the experiment definition."
+        )
+    elif experiment.exp_def.store.wandb_entity is None:
+        raise ValueError(
+            "Wandb entity name is not set. Please set it in the experiment definition."
+        )
+    elif experiment.exp_def.store.wandb_key is None:
+        raise ValueError(
+            "Wandb key is not set. Please set it in the experiment definition."
+        )
+
+    exp_name = os.path.basename(experiment.results_dir)
+    if experiment.previous_slurm_job_id is not None:
+        try:
+            exp_name_all = exp_name.split("__")
+            exp_name = (
+                exp_name_all[0]
+                + "__"
+                + exp_name_all[1]
+                + "__"
+                + experiment.previous_slurm_job_id
+                + "->"
+                + exp_name_all[2]
+            )
+        except Exception:
+            exp_name = os.path.basename(experiment.results_dir)
+
+    try:
+        wandb.login(key=experiment.exp_def.store.wandb_key)
+        wandb.init(
+            project=experiment.exp_def.store.wandb_project,
+            entity=experiment.exp_def.store.wandb_entity,
+            name=exp_name,
+            config=experiment.exp_file,
+        )
+    except Exception as e:
+        eprint("Unable to initialize wandb!")
+        eprint(f"Error: {e}")
+        experiment.useWandb = False
+        return
+
+    experiment.wandb_initialized = True
+    iprint(f"Init Wandb -  log path: {wandb.run.dir}")
+
+
+@torch.no_grad()
+def save_wandb(experiment, images=None, scalars=None):
+    """Track experiment data with weights and biases.
+
+    Args:
+        experiment (class): experiment object.
+        images (list): stacked list of [[image_name, image_data]].
+
+    Returns:
+        type: Description of returned object.
+    """
+    if not experiment.useWandb:
+        return
+
+    if experiment.wandb_initialized is False:
+        init_wandb(experiment)
+
+    if scalars is None:
+        scalars = {}
+    elif not isinstance(scalars, dict):
+        raise ValueError("Scalars must be a dictionary.")
+    scalars["train_loss"] = experiment.trainLoss
+    scalars["val_loss"] = experiment.valLoss
+    scalars["epoch"] = experiment.current_epoch
+
+    wandb.log(scalars)
+
+    if images is not None:
+        if not isinstance(images, list):
+            if isinstance(images, dict):
+                images = [images]
+            else:
+                raise ValueError(
+                    "Images must be a dictionary or a list of dictionaries."
+                )
+
+        for image in images:
+            img = image["data"]
+            captions = image.get("captions", None)
+
+            images = wandb.Image(img, caption=captions)
+            wandb.log({image["name"]: images})

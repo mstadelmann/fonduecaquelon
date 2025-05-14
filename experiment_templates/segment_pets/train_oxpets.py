@@ -93,7 +93,7 @@ def train(experiment: fdqExperiment) -> None:
             {"name": "target", "data": targets, "dataformats": "NCHW"},
         ]
 
-        experiment.finalize_epoch(log_images=img)
+        experiment.finalize_epoch(log_images_wandb=img, log_images_tensorboard=img)
 
         if experiment.check_early_stop():
             break

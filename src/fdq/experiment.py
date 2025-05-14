@@ -19,8 +19,9 @@ from fdq.misc import (
     DictToObj,
     replace_tilde_with_abs_path,
     save_train_history,
+    save_tensorboard,
+    save_wandb,
 )
-from fdq.img_func import save_tensorboard
 
 
 class fdqExperiment:
@@ -80,12 +81,9 @@ class fdqExperiment:
         self.new_best_val_loss_ep_id = None
         self.early_stop_detected = False
         # ------------- MGMT attributes ------------------------------
-        self.useTensorboard = self.exp_def.store.tensorboard
+        self.useTensorboard = self.exp_def.store.use_tensorboard
         self.tb_writer = None
-        self.useWandb = self.exp_file.get("store", {}).get("use_wandb", False)
-        self.wandb_project = self.exp_file.get("store", {}).get("wandb_project", None)
-        self.wandb_entity = self.exp_file.get("store", {}).get("wandb_entity", None)
-        self.wandb_key = self.exp_file.get("store", {}).get("wandb_key", None)
+        self.useWandb = self.exp_def.store.use_wandb
         self.wandb_initialized = False
         # ------------- SLURM ------------------------------
         slurm_job_id = os.getenv("SLURM_JOB_ID")
@@ -647,16 +645,25 @@ class fdqExperiment:
 
             self.optimizers[model_name].zero_grad()
 
-    def finalize_epoch(self, log_scalars=None, log_images=None, log_text=None):
+    def finalize_epoch(
+        self,
+        log_scalars=None,
+        log_images_wandb=None,
+        log_images_tensorboard=None,
+        log_text_tensorboard=None,
+    ):
         show_train_progress(self)
         save_tensorboard(
             experiment=self,
-            images=log_images,
+            images=log_images_tensorboard,
             scalars=log_scalars,
-            text=log_text,
-            max_batch_size=4,
+            text=log_text_tensorboard,
         )
-        # save_wandb_loss(experiment)
+        save_wandb(
+            experiment=self,
+            images=log_images_wandb,
+            scalars=log_scalars,
+        )
 
         # update learning rate
         for model_name in self.models:

@@ -8,7 +8,7 @@ from PIL import Image
 
 
 from fdq.ui_functions import getIntInput, startProgBar
-from fdq.img_func import showImg, showImg_cv
+from fdq.misc import showImg_cv
 
 
 import matplotlib
@@ -46,8 +46,8 @@ def createEvaluator(experiment):
     else:
         tmode = getIntInput(
             "\nSelect Testmode:\n1: Interactive test with predefined data.\n2: Automatic with predefined data."
-            " \n3: Manual image load. \n4: Homogenous scalar tensor.",
-            [1, 4],
+            " \n3: Homogenous scalar tensor.",
+            [1, 3],
         )
 
     if tmode == 1:
@@ -130,75 +130,7 @@ def createEvaluator(experiment):
         accuracy = cor_pred / len(labels_pred)
         print(f"\nTotal accuracy: {accuracy}, Nb samples: {len(labels_pred)}")
 
-    elif tmode == 3:
-        while True:
-            user_input = input("Enter path to image (or 'q' to quit).")
-
-            if user_input == "q":
-                sys.exit()
-
-            if not os.path.exists(user_input):
-                print(f"Error: File {user_input} not found.")
-            else:
-                try:
-                    img = Image.open(user_input)
-
-                    # imgt = np.array(img)
-                    # print("-----------------------------")
-                    # print(f"shape: {imgt.shape}")
-                    # print(f"np.min(imgt): {np.min(imgt)}")
-                    # print(f"np.max(imgt) input: {np.max(imgt)}")
-                    # print(f"np.mean(imgt): {np.mean(imgt)}")
-                    # print("-----------------------------")
-                    # print(f"np.min(imgt[:,:,0]): {np.min(imgt[:,:,0])}")
-                    # print(f"np.max(imgt) input: {np.max(imgt[:,:,0])}")
-                    # print(f"np.mean(imgt): {np.mean(imgt[:,:,0])}")
-                    # print(f"np.std(imgt): {np.std(imgt[:,:,0])}")
-
-                    img = experiment.trainTransformer_a(img).to(experiment.device)
-
-                    if len(img.shape) == 3:
-                        img = torch.unsqueeze(img, 0)
-
-                    # print("-----------------------------")
-                    # print("-----------------------------")
-                    # print(f"\nimg.dtype: {img.dtype}")
-                    # print(f"\nimg.shape: {img.shape}")
-                    # print(f"torch.min(img) total: {torch.min(img)}")
-                    # print(f"torch.max(img): {torch.max(img)}")
-                    # print(f"torch.mean(img): {torch.mean(img)}")
-
-                    # print("-----------------------------")
-                    # print(f"torch.min(img[:,0,...]): {torch.min(img[:,0,...])}")
-                    # print(f"torch.max(img): {torch.max(img[:,0,...])}")
-                    # print(f"torch.mean(img): {torch.mean(img[:,0,...])}")
-
-                    # print("-----------------------------")
-                    # print(f"torch.min(img[:,1,...]): {torch.min(img[:,1,...])}")
-                    # print(f"torch.max(img): {torch.max(img[:,1,...])}")
-                    # print(f"torch.mean(img): {torch.mean(img[:,1,...])}")
-
-                    # print("-----------------------------")
-                    # print(f"torch.min(img[:,2,...]): {torch.min(img[:,2,...])}")
-                    # print(f"torch.max(img): {torch.max(img[:,2,...])}")
-                    # print(f"torch.mean(img): {torch.mean(img[:,2,...])}")
-
-                    print("--------------------------------------")
-                    print(f"img shape forwarded: {img.shape}")
-                    pred = experiment.model(img)
-                    print(f"pred: {pred}")
-                    pred_sm = F.softmax(pred, dim=1)
-                    pred_am = pred_sm.argmax()
-                    print(
-                        f"Prediction: {pred.tolist()} \nSoftmax: {pred_sm.tolist()}"
-                        f" \nPredicted Label: {experiment.class_names[pred_am.item()]}"
-                    )
-                    showImg(img)
-
-                except Exception:
-                    print(f"Error loading image {user_input}")
-
-    if tmode == 4:
+    if tmode == 3:
         in_scalar = getIntInput("Int input value?")
         in_tensor = in_scalar * torch.ones(
             (1, 3, experiment.net_input_size[0], experiment.net_input_size[1])

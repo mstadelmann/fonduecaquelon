@@ -3,11 +3,8 @@
 import torch
 import torchvision
 from fdq.experiment import fdqExperiment
-from fdq.ui_functions import show_train_progress, startProgBar, iprint
+from fdq.ui_functions import startProgBar, iprint
 from fdq.misc import print_nb_weights
-from fdq.img_func import (
-    save_wandb_loss,
-)
 
 
 def train(experiment: fdqExperiment) -> None:
@@ -91,21 +88,39 @@ def train(experiment: fdqExperiment) -> None:
 
         pbar.finish()
 
-        # Log the image grid
-        img_grid = {
-            "name": "inputs",
-            "data": torchvision.utils.make_grid(inputs),
-            "dataformats": "CHW",
-        }
-
         # Log text predictions
+        # only tensorboard!
+        max_log_size = 8
         _, preds = torch.max(output, 1)
         log_txt = {
             f"Predictions/image_{idx}": f"Predicted: {preds[idx].item()}, True: {targets[idx].item()}"
-            for idx in range(len(inputs))
+            for idx in range(min(len(inputs), max_log_size))
         }
 
-        experiment.finalize_epoch(log_images=img_grid, log_text=log_txt)
+        # Log the images
+        # tensorboard and wandb behave slightly different!
+        # here two examples:
+        imgs_tb = {
+            "name": "inputs",
+            "data": torchvision.utils.make_grid(inputs[:max_log_size, ...]),
+            "dataformats": "CHW",
+        }
+
+        captions = [
+            f"Predicted: {preds[idx].item()}, True: {targets[idx].item()}"
+            for idx in range(len(preds))
+        ]
+        imgs_wandb = {
+            "name": "inputs",
+            "data": inputs[:max_log_size],
+            "captions": captions[:max_log_size],
+        }
+
+        experiment.finalize_epoch(
+            log_images_wandb=imgs_wandb,
+            log_images_tensorboard=imgs_tb,
+            log_text_tensorboard=log_txt,
+        )
 
         if experiment.check_early_stop():
             break

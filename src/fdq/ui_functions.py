@@ -8,7 +8,6 @@ from termcolor import colored
 colorama_initialized = None
 
 
-# trunk-ignore(ruff/B006)
 def getIntInput(message, drange=[0, 5000]):  # pylint: disable=W0102
     tmode = None
     while not isinstance(tmode, int):
@@ -40,7 +39,6 @@ def getYesNoInput(message):
     return tmode.lower() == "y"
 
 
-# trunk-ignore(ruff/B006)
 def getFloatInput(message, drange=[-10, 10]):  # pylint: disable=W0102
     tmode = None
     while not isinstance(tmode, float):
