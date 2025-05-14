@@ -502,13 +502,16 @@ def add_graph(experiment, inputs):
 
 
 @no_grad_decorator
-def save_tensorboard(experiment, images=None, scalars=None, max_batch_size=None):
+def save_tensorboard(
+    experiment, images=None, scalars=None, text=None, max_batch_size=None
+):
     """Log images and scalars to tensorboard.
 
     Scalars: {name: value}
     Train and Val loss are logged automatically.
     Images are expected to be in shape [B,C,D,H,W]
     """
+
     if not experiment.useTensorboard:
         return
 
@@ -517,6 +520,8 @@ def save_tensorboard(experiment, images=None, scalars=None, max_batch_size=None)
 
     if scalars is None:
         scalars = {}
+    elif not isinstance(scalars, dict):
+        raise ValueError("Scalars must be a dictionary.")
     scalars["train_loss"] = experiment.trainLoss
     scalars["val_loss"] = experiment.valLoss
 
@@ -525,7 +530,22 @@ def save_tensorboard(experiment, images=None, scalars=None, max_batch_size=None)
             scalar_name, scalar_value, experiment.current_epoch
         )
 
+    if text is not None:
+        if not isinstance(text, dict):
+            raise ValueError("Text must be a dictionary.")
+        for text_name, text_value in text.items():
+            experiment.tb_writer.add_text(
+                text_name, text_value, experiment.current_epoch
+            )
+
     if images is not None:
+        if not isinstance(images, list):
+            if isinstance(images, dict):
+                images = [images]
+            else:
+                raise ValueError(
+                    "Images must be a dictionary or a list of dictionaries."
+                )
         # add model to tensorboard
         if not experiment.tb_graph_stored:
             add_graph(experiment, images[0]["data"])

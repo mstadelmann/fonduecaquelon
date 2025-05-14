@@ -647,10 +647,14 @@ class fdqExperiment:
 
             self.optimizers[model_name].zero_grad()
 
-    def finalize_epoch(self, log_scalars=None, log_images=None):
+    def finalize_epoch(self, log_scalars=None, log_images=None, log_text=None):
         show_train_progress(self)
         save_tensorboard(
-            experiment=self, images=log_images, scalars=log_scalars, max_batch_size=4
+            experiment=self,
+            images=log_images,
+            scalars=log_scalars,
+            text=log_text,
+            max_batch_size=4,
         )
         # save_wandb_loss(experiment)
 

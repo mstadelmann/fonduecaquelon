@@ -30,7 +30,8 @@
         "save_last_model": true,
         "save_best_val_model": true,
         "save_best_train_model": true,
-        "checkpoint_frequency": 2
+        "checkpoint_frequency": 2,
+        "tensorboard": true
     },
     "test": {
         "processor": "~/dev/fonduecaquelon/experiment_templates/mnist/mnist_test.py",

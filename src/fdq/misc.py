@@ -190,37 +190,6 @@ def remove_file(path):
             eprint(f"{path} does not exists!")
 
 
-def get_nvidia_smi_memory():
-    def _string_to_list(x):
-        return x.decode("ascii").split("\n")[:-1]
-
-    try:
-        COMMAND = "nvidia-smi --query-gpu=memory.used --format=csv"
-        memory_used_info = _string_to_list(sp.check_output(COMMAND.split()))[1:]
-        memory_used_values = [int(x.split()[0]) for i, x in enumerate(memory_used_info)]
-
-        COMMAND = "nvidia-smi --query-gpu=memory.total --format=csv"
-        memory_total_info = _string_to_list(sp.check_output(COMMAND.split()))[1:]
-        memory_total_values = [
-            int(x.split()[0]) for i, x in enumerate(memory_total_info)
-        ]
-
-        res = (
-            memory_used_values,
-            memory_total_values,
-            list(
-                np.round(
-                    np.array(memory_used_values) / np.array(memory_total_values), 2
-                )
-            ),
-        )
-
-    except Exception:
-        res = None
-
-    return res
-
-
 def store_processing_infos(experiment):
     """Store experiment information to results directory."""
     experiment.run_info = collect_processing_infos(experiment=experiment)
@@ -361,63 +330,6 @@ def collect_processing_infos(experiment=None):
         pass
 
     return data
-
-
-def get_model_git(model):
-    try:
-        model_path = inspect.getfile(model)
-        model_git = git.Repo(model_path, search_parent_directories=True)
-
-    except Exception:
-        model_git = None
-
-    return model_git
-
-
-def check_model_git_hash(experiment, current_model):
-    """This function allows to check and checkout the correct version of external models."""
-
-    # TODO: this does currently not work in a docker environment!
-
-    ignore_model_git_hash = experiment.model_hash == "ignore"
-
-    if ignore_model_git_hash:
-        return
-
-    if experiment.model_hash is None:
-        raise ValueError(
-            f"Could not find git hash for {experiment.networkName}! Set model_git_hash to 'ignore' to ignore check!"
-        )
-
-    model_git = get_model_git(current_model)
-
-    if model_git is None:
-        error_str = (
-            "Unable to detect model git repository. Is it installed in editable mode? "
-            "Set model_git_hash to 'ignore' False to ignore check!"
-        )
-        raise ValueError(error_str)
-
-    try:
-        current_model_hash = model_git.head.object.hexsha
-    except Exception as exc:
-        raise ValueError("Could not extract git hash for model!") from exc
-
-    if current_model_hash == experiment.model_hash:
-        iprint(f"Requested model version {experiment.model_hash} is already installed.")
-
-    elif experiment.model_hash not in (current_model_hash, "ignore"):
-        iprint(f"Trying to checkout model version {experiment.model_hash}.")
-
-        try:
-            model_git.git.checkout(experiment.model_hash)
-            iprint("SUCCESS!")
-        except Exception as exc:
-            error_str = (
-                f"Could not checkout model version {experiment.model_hash}. "
-                "Set model_git_hash to 'ignore' False to ignore check!"
-            )
-            raise ValueError(error_str) from exc
 
 
 def avoid_nondeterministic(experiment, seed_overwrite=0):

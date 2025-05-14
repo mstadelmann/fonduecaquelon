@@ -1,6 +1,7 @@
 """This module defines the training procedure for the MNIST test experiment."""
 
 import torch
+import torchvision
 from fdq.experiment import fdqExperiment
 from fdq.ui_functions import show_train_progress, startProgBar, iprint
 from fdq.misc import print_nb_weights
@@ -90,7 +91,21 @@ def train(experiment: fdqExperiment) -> None:
 
         pbar.finish()
 
-        experiment.finalize_epoch()
+        # Log the image grid
+        img_grid = {
+            "name": "inputs",
+            "data": torchvision.utils.make_grid(inputs),
+            "dataformats": "CHW",
+        }
+
+        # Log text predictions
+        _, preds = torch.max(output, 1)
+        log_txt = {
+            f"Predictions/image_{idx}": f"Predicted: {preds[idx].item()}, True: {targets[idx].item()}"
+            for idx in range(len(inputs))
+        }
+
+        experiment.finalize_epoch(log_images=img_grid, log_text=log_txt)
 
         if experiment.check_early_stop():
             break
