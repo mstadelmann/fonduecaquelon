@@ -99,7 +99,8 @@ sig_handler_USR1()
     most_recent_chp_path=${CLUSTER_RESULTS_PATH}/${most_recent_chp}
     echo "Most recent checkpoint_path: $most_recent_chp_path"
 
-    sed -e "s|RESUME_CHPT_PATH=None|RESUME_CHPT_PATH=$most_recent_chp_path|g" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
+    # sed -e "s|RESUME_CHPT_PATH=None|RESUME_CHPT_PATH=$most_recent_chp_path|g" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
+    sed -i "s|^RESUME_CHPT_PATH=.*|RESUME_CHPT_PATH=$most_recent_chp_path|" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
     rm $SCRATCH_SUBMIT_FILE_PATH
     mv $SCRATCH_SUBMIT_FILE_PATH.resub $SCRATCH_SUBMIT_FILE_PATH
 
