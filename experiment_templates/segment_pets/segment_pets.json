@@ -102,8 +102,9 @@
         }
     },
     "slurm_cluster": {
-        "python_env_mod": "python/3.12.4",
-        "uv_env_mod": "uv/0.6.12",
+        "fdq_version": "0.0.6",
+        "python_env_module": "python/3.12.4",
+        "uv_env_module": "uv/0.6.12",
         "temp_results_path": "/scratch/fdq_results",
         "cluster_data_path": "/scratch/fdq_data",
         "log_path": "~/slurm_logs/",
@@ -116,7 +117,7 @@
         "account": "cai_ivs",
         "run_train": true,
         "run_test": true,
-        "auto_resubmitt": true,
+        "auto_resubmit": true,
         "resume_chpt_path": null
     }
 }
