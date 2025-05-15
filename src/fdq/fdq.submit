@@ -51,7 +51,6 @@ echo ------------------------------------------------------------
 
 cd /scratch/
 module load python/3.12.4
-# VENV="fdqenv" UV_PATH="/scratch/" module load uv/0.6.12
 VENV="fdqenv" module load uv/0.6.12
 uv venv fdqenv
 source /scratch/fdqenv/bin/activate
@@ -99,8 +98,7 @@ sig_handler_USR1()
     most_recent_chp_path=${CLUSTER_RESULTS_PATH}/${most_recent_chp}
     echo "Most recent checkpoint_path: $most_recent_chp_path"
 
-    # sed -e "s|RESUME_CHPT_PATH=None|RESUME_CHPT_PATH=$most_recent_chp_path|g" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
-    sed -i "s|^RESUME_CHPT_PATH=.*|RESUME_CHPT_PATH=$most_recent_chp_path|" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
+    sed -e "s|^RESUME_CHPT_PATH=.*|RESUME_CHPT_PATH=$most_recent_chp_path|g" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
     rm $SCRATCH_SUBMIT_FILE_PATH
     mv $SCRATCH_SUBMIT_FILE_PATH.resub $SCRATCH_SUBMIT_FILE_PATH
 
