@@ -8,6 +8,7 @@
 **/__pycache__/
 test_old/
 wandb
+slurm_log/
 
 # Distribution / packaging
 dist/

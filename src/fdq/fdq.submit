@@ -4,81 +4,101 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --nodes=1
-#SBATCH --gres=gpus:1
+#SBATCH --gres=gpu:1
 #SBATCH --mem=20G 
 #SBATCH --partition=gpu
 #SBATCH --account=admin
 #SBATCH --mail-user=stmd@zhaw.ch
-#SBATCH --output=/cluster/home/stmd/slurm_logs/%j_%N__vlf_runner.out
-#SBATCH --error=/cluster/home/stmd/slurm_logs/%j_%N__vlf_runner.err
+#SBATCH --output=/cluster/home/stmd/dev/fonduecaquelon/slurm_log/%j_%N__vlf_runner.out
+#SBATCH --error=/cluster/home/stmd/dev/fonduecaquelon/slurm_log/%j_%N__vlf_runner.err
 
 
-DEBUG=false
+run_train=true
+run_test=true
+
 script_start=$(date +%s.%N)
+
+SCRATCH_RESULTS_PATH="/scratch/fdq_results/"
+CLUSTER_RESULTS_PATH="/cluster/home/stmd/data/ML_data/results/deleteme/"
+
+echo ------------------------------------------------------------
+echo "PREPARING ENVIRONMENT"
+echo ------------------------------------------------------------
 
 cd /scratch/
 module load python/3.12.4
 VENV="fdqenv" UV_PATH="/scratch/" module load uv/0.6.12
-uv init
-uv add fdq
+uv venv fdqenv
+source /scratch/fdqenv/bin/activate
+uv pip install fdq
 
 
-# ----------------------------------------------------------------------------------
-# Run training
-# ----------------------------------------------------------------------------------
+if [ "$run_train" == true ]; then
+    echo ------------------------------------------------------------
+    echo "RUNNING TRAINING"
+    echo ------------------------------------------------------------
 
-compute_start=$(date +%s.%N)
+    train_start=$(date +%s.%N)
 
-fdq /cluster/home/stmd/dev/fonduecaquelon/experiment_templates/segment_pets/segment_pets.json
+    fdq /cluster/home/stmd/dev/fonduecaquelon/experiment_templates/segment_pets/segment_pets.json
 
-fdq_pid=$!
+    fdq_pid=$!
+    wait $fdq_pid
+    retvalue=$?
 
-# wait for all background jobs to finish!
-wait $fdq_pid
-retvalue=$?
+    train_stop=$(date +%s.%N)
 
 
-# ----------------------------------------------------------------------------------
-# Finalize
-# ----------------------------------------------------------------------------------
-echo ------------------------------------------------------------
-echo "PROCESSING DONE - Copying results back to storage cluster"
-echo ------------------------------------------------------------
+    echo ------------------------------------------------------------
+    echo "TRAINING DONE - Copying results back to storage cluster"
+    echo ------------------------------------------------------------
 
-if [ "$param2_opt" != "-nt" ]; then
-    # if the current run was not a training, no need to copy any data back to the storage cluster
-    rsync -a $SCRATCH_PATH* $RESULTS_PATH
+    sleep 5
+    # if [ "$param2_opt" != "-nt" ]; then
+    #     # if the current run was not a training, no need to copy any data back to the storage cluster
+    #     rsync -a $SCRATCH_PATH* $RESULTS_PATH
+    # fi
+
+    copy_start=$(date +%s.%N)
+    rsync -a $SCRATCH_RESULTS_PATH* $CLUSTER_RESULTS_PATH
+    copy_end=$(date +%s.%N)
+
+
+    echo ------------------------------------------------------------
+    echo "Copying results back to storage cluster - DONE"
+    echo ------------------------------------------------------------
 fi
 
-echo ------------------------------------------------------------
-echo "Copying results back to storage cluster - DONE"
-echo ------------------------------------------------------------
-
-end=$(date +%s.%N)
-script_time=$(echo "$end - $script_start" | bc)
-compute_time=$(echo "$end - $compute_start" | bc)
-echo ------------------------
-echo "Script execution time: $script_time seconds"
-echo "Compute time: $compute_time seconds"
-echo ------------------------
 
 
-# start test as new job
-if [ "$automatic_test" == true ]; then
+# end=$(date +%s.%N)
+# script_time=$(echo "$end - $script_start" | bc)
+# compute_time=$(echo "$end - $train_start" | bc)
+# echo ------------------------
+# echo "Script execution time: $script_time seconds"
+# echo "Compute time: $compute_time seconds"
+# echo ------------------------
+
+
+# --------------------------------------------------------------
+# Submit new job for test
+# --------------------------------------------------------------
+
+if [ "$run_test" == true ]; then
     if [ $retvalue -eq 0 ]; then
-        echo ------------------------
+        echo ------------------------------------------------------------
         echo "Starting automatic test.."
-        echo ------------------------
+        echo ------------------------------------------------------------
 
         sleep 1
         echo submitting new job with the following command:
         echo "sbatch --partition=$SLURM_JOB_PARTITION --gpus=$SLURM_GPUS --job-name=vlf-test #PACKAGES_PATH#/vlf-core/vlf.submit $param1_exp_path -nt -ta"
-        sbatch --partition=$SLURM_JOB_PARTITION --gpus=$SLURM_GPUS --job-name=vlf-test #PACKAGES_PATH#/vlf-core/vlf.submit $param1_exp_path -nt -ta
+        # sbatch --partition=$SLURM_JOB_PARTITION --gpus=$SLURM_GPUS --job-name=vlf-test #PACKAGES_PATH#/vlf-core/vlf.submit $param1_exp_path -nt -ta
         sleep 1
         exit 0
     else
         echo ----------------------------------------------------------------------
-        echo "Automatic test not started due to non-zero return vlf value: $retvalue"
+        echo "Automatic test not started due to non-zero fdq ret value: $retvalue"
         echo ----------------------------------------------------------------------
     fi
 fi

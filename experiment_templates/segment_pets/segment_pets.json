@@ -112,6 +112,9 @@
         "cpus-per-task": 8,
         "gres": "gpu:1",
         "partition": "gpu",
-        "account": "admin"
+        "account": "admin",
+        "run_train": true,
+        "run_test": true,
+        "auto_resubmitt": true
     }
 }

@@ -202,46 +202,9 @@ def store_processing_infos(experiment):
         json.dump(experiment.run_info, write_file, indent=4, sort_keys=True)
 
 
-def collect_fdq_git_hash():
-    """Returns the git hash of the currently running FDQ environment,
-    and checks, if all files were committed.
-    None committed files are printed to the console and stored in the
-    experiment info file.
-    """
-    dirty_files = None
-    fdq_hash = None
-    fdq_dirty = True  # unless proved otherwise...
-
-    try:
-        fdq_git = git.Repo(os.path.abspath(__file__), search_parent_directories=True)
-    except Exception:
-        wprint("Warning: Could not find git repo for FDQ!")
-        fdq_git = None
-        fdq_hash = "UNABLE TO LOCALIZE GIT REPO!"
-
-    if fdq_git is not None:
-        try:
-            fdq_hash = fdq_git.head.object.hexsha
-            fdq_dirty = fdq_git.is_dirty()
-
-            if fdq_dirty:
-                dirty_files = [f.b_path for f in fdq_git.index.diff(None)]
-
-                wprint("---------------------------------------------")
-                wprint("WARNING: fdq git repo is dirty!")
-                wprint(dirty_files)
-                wprint("---------------------------------------------")
-                time.sleep(5)
-
-        except Exception:
-            wprint("Warning: Could not extract git hash for FDQ!")
-            fdq_hash = "UNABLE TO LOCALIZE GIT REPO!"
-
-    return fdq_hash, fdq_dirty, dirty_files
 
 
 def collect_processing_infos(experiment=None):
-    fdq_hash, fdq_dirty, dirty_files = collect_fdq_git_hash()
 
     try:
         sysname = os.uname()[1]
@@ -275,9 +238,6 @@ def collect_processing_infos(experiment=None):
         "Python V.": sys.version,
         "Torch V.": torch.__version__,
         "Cuda V.": torch.version.cuda,
-        "fdq-git": fdq_hash,
-        "git-is-dirty": fdq_dirty,
-        "dirty-files": dirty_files,
         "start_datetime": create_dt_string,
         "end_datetime": stop_dt_string,
         "total_runtime": run_t_string,
@@ -300,15 +260,7 @@ def collect_processing_infos(experiment=None):
     else:
         data["job_continuation"] = False
 
-    try:
-        # add GPU memory usage
-        if experiment.device == torch.device("cuda"):
-            cur_str = f"{experiment.malloc_nvi_smi_current_list[-1] / 1000:.0f}"
-            tot_str = f"{experiment.malloc_nvidia_smi_total / 1000:.0f}"
-            mem_str = f"{experiment.malloc_nvidia_smi_percentage}%  ({cur_str}/{tot_str} [GB])"
-            data["GPU memory usage estimation"] = mem_str
-    except Exception:
-        pass
+
 
     try:
         # add nb model parameters to info file
