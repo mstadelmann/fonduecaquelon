@@ -47,8 +47,7 @@ class OxfordPetDataset(torch.utils.data.Dataset):
         image_path = os.path.join(self.images_directory, filename + ".jpg")
         mask_path = os.path.join(self.masks_directory, filename + ".png")
 
-        image = self.to_tensor(Image.open(image_path))
-        # image = Image.open(image_path)
+        image = self.to_tensor(Image.open(image_path).convert("RGB"))
         mask = torch.from_numpy(np.array(Image.open(mask_path)))
 
         if self.binary:
@@ -158,7 +157,7 @@ def createDatasets(experiment):
         shuffle=dargs.shuffle_train,
         num_workers=dargs.num_workers,
         pin_memory=pin_mem,
-        drop_last=drop_last
+        drop_last=drop_last,
     )
 
     test_loader = DataLoader(
@@ -167,7 +166,7 @@ def createDatasets(experiment):
         shuffle=dargs.shuffle_test,
         num_workers=dargs.num_workers,
         pin_memory=pin_mem,
-        drop_last=drop_last
+        drop_last=drop_last,
     )
 
     val_loader = DataLoader(
@@ -176,7 +175,7 @@ def createDatasets(experiment):
         shuffle=dargs.shuffle_val,
         num_workers=dargs.num_workers,
         pin_memory=pin_mem,
-        drop_last=drop_last
+        drop_last=drop_last,
     )
 
     return {

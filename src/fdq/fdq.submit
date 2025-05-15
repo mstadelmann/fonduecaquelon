@@ -12,14 +12,37 @@
 #SBATCH --output=/cluster/home/stmd/dev/fonduecaquelon/slurm_log/%j_%N__vlf_runner.out
 #SBATCH --error=/cluster/home/stmd/dev/fonduecaquelon/slurm_log/%j_%N__vlf_runner.err
 
-
-run_train=true
-run_test=true
-
 script_start=$(date +%s.%N)
 
+RUN_TRAIN=true
+RUN_TEST=true # test will be run automatically, but not necessarily in this job
+IS_TEST=false # if true, start test in this job
+AUTO_RESUBMIT=true
+RESUME_TRAIN=false
+RESUME_CHPT_PATH=None
+EXP_FILE_PATH="/cluster/home/stmd/dev/fonduecaquelon/experiment_templates/segment_pets/segment_pets.json"
 SCRATCH_RESULTS_PATH="/scratch/fdq_results/"
 CLUSTER_RESULTS_PATH="/cluster/home/stmd/data/ML_data/results/deleteme/"
+SUBMIT_FILE_PATH="/cluster/home/stmd/dev/fonduecaquelon/src/fdq/fdq.submit"
+RETVALUE=0 # might become non-zero if training fails, which will prevent launching a test job
+
+# Copy submit script to scratch for resubmission
+cp $SUBMIT_FILE_PATH /scratch/
+SCRATCH_SUBMIT_FILE_PATH="/scratch/$(basename "$SUBMIT_FILE_PATH")"
+
+echo ------------------------------------------------------------
+echo "EXPERIMENT CONFIGURATION"
+echo ------------------------------------------------------------
+echo "Submit file path: $SUBMIT_FILE_PATH"
+echo "Scratch submit file path: $SCRATCH_SUBMIT_FILE_PATH"
+echo "RUN_TRAIN: $RUN_TRAIN"
+echo "RUN_TEST: $RUN_TEST"
+echo "IS_TEST: $IS_TEST"
+echo "RESUME_TRAIN: $RESUME_TRAIN"
+echo "RESUME_CHPT_PATH: $RESUME_CHPT_PATH"
+echo "EXP_FILE_PATH: $EXP_FILE_PATH"
+echo "SCRATCH_RESULTS_PATH: $SCRATCH_RESULTS_PATH"
+echo "CLUSTER_RESULTS_PATH: $CLUSTER_RESULTS_PATH"
 
 echo ------------------------------------------------------------
 echo "PREPARING ENVIRONMENT"
@@ -27,73 +50,108 @@ echo ------------------------------------------------------------
 
 cd /scratch/
 module load python/3.12.4
-VENV="fdqenv" UV_PATH="/scratch/" module load uv/0.6.12
+# VENV="fdqenv" UV_PATH="/scratch/" module load uv/0.6.12
+VENV="fdqenv" module load uv/0.6.12
 uv venv fdqenv
 source /scratch/fdqenv/bin/activate
 uv pip install fdq
 
 
-if [ "$run_train" == true ]; then
+if [ "$RUN_TRAIN" == true ]; then
     echo ------------------------------------------------------------
     echo "RUNNING TRAINING"
     echo ------------------------------------------------------------
 
     train_start=$(date +%s.%N)
 
-    fdq /cluster/home/stmd/dev/fonduecaquelon/experiment_templates/segment_pets/segment_pets.json
+    fdq $EXP_FILE_PATH
 
     fdq_pid=$!
     wait $fdq_pid
-    retvalue=$?
+    RETVALUE=$?
 
     train_stop=$(date +%s.%N)
-
 
     echo ------------------------------------------------------------
     echo "TRAINING DONE - Copying results back to storage cluster"
     echo ------------------------------------------------------------
 
-    sleep 5
-    # if [ "$param2_opt" != "-nt" ]; then
-    #     # if the current run was not a training, no need to copy any data back to the storage cluster
-    #     rsync -a $SCRATCH_PATH* $RESULTS_PATH
-    # fi
+    sleep 1
 
     copy_start=$(date +%s.%N)
     rsync -a $SCRATCH_RESULTS_PATH* $CLUSTER_RESULTS_PATH
     copy_end=$(date +%s.%N)
 
-
     echo ------------------------------------------------------------
     echo "Copying results back to storage cluster - DONE"
     echo ------------------------------------------------------------
+
+    train_time=$(echo "$train_stop - $train_start" | bc)
+    copy_time=$(echo "$copy_end - $copy_start" | bc)
+    script_time=$(echo "$copy_end - $script_start" | bc)
+    echo ------------------------------------------------------------
+    echo "Script execution time: $script_time s"
+    echo "Train time: $train_time s"
+    echo "Data copy time: $copy_time s"
+    echo ------------------------------------------------------------
 fi
 
+if [ "$IS_TEST" == true ]; then
+    echo ------------------------------------------------------------
+    echo "RUNNING TEST"
+    echo ------------------------------------------------------------
 
+    test_start=$(date +%s.%N)
 
-# end=$(date +%s.%N)
-# script_time=$(echo "$end - $script_start" | bc)
-# compute_time=$(echo "$end - $train_start" | bc)
-# echo ------------------------
-# echo "Script execution time: $script_time seconds"
-# echo "Compute time: $compute_time seconds"
-# echo ------------------------
+    fdq $EXP_FILE_PATH -nt -ta
+
+    fdq_pid=$!
+    wait $fdq_pid
+    RETVALUE=$?
+
+    test_stop=$(date +%s.%N)
+
+    echo ------------------------------------------------------------
+    echo "TEST DONE - Copying results back to storage cluster"
+    echo ------------------------------------------------------------
+
+    # sleep 1
+
+    # copy_start=$(date +%s.%N)
+    # rsync -a $SCRATCH_RESULTS_PATH* $CLUSTER_RESULTS_PATH
+    # copy_end=$(date +%s.%N)
+
+    # echo ------------------------------------------------------------
+    # echo "Copying results back to storage cluster - DONE"
+    # echo ------------------------------------------------------------
+
+    # train_time=$(echo "$train_stop - $train_start" | bc)
+    # copy_time=$(echo "$copy_end - $copy_start" | bc)
+    # script_time=$(echo "$copy_end - $script_start" | bc)
+    # echo ------------------------------------------------------------
+    # echo "Script execution time: $script_time s"
+    # echo "Train time: $train_time s"
+    # echo "Data copy time: $copy_time s"
+    # echo ------------------------------------------------------------
+fi
 
 
 # --------------------------------------------------------------
 # Submit new job for test
 # --------------------------------------------------------------
 
-if [ "$run_test" == true ]; then
-    if [ $retvalue -eq 0 ]; then
+if [ "$RUN_TEST" == true ]; then
+    if [ $RETVALUE -eq 0 ]; then
         echo ------------------------------------------------------------
-        echo "Starting automatic test.."
+        echo "Launching test job.."
         echo ------------------------------------------------------------
+
+        sed  -e "s|IS_TEST=false|IS_TEST=true|g" -e "s|RUN_TRAIN=true|RUN_TRAIN=false|g" -e "s|RUN_TEST=true|RUN_TEST=false|g" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
 
         sleep 1
         echo submitting new job with the following command:
-        echo "sbatch --partition=$SLURM_JOB_PARTITION --gpus=$SLURM_GPUS --job-name=vlf-test #PACKAGES_PATH#/vlf-core/vlf.submit $param1_exp_path -nt -ta"
-        # sbatch --partition=$SLURM_JOB_PARTITION --gpus=$SLURM_GPUS --job-name=vlf-test #PACKAGES_PATH#/vlf-core/vlf.submit $param1_exp_path -nt -ta
+        echo "sbatch --job-name=fdq-test $SCRATCH_SUBMIT_FILE_PATH.resub"
+        sbatch --job-name=fdq-test $SCRATCH_SUBMIT_FILE_PATH.resub
         sleep 1
         exit 0
     else

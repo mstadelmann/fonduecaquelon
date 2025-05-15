@@ -115,6 +115,7 @@
         "account": "admin",
         "run_train": true,
         "run_test": true,
-        "auto_resubmitt": true
+        "auto_resubmitt": true,
+        "resume_chpt_path": null
     }
 }
