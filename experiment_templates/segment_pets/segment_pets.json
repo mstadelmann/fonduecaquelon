@@ -93,7 +93,7 @@
         "wandb_key": "126aea51c74a8e5533f79411f171a1a2860a2e4b"
     },
     "test": {
-        "evaluator": "~/dev/fonduecaquelon/experiment_templates/mnist/mnist_test.py",
+        "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxpets_test.py",
         "test_model": "best",
         "args": {
             "metrics": {
@@ -112,7 +112,7 @@
         "cpus-per-task": 8,
         "gres": "gpu:1",
         "partition": "gpu",
-        "account": "admin",
+        "account": "cai_ivs",
         "run_train": true,
         "run_test": true,
         "auto_resubmitt": true,

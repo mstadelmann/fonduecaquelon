@@ -90,7 +90,9 @@ class fdqExperiment:
         if isinstance(slurm_job_id, str) and slurm_job_id.isdigit():
             self.is_slurm = True
             self.slurm_job_id = slurm_job_id
-            self.cluster_data_path = self.exp_def.get("slurm_cluster",{}).get("cluster_data_path")
+            self.cluster_data_path = self.exp_def.get("slurm_cluster", {}).get(
+                "cluster_data_path"
+            )
         else:
             self.is_slurm = False
             self.slurm_job_id = None
@@ -120,7 +122,9 @@ class fdqExperiment:
 
             if self.is_slurm:
                 folder_name += f"__{self.slurm_job_id}"
-                res_base_path = self.exp_def.get("slurm_cluster",{}).get("temp_results_path")
+                res_base_path = self.exp_def.get("slurm_cluster", {}).get(
+                    "temp_results_path"
+                )
                 if res_base_path is None:
                     raise ValueError("Error, temp_results_path was not defined.")
 
@@ -309,7 +313,9 @@ class fdqExperiment:
                 )
 
             if instantiate:
-                self.models[model_name] = cls(**model_def.args.to_dict()).to(self.device)
+                self.models[model_name] = cls(**model_def.args.to_dict()).to(
+                    self.device
+                )
 
     def load_models(self):
         self.init_models(instantiate=False)
@@ -728,6 +734,10 @@ class fdqExperiment:
         if not os.path.exists(self.cluster_data_path):
             os.makedirs(self.cluster_data_path)
 
+        iprint("----------------------------------------------------")
+        iprint("Copy datasets to temporary scratch location...")
+        iprint("----------------------------------------------------")
+
         for data_name, data_source in self.exp_def.data.items():
             try:
                 # cleanup old data first -> in case this is a debugging run with dirty data
@@ -740,7 +750,7 @@ class fdqExperiment:
                 raise ValueError(
                     f"Unable to copy {data_source.args.base_path} to  to scratch location at {self.cluster_data_path}!"
                 ) from exc
-            
+
             data_source.args.base_path = dst_path
 
         iprint("----------------------------------------------------")

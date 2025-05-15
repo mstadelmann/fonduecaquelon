@@ -22,7 +22,7 @@ RESUME_TRAIN=false
 RESUME_CHPT_PATH=None
 EXP_FILE_PATH="/cluster/home/stmd/dev/fonduecaquelon/experiment_templates/segment_pets/segment_pets.json"
 SCRATCH_RESULTS_PATH="/scratch/fdq_results/"
-CLUSTER_RESULTS_PATH="/cluster/home/stmd/data/ML_data/results/deleteme/"
+CLUSTER_RESULTS_PATH="/cluster/home/stmd/data/ML_data/results/"
 SUBMIT_FILE_PATH="/cluster/home/stmd/dev/fonduecaquelon/src/fdq/fdq.submit"
 RETVALUE=0 # might become non-zero if training fails, which will prevent launching a test job
 
@@ -31,7 +31,7 @@ cp $SUBMIT_FILE_PATH /scratch/
 SCRATCH_SUBMIT_FILE_PATH="/scratch/$(basename "$SUBMIT_FILE_PATH")"
 
 echo ------------------------------------------------------------
-echo "EXPERIMENT CONFIGURATION"
+echo "FONDUE-CAQUELON - EXPERIMENT CONFIGURATION"
 echo ------------------------------------------------------------
 echo "Submit file path: $SUBMIT_FILE_PATH"
 echo "Scratch submit file path: $SCRATCH_SUBMIT_FILE_PATH"
@@ -55,6 +55,8 @@ VENV="fdqenv" module load uv/0.6.12
 uv venv fdqenv
 source /scratch/fdqenv/bin/activate
 uv pip install fdq
+
+echo "UV environment ready...!"
 
 
 if [ "$RUN_TRAIN" == true ]; then

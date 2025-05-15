@@ -24,7 +24,9 @@ def find_experiment_result_dirs(experiment):
         wprint(
             "WARNING: This is a slurm TRAINING session - looking only for results in temp_results_path!"
         )
-        outbasepath=experiment.exp_def.get("slurm_cluster",{}).get("temp_results_path")
+        outbasepath = experiment.exp_def.get("slurm_cluster", {}).get(
+            "temp_results_path"
+        )
 
     elif experiment.is_slurm and not experiment.inargs.train_model:
         wprint(
@@ -153,7 +155,7 @@ def save_test_results(test_results, experiment):
             )
 
 
-def save_test_string(experiment, model=None, weights=None):
+def save_test_info(experiment, model=None, weights=None):
     now = datetime.now()
     dt_string = now.strftime("%Y%m%d_%H_%M")
     results_fp = os.path.join(experiment.test_dir, f"test_config_{dt_string}.json")
@@ -189,15 +191,9 @@ def ui_ask_test_mode(experiment):
             experiment.mode.custom_path()
 
 
-def run_test(experiment):
-    iprint("-------------------------------------------")
-    iprint("Starting Test...")
-    iprint("-------------------------------------------")
-
+def _set_test_mode(experiment):
     experiment.mode.test()
-
     best_or_last = experiment.exp_def.test.get("test_model", "best")
-
     if experiment.mode.op_mode.unittest:
         experiment.mode.last()
 
@@ -211,6 +207,8 @@ def run_test(experiment):
     else:
         ui_ask_test_mode(experiment)
 
+
+def _load_test_models(experiment):
     for model_name, _ in experiment.exp_def.models:
         if experiment.mode.test_mode.custom_path:
             while True:
@@ -233,13 +231,24 @@ def run_test(experiment):
 
         experiment.load_models()
 
+
+def run_test(experiment):
+    iprint("-------------------------------------------")
+    iprint("Starting Test...")
+    iprint("-------------------------------------------")
+
+    _set_test_mode(experiment)
+    _load_test_models(experiment)
+
     experiment.copy_files_to_test_dir(experiment.experiment_file_path)
     if experiment.parent_file_path is not None:
         experiment.copy_files_to_test_dir(experiment.parent_file_path)
-    save_test_string(
+
+    save_test_info(
         experiment,
         model=experiment.inference_model_paths,
     )
     experiment.setupData()
+    experiment.createLosses()
     test_results = experiment.runEvaluator()
     save_test_results(test_results, experiment)
