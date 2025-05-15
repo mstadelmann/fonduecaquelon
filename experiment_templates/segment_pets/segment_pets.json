@@ -111,6 +111,7 @@
         "ntasks": 1,
         "cpus-per-task": 8,
         "gres": "gpu:1",
+        "mem": "20G",
         "partition": "gpu",
         "account": "cai_ivs",
         "run_train": true,

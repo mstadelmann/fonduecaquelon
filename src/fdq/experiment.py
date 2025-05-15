@@ -413,7 +413,7 @@ class fdqExperiment:
             iprint(
                 "--------------------------------------------------------------------------"
             )
-            iprint(f"Loading checkpoint: {self.inargs.resume_pathh}")
+            iprint(f"Loading checkpoint: {self.inargs.resume_path}")
 
             self.load_checkpoint(self.inargs.resume_path)
 
@@ -496,8 +496,14 @@ class fdqExperiment:
                 f"Error, checkpoint epoch {self.start_epoch + 1} already reached defined nb epochs ({self.nb_epochs})."
             )
 
-        self.model.load_state_dict(checkpoint["model_state_dict"])
-        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        for model_name, _ in self.exp_def.models:
+            self.models[model_name].load_state_dict(
+                checkpoint["model_state_dict"][model_name]
+            )
+
+            self.optimizers[model_name].load_state_dict(
+                checkpoint["optimizer"][model_name]
+            )
 
     def save_checkpoint(self):
         if self.checkpoint_frequency is None or self.checkpoint_frequency == 0:

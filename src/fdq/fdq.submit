@@ -18,7 +18,6 @@ RUN_TRAIN=true
 RUN_TEST=true # test will be run automatically, but not necessarily in this job
 IS_TEST=false # if true, start test in this job
 AUTO_RESUBMIT=true
-RESUME_TRAIN=false
 RESUME_CHPT_PATH=None
 EXP_FILE_PATH="/cluster/home/stmd/dev/fonduecaquelon/experiment_templates/segment_pets/segment_pets.json"
 SCRATCH_RESULTS_PATH="/scratch/fdq_results/"
@@ -38,7 +37,6 @@ echo "Scratch submit file path: $SCRATCH_SUBMIT_FILE_PATH"
 echo "RUN_TRAIN: $RUN_TRAIN"
 echo "RUN_TEST: $RUN_TEST"
 echo "IS_TEST: $IS_TEST"
-echo "RESUME_TRAIN: $RESUME_TRAIN"
 echo "RESUME_CHPT_PATH: $RESUME_CHPT_PATH"
 echo "EXP_FILE_PATH: $EXP_FILE_PATH"
 echo "SCRATCH_RESULTS_PATH: $SCRATCH_RESULTS_PATH"
@@ -66,7 +64,16 @@ if [ "$RUN_TRAIN" == true ]; then
 
     train_start=$(date +%s.%N)
 
-    fdq $EXP_FILE_PATH
+    if [ "$RESUME_CHPT_PATH" == None ]; then
+        fdq $EXP_FILE_PATH
+
+    elif [ -f "$RESUME_CHPT_PATH" ]; then
+        echo "Resuming training from checkpoint: $RESUME_CHPT_PATH"
+        fdq $EXP_FILE_PATH -rp $RESUME_CHPT_PATH
+
+    else
+        echo "ERROR: Checkpoint path does not exist: $RESUME_CHPT_PATH"
+    fi
 
     fdq_pid=$!
     wait $fdq_pid
