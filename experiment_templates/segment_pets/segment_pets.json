@@ -1,6 +1,6 @@
 {
     "globals": {
-        "project": "Segment OXPET classifier",
+        "project": "Segment OXPET segmentation",
         "author": "Marc"
     },
     "data": {
@@ -62,12 +62,12 @@
     "train": {
         "path": "~/dev/fonduecaquelon/experiment_templates/segment_pets/train_oxpets.py",
         "args": {
-            "epochs": 8,
+            "epochs": 100,
             "use_GPU": true,
             "use_AMP": false,
             "accumulate_grad_batches": 1,
-            "early_stop_val_loss": 5,
-            "early_stop_train_loss": 5,
+            "early_stop_val_loss": 500,
+            "early_stop_train_loss": 500,
             "early_stop_nan": 5
         }
     },
