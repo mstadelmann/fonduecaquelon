@@ -1,325 +1,197 @@
 #!/bin/bash
-#SBATCH --time=1400
+#SBATCH --time=8
 #SBATCH --job-name=fdq-runner
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --nodes=1
-#SBATCH --gres=gpus:1
-#SBATCH --mem=200G 
-#SBATCH --partition=gpu_top
-#SBATCH --account=cai_ivs
-#SBATCH --mail-user=#USERNAME#@zhaw.ch
-#SBATCH --output=#PACKAGES_PATH#/vlf-core/slurm_logs/%j_%N__vlf_runner.out
-#SBATCH --error=#PACKAGES_PATH#/vlf-core/slurm_logs/%j_%N__vlf_runner.err
-#SBATCH --signal=B:SIGUSR1@1000
-
-# Acceptable --time formats
-# "minutes", "minutes:seconds", "hours:minutes:seconds", "days-hours", "days-hours:minutes" and "days-hours:minutes:seconds"
-
-# Replace placeholders in this script to run it. e.g.:
-# RESULTS_PATH="/cluster/home/stmd/data/ML_data/results"
-# PACKAGES_PATH="/cluster/home/stmd/dev"
-# sed  -e "s|#USERNAME#|$USER|g" -e "s|#RESULTS_PATH#|$RESULTS_PATH|g" -e "s|#PACKAGES_PATH#|$PACKAGES_PATH|g" vlf.submit.template > vlf.submit
-
-
-# ------------
-# NOTES
-# ------------
-# - Create a log dir directory before submitting this script (e.g. /cluster/home/#USERNAME#/vlf_logs)
-# - run it with: $ sbatch ~/dev/vlf-core/vlf.submit PATH_TO_EXPERIMENT.json
-#   e.g. sbatch ~/dev/vlf-core/vlf.submit ~/dev/vlf-core/experiments/simpsons/homer_lisa_class_dense.json
-# - overwrite a parameter
-#   e.g. sbatch --nodelist=sanjose ~/dev/vlf-core/vlf.submit ~/dev/vlf-core/experiments/simpsons/homer_lisa_class_dense.json
-# - if the number of epochs defined in the experiment file is not reached at time out, the script will resubmit itself!
-# - SIGUSR1@60 means that the stop signal is send 60 seconds before job termination. Make sure that this is long enough copy
-#   all your data back to the storage cluster.
-# - There is a small risk of a race condition if vlf was to produce a new checkpoint at exactly during the time when
-#   sig_handler_USR1 is called. TODO: check if that needs a mitigation.
-
-
-
-DEBUG=false
+#SBATCH --gres=gpu:1
+#SBATCH --mem=20G 
+#SBATCH --partition=gpu
+#SBATCH --account=admin
+#SBATCH --mail-user=stmd@zhaw.ch
+#SBATCH --output=/cluster/home/stmd/dev/fonduecaquelon/slurm_log/%j_%N__vlf_runner.out
+#SBATCH --error=/cluster/home/stmd/dev/fonduecaquelon/slurm_log/%j_%N__vlf_runner.err
+#SBATCH --signal=B:SIGUSR1@5
 
 script_start=$(date +%s.%N)
 
-# vlf writes all outputs to this dir
-SCRATCH_PATH="/scratch/fdq_results/"
+RUN_TRAIN=true
+RUN_TEST=true # test will be run automatically, but not necessarily in this job
+IS_TEST=false # if true, start test in this job
+AUTO_RESUBMIT=true # resubmit the job if stopped due to time constraints
+RESUME_CHPT_PATH=None
+EXP_FILE_PATH="/cluster/home/stmd/dev/fonduecaquelon/experiment_templates/segment_pets/segment_pets.json"
+SCRATCH_RESULTS_PATH="/scratch/fdq_results/"
+CLUSTER_RESULTS_PATH="/cluster/home/stmd/data/ML_data/results/"
+SUBMIT_FILE_PATH="/cluster/home/stmd/dev/fonduecaquelon/src/fdq/fdq.submit"
+RETVALUE=1 # will become zero if training is successful, which will launch an optional test job
 
-# at job termination, everything is moved here:
-RESULTS_PATH=#RESULTS_PATH#
+# Copy submit script to scratch for resubmission
+cp $SUBMIT_FILE_PATH /scratch/
+SCRATCH_SUBMIT_FILE_PATH="/scratch/$(basename "$SUBMIT_FILE_PATH")"
 
-mkdir -p $SCRATCH_PATH
-mkdir -p $RESULTS_PATH
+echo ------------------------------------------------------------
+echo "FONDUE-CAQUELON - EXPERIMENT CONFIGURATION"
+echo ------------------------------------------------------------
+echo "Start Time: $(date)"
+echo "Slurm job ID: $SLURM_JOB_ID"
+echo "Submit file path: $SUBMIT_FILE_PATH"
+echo "Scratch submit file path: $SCRATCH_SUBMIT_FILE_PATH"
+echo "RUN_TRAIN: $RUN_TRAIN"
+echo "RUN_TEST: $RUN_TEST"
+echo "IS_TEST: $IS_TEST"
+echo "AUTO_RESUBMIT: $AUTO_RESUBMIT"
+echo "RESUME_CHPT_PATH: $RESUME_CHPT_PATH"
+echo "EXP_FILE_PATH: $EXP_FILE_PATH"
+echo "SCRATCH_RESULTS_PATH: $SCRATCH_RESULTS_PATH"
+echo "CLUSTER_RESULTS_PATH: $CLUSTER_RESULTS_PATH"
 
-sleep 1
+echo ------------------------------------------------------------
+echo "PREPARING ENVIRONMENT"
+echo ------------------------------------------------------------
 
-# default experiment: vlf.submit expfile.json -runtest (-runtest is a parameter for the submitscript, not for vlf itself!)
-# at experiment launch:
-# $1 # path to experiment file
-# $2 / param2_opt = "-runtest" -> this is removed by the submit script and not forwarded to vlf. only at training termination, a new job with -nt -ta will be launched
-# $3 / param3_opt = None
-# $4 / param4_opt = None
-# at resubmit:
-# $1 # path to experiment file
-# $2 / param2_opt = "-runtest"
-# $3 / param3_opt = -rp
-# $4 / param4_opt = actual path for -rp
+cd /scratch/
+module load python/3.12.4
+VENV="fdqenv" module load uv/0.6.12
+uv venv fdqenv
+source /scratch/fdqenv/bin/activate
+uv pip install fdq==0.0.6
 
-param1_exp_path=$1 # path to experiment file
-param2_opt=$2
-param3_opt=$3 
-param4_opt=$4
+echo "UV environment ready...!"
 
-echo ----------------------------------------------------------------------------------
-echo "Start date: $(date +"%Y-%m-%d %H:%M:%S")" 
-echo "Hostname: $(hostname)"
-echo "Experiment: $param1_exp_path"
-echo "param2_opt: $param2_opt"
-echo "param3_opt: $param3_opt"
-echo "param4_opt: $param4_opt"
-
-# random sleep
-sleep_time=$((RANDOM % 121 + 20))
-echo "Random sleep for $sleep_time seconds to prevent race conditions"
-sleep $sleep_time
-
-params=("param2_opt" "param3_opt" "param4_opt")
-train_model=true
-automatic_test=false
-resume_train=false
-resume_train_path=""
-for param in "${params[@]}"; do
-    if [ "${!param}" == "-runtest" ]; then
-        eval "$param=''"
-        automatic_test=true
-    elif [ "${!param}" == "-nt" ]; then
-        train_model=false
-    elif [ "${!param}" == "-rp" ]; then
-        eval "$param=''"
-        resume_train=true
-    elif [ "$resume_train" == true ] && [[ "${!param}" == /* ]]; then
-        resume_train_path="${!param}"
-        eval "$param=''"
-    fi
-done
-
-echo "Train model: $train_model"
-echo "Automatic test: $automatic_test"
-echo "Resume training: $resume_train"
-echo "Resume training path: $resume_train_path"
-echo ----------------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------------
 # Stop signal handler
 # ----------------------------------------------------------------------------------
-sig_handler_USR2()
-{
-    echo "++++++++++++++++++++++++++++++++++++++"
-    echo "USR2 - MAN STOP DETECTED -  `date`"
-    echo experiment file: $param1_exp_path
-    echo "copy files back to cluster and stop!"
-    echo "++++++++++++++++++++++++++++++++++++++"
-
-    echo Copy files from $SCRATCH_PATH to $RESULTS_PATH.
-    rsync -a $SCRATCH_PATH* $RESULTS_PATH
-    echo "---------------"
-    echo "File copy done."
-    echo "---------------"
-    sleep 1
-    exit 0
-}
-
 sig_handler_USR1()
 {
     echo "++++++++++++++++++++++++++++++++++++++"
-    echo "STOP SIGNAL DETECTED -  `date`"
-    echo experiment file: $param1_exp_path
+    echo "SLURM STOP SIGNAL DETECTED -  `date`"
+    echo experiment file: $EXP_FILE_PATH
     echo "++++++++++++++++++++++++++++++++++++++"
 
-    echo Copy files from $SCRATCH_PATH to $RESULTS_PATH.
-    rsync -a $SCRATCH_PATH* $RESULTS_PATH
+    echo Copy files from $SCRATCH_RESULTS_PATH to $CLUSTER_RESULTS_PATH.
+    rsync -a $SCRATCH_RESULTS_PATH* $CLUSTER_RESULTS_PATH
     sleep 1
     echo "---------------"
     echo "File copy done."
     echo "---------------"
 
-    # run intermediate test
-    echo "Starting intermediate test.."
-    sbatch --partition=$SLURM_JOB_PARTITION --gpus=$SLURM_GPUS --job-name=vlf-inter-test #PACKAGES_PATH#/vlf-core/vlf.submit $param1_exp_path -nt -ta
-    sleep 1
+    if [ "$AUTO_RESUBMIT" == true ]; then
+        # resubmit the job pointing to the last checkpoint file.
+        most_recent_chp=$(find $SCRATCH_RESULTS_PATH -name checkpoint* | head -n 1 | awk -F '/fdq_results/' '{print $2}')
+        most_recent_chp_path=${CLUSTER_RESULTS_PATH}/${most_recent_chp}
+        echo "Most recent checkpoint_path: $most_recent_chp_path"
 
-    # resubmit the job pointing to the last checkpoint file.
-    most_recent_chp=$(find $SCRATCH_PATH -name checkpoint* | head -n 1 | awk -F './vlf_results/' '{print $2}')
-    most_recent_chp_path=${RESULTS_PATH}/${most_recent_chp}
-    echo "Most recent checkpoint_path: $most_recent_chp_path"
-
-    sleep 1
-    echo ""
-    echo re-submitting job:
-    echo "param1_exp_path: $param1_exp_path"
-    echo "param2_opt: $param2_opt"
-    echo "param3_opt: $param3_opt"
-    echo "most_recent_chp_path: $most_recent_chp_path"
-    echo "automatic_test: $automatic_test"
-
-    if [ "$automatic_test" == true ]; then
-        sbatch --partition=$SLURM_JOB_PARTITION --gpus=$SLURM_GPUS --job-name=vlf-resubmit #PACKAGES_PATH#/vlf-core/vlf.submit $param1_exp_path $param2_opt $param3_opt -runtest -rp $most_recent_chp_path
-    else
-        sbatch --partition=$SLURM_JOB_PARTITION --gpus=$SLURM_GPUS --job-name=vlf-resubmit #PACKAGES_PATH#/vlf-core/vlf.submit $param1_exp_path $param2_opt $param3_opt -rp $most_recent_chp_path
-    fi
-    # alternatively, use  scontrol ... --requeue
-    sleep 1
-    exit 0
-}
-
-# associate the function "sig_handler_USR1" with the USR1 signal
-trap 'sig_handler_USR1' USR1 # slurm stop signal -> continue experiment..
-trap 'sig_handler_USR2' USR2 # manual experiment stop -> dont resubmit!
-
-
-echo ------------------------
-# ----------------------------------------------------------------------------------
-# create / load python venv
-# ----------------------------------------------------------------------------------
-
-env_name="vlf_env"
-venv_base_dir="/raid/persistent_scratch/#USERNAME#/venvs"
-venv_path="$venv_base_dir/$env_name"
-
-# Check if the virtual environment exists
-if [ -d "$venv_path" ]; then
-    echo "Virtual environment ($env_name) found. Activating..."
-    source "$venv_path/bin/activate"
-else
-    echo "Virtual environment ($env_name) not found. Creating..."
-    module load python/3.10.14
-    virtualenv $venv_path
-    unset PIP_TARGET
-    unset PYTHONPATH
-    source "$venv_path/bin/activate"
-fi
-
-echo ------------------------
-
-# read requirements.txt file and store valid packages into list
-# this is necessary in case the requirements.txt changes
-declare -A packages
-while IFS= read -r line || [ -n "$line" ]; do
-    # Strip comments from the line
-    line="${line%%#*}"
-    # Remove trailing spaces
-    line="${line%"${line##*[![:space:]]}"}"
-    # Skip empty lines
-    [[ -z "$line" ]] && continue
-    # Split the line into package and version if it matches the pattern package==version
-    if [[ "$line" =~ ^[a-zA-Z0-9_(\-\.)]+==([1-9][0-9]*!)?(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))*((a|b|rc)(0|[1-9][0-9]*))?(\.post(0|[1-9][0-9]*))?(\.dev(0|[1-9][0-9]*))?$ ]]; then
-        IFS='==' read -r package version <<< "${line/==/==}"
-        # Remove leading = from version
-        version=${version#=}
-        # Add the package and version to the associative array
-        packages[$package]=$version
-    # elif git+ split into git and hash
-    elif [[ "$line" =~ ^git\+https:\/\/[a-zA-Z0-9_\.\-] ]]; then
-        pip3 install "$line"
-    else
-        echo "Ignoring invalid line: $line"
-    fi
-done < #PACKAGES_PATH#/vlf-core/requirements.txt
-
-echo ------------------------
-
-# Check if the correct package versions are installed:
-for package in "${!packages[@]}"; do
-    version=${packages[$package]}
-    installed_version=$(pip3 show $package | grep "Version:" | cut -d' ' -f2)
-    if [ -z "$installed_version" ]; then
-        echo "Installing $package==$version..."
-        pip3 install "$package==$version"
-    elif [ "$installed_version" != "$version" ]; then
-        echo "$package is installed but version $installed_version is not the required version $version. Updating..."
-        pip3 install "$package==$version"
-    fi
-done
-
-check_and_install() {
-    package=$1
-    if ! pip3 list | grep -F "$package" > /dev/null; then
-        echo "Package $package is not installed. Installing..."
-        pip3 install -e "#PACKAGES_PATH#/$package/"
-    else
-        echo "Package $package is already installed."
-    fi
-}
-
-check_and_install vlf-core
-# check_and_install chuchichaestli # -> this is now a pip package!
-
-if [ "$DEBUG" = true ]; then
-    echo ------------------------
-    echo "list all packages:"
-    pip3 list
-    echo ------------------------
-fi
-
-# ----------------------------------------------------------------------------------
-# Run training
-# ----------------------------------------------------------------------------------
-
-compute_start=$(date +%s.%N)
-
-if [ "$resume_train" == true ]; then
-    vlf $param1_exp_path $param2_opt $param3_opt $param4_opt -rp $resume_train_path &
-else
-    vlf $param1_exp_path $param2_opt $param3_opt $param4_opt &
-fi
-vlf_pid=$!
-
-# wait for all background jobs to finish!
-wait $vlf_pid
-retvalue=$?
-
-
-# ----------------------------------------------------------------------------------
-# Finalize
-# ----------------------------------------------------------------------------------
-echo ------------------------------------------------------------
-echo "PROCESSING DONE - Copying results back to storage cluster"
-echo ------------------------------------------------------------
-
-if [ "$param2_opt" != "-nt" ]; then
-    # if the current run was not a training, no need to copy any data back to the storage cluster
-    rsync -a $SCRATCH_PATH* $RESULTS_PATH
-fi
-
-echo ------------------------------------------------------------
-echo "Copying results back to storage cluster - DONE"
-echo ------------------------------------------------------------
-
-end=$(date +%s.%N)
-script_time=$(echo "$end - $script_start" | bc)
-compute_time=$(echo "$end - $compute_start" | bc)
-echo ------------------------
-echo "Script execution time: $script_time seconds"
-echo "Compute time: $compute_time seconds"
-echo ------------------------
-
-
-# start test as new job
-if [ "$automatic_test" == true ]; then
-    if [ $retvalue -eq 0 ]; then
-        echo ------------------------
-        echo "Starting automatic test.."
-        echo ------------------------
+        sed -e "s|^RESUME_CHPT_PATH=.*|RESUME_CHPT_PATH=$most_recent_chp_path|g" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
+        rm $SCRATCH_SUBMIT_FILE_PATH
+        mv $SCRATCH_SUBMIT_FILE_PATH.resub $SCRATCH_SUBMIT_FILE_PATH
 
         sleep 1
         echo submitting new job with the following command:
-        echo "sbatch --partition=$SLURM_JOB_PARTITION --gpus=$SLURM_GPUS --job-name=vlf-test #PACKAGES_PATH#/vlf-core/vlf.submit $param1_exp_path -nt -ta"
-        sbatch --partition=$SLURM_JOB_PARTITION --gpus=$SLURM_GPUS --job-name=vlf-test #PACKAGES_PATH#/vlf-core/vlf.submit $param1_exp_path -nt -ta
+        echo "sbatch --job-name=fdq-test $SCRATCH_SUBMIT_FILE_PATH"
+        sbatch --job-name=fdq-test $SCRATCH_SUBMIT_FILE_PATH
+        sleep 1
+    fi
+    exit 0
+}
+sig_handler_USR2()
+{
+    echo "++++++++++++++++++++++++++++++++++++++"
+    echo "USR2 - MANUAL STOP DETECTED -  `date`"
+    echo experiment file: $EXP_FILE_PATH
+    echo "copy files back to cluster and stop!"
+    echo "++++++++++++++++++++++++++++++++++++++"
+
+    echo Copy files from $SCRATCH_RESULTS_PATH to $CLUSTER_RESULTS_PATH.
+    rsync -a $SCRATCH_RESULTS_PATH* $CLUSTER_RESULTS_PATH
+    echo "---------------"
+    echo "File copy done."
+    echo "---------------"
+    exit 0
+}
+
+trap 'sig_handler_USR1' USR1
+trap 'sig_handler_USR2' USR2
+
+if [ "$RUN_TRAIN" == true ]; then
+    echo ------------------------------------------------------------
+    echo "RUNNING TRAINING"
+    echo ------------------------------------------------------------
+
+    train_start=$(date +%s.%N)
+
+    if [ "$RESUME_CHPT_PATH" == None ]; then
+        fdq $EXP_FILE_PATH &
+    elif [ -f "$RESUME_CHPT_PATH" ]; then
+        echo "Resuming training from checkpoint: $RESUME_CHPT_PATH"
+        fdq $EXP_FILE_PATH -rp $RESUME_CHPT_PATH &
+    else
+        echo "ERROR: Checkpoint path does not exist: $RESUME_CHPT_PATH"
+    fi
+
+    fdq_pid=$!
+    wait $fdq_pid
+    RETVALUE=$?
+    train_stop=$(date +%s.%N)
+
+    echo ------------------------------------------------------------
+    echo "TRAINING DONE - Copying results back to storage cluster"
+    echo ------------------------------------------------------------
+    sleep 1
+    copy_start=$(date +%s.%N)
+    rsync -a $SCRATCH_RESULTS_PATH* $CLUSTER_RESULTS_PATH
+    copy_end=$(date +%s.%N)
+    echo ------------------------------------------------------------
+    echo "Copying results back to storage cluster - DONE"
+    echo ------------------------------------------------------------
+    train_time=$(echo "$train_stop - $train_start" | bc)
+    copy_time=$(echo "$copy_end - $copy_start" | bc)
+    script_time=$(echo "$copy_end - $script_start" | bc)
+    echo ------------------------------------------------------------
+    echo "Script execution time: $script_time s"
+    echo "Train time: $train_time s"
+    echo "Data copy time: $copy_time s"
+    echo ------------------------------------------------------------
+fi
+
+if [ "$IS_TEST" == true ]; then
+    echo ------------------------------------------------------------
+    echo "RUNNING TEST"
+    echo ------------------------------------------------------------
+    test_start=$(date +%s.%N)
+    fdq $EXP_FILE_PATH -nt -ta
+    fdq_pid=$!
+    wait $fdq_pid
+    RETVALUE=$?
+    test_stop=$(date +%s.%N)
+    test_time=$(echo "$test_stop - $test_start" | bc)
+    echo ------------------------------------------------------------
+    echo "Test time: $test_time s"
+    echo ------------------------------------------------------------
+fi
+
+
+# --------------------------------------------------------------
+# Submit new job for test
+# --------------------------------------------------------------
+if [ "$RUN_TEST" == true ]; then
+    if [ $RETVALUE -eq 0 ]; then
+        echo ------------------------------------------------------------
+        echo "Launching test job.."
+        echo ------------------------------------------------------------
+        sed  -e "s|IS_TEST=false|IS_TEST=true|g" -e "s|RUN_TRAIN=true|RUN_TRAIN=false|g" -e "s|RUN_TEST=true|RUN_TEST=false|g" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
+        rm $SCRATCH_SUBMIT_FILE_PATH
+        mv $SCRATCH_SUBMIT_FILE_PATH.resub $SCRATCH_SUBMIT_FILE_PATH
+        sleep 1
+        echo submitting new job with the following command:
+        echo "sbatch --job-name=fdq-test $SCRATCH_SUBMIT_FILE_PATH"
+        sbatch --job-name=fdq-test $SCRATCH_SUBMIT_FILE_PATH
         sleep 1
         exit 0
     else
         echo ----------------------------------------------------------------------
-        echo "Automatic test not started due to non-zero return vlf value: $retvalue"
+        echo "Automatic test not started due to non-zero fdq ret value: $retvalue"
         echo ----------------------------------------------------------------------
     fi
 fi
