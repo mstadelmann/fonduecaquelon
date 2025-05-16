@@ -1,32 +1,32 @@
 #!/bin/bash
-#SBATCH --time=#TIME#
-#SBATCH --job-name=fdq-#JOBNAME#
-#SBATCH --ntasks=#NTASKS#
-#SBATCH --cpus-per-task=#CPUSPERTASK#
-#SBATCH --nodes=#NODES#
-#SBATCH --gres=#GRES#
-#SBATCH --mem=#MEM#
-#SBATCH --partition=#PARTITION#
-#SBATCH --account=#ACCOUNT#
-#SBATCH --mail-user=#USER#@zhaw.ch
-#SBATCH --output=#LOGPATH#/%j_%N__fdq_runner.out
-#SBATCH --error=#LOGPATH#/%j_%N__fdq_runner.err
-#SBATCH --signal=B:SIGUSR1@#TIMEOUT#
+#SBATCH --time=#job_time#
+#SBATCH --job-name=fdq-#job_name#
+#SBATCH --ntasks=#ntasks#
+#SBATCH --cpus-per-task=#cpus_per_task#
+#SBATCH --nodes=#nodes#
+#SBATCH --gres=#gres#
+#SBATCH --mem=#mem#
+#SBATCH --partition=#partition#
+#SBATCH --account=#account#
+#SBATCH --mail-user=#user#@zhaw.ch
+#SBATCH --output=#log_path#/%j_%N__fdq_runner.out
+#SBATCH --error=#log_path#/%j_%N__fdq_runner.err
+#SBATCH --signal=B:SIGUSR1@#stop_grace_time#
 
 script_start=$(date +%s.%N)
 
-RUN_TRAIN=true
-RUN_TEST=true # test will be run automatically, but not necessarily in this job
-IS_TEST=false # if true, start test in this job
-AUTO_RESUBMIT=true # resubmit the job if stopped due to time constraints
-RESUME_CHPT_PATH=None
-EXP_FILE_PATH="/cluster/home/stmd/dev/fonduecaquelon/experiment_templates/segment_pets/segment_pets.json"
-SCRATCH_RESULTS_PATH="/scratch/fdq_results/"
-CLUSTER_RESULTS_PATH="/cluster/home/stmd/data/ML_data/results/"
-SUBMIT_FILE_PATH="/cluster/home/stmd/dev/fonduecaquelon/src/fdq/fdq.submit"
-PY_MODULE=#PY_MODULE#
-UV_MODULE=#UV_MODULE#
-FDQ_VERSION=#FDQ_VERSION#
+RUN_TRAIN=#run_train#
+RUN_TEST=#run_test# # test will be run automatically, but not necessarily in this job
+IS_TEST=#is_test# # if true, start test in this job
+AUTO_RESUBMIT=#auto_resubmit# # resubmit the job if stopped due to time constraints
+RESUME_CHPT_PATH=#resume_chpt_path# # path to checkpoint file to resume training
+EXP_FILE_PATH=#exp_file_path#
+SCRATCH_RESULTS_PATH=#temp_results_path#
+CLUSTER_RESULTS_PATH=#cluster_results_path#
+SUBMIT_FILE_PATH=#submit_file_path#
+PY_MODULE=#python_env_module#
+UV_MODULE=#uv_env_module#
+FDQ_VERSION=#fdq_version#
 RETVALUE=1 # will become zero if training is successful, which will launch an optional test job
 
 # Copy submit script to scratch for resubmission
@@ -126,7 +126,7 @@ if [ "$RUN_TRAIN" == true ]; then
 
     train_start=$(date +%s.%N)
 
-    if [ "$RESUME_CHPT_PATH" == None ]; then
+    if [ -z "$RESUME_CHPT_PATH" ]; then
         fdq $EXP_FILE_PATH &
     elif [ -f "$RESUME_CHPT_PATH" ]; then
         echo "Resuming training from checkpoint: $RESUME_CHPT_PATH"
