@@ -18,7 +18,7 @@ script_start=$(date +%s.%N)
 RUN_TRAIN=true
 RUN_TEST=true # test will be run automatically, but not necessarily in this job
 IS_TEST=false # if true, start test in this job
-AUTO_RESUBMIT=true
+AUTO_RESUBMIT=true # resubmit the job if stopped due to time constraints
 RESUME_CHPT_PATH=None
 EXP_FILE_PATH="/cluster/home/stmd/dev/fonduecaquelon/experiment_templates/segment_pets/segment_pets.json"
 SCRATCH_RESULTS_PATH="/scratch/fdq_results/"
@@ -40,6 +40,7 @@ echo "Scratch submit file path: $SCRATCH_SUBMIT_FILE_PATH"
 echo "RUN_TRAIN: $RUN_TRAIN"
 echo "RUN_TEST: $RUN_TEST"
 echo "IS_TEST: $IS_TEST"
+echo "AUTO_RESUBMIT: $AUTO_RESUBMIT"
 echo "RESUME_CHPT_PATH: $RESUME_CHPT_PATH"
 echo "EXP_FILE_PATH: $EXP_FILE_PATH"
 echo "SCRATCH_RESULTS_PATH: $SCRATCH_RESULTS_PATH"
@@ -62,6 +63,38 @@ echo "UV environment ready...!"
 # ----------------------------------------------------------------------------------
 # Stop signal handler
 # ----------------------------------------------------------------------------------
+sig_handler_USR1()
+{
+    echo "++++++++++++++++++++++++++++++++++++++"
+    echo "SLURM STOP SIGNAL DETECTED -  `date`"
+    echo experiment file: $EXP_FILE_PATH
+    echo "++++++++++++++++++++++++++++++++++++++"
+
+    echo Copy files from $SCRATCH_RESULTS_PATH to $CLUSTER_RESULTS_PATH.
+    rsync -a $SCRATCH_RESULTS_PATH* $CLUSTER_RESULTS_PATH
+    sleep 1
+    echo "---------------"
+    echo "File copy done."
+    echo "---------------"
+
+    if [ "$AUTO_RESUBMIT" == true ]; then
+        # resubmit the job pointing to the last checkpoint file.
+        most_recent_chp=$(find $SCRATCH_RESULTS_PATH -name checkpoint* | head -n 1 | awk -F '/fdq_results/' '{print $2}')
+        most_recent_chp_path=${CLUSTER_RESULTS_PATH}/${most_recent_chp}
+        echo "Most recent checkpoint_path: $most_recent_chp_path"
+
+        sed -e "s|^RESUME_CHPT_PATH=.*|RESUME_CHPT_PATH=$most_recent_chp_path|g" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
+        rm $SCRATCH_SUBMIT_FILE_PATH
+        mv $SCRATCH_SUBMIT_FILE_PATH.resub $SCRATCH_SUBMIT_FILE_PATH
+
+        sleep 1
+        echo submitting new job with the following command:
+        echo "sbatch --job-name=fdq-test $SCRATCH_SUBMIT_FILE_PATH"
+        sbatch --job-name=fdq-test $SCRATCH_SUBMIT_FILE_PATH
+        sleep 1
+    fi
+    exit 0
+}
 sig_handler_USR2()
 {
     echo "++++++++++++++++++++++++++++++++++++++"
@@ -78,38 +111,6 @@ sig_handler_USR2()
     exit 0
 }
 
-sig_handler_USR1()
-{
-    echo "++++++++++++++++++++++++++++++++++++++"
-    echo "SLURM STOP SIGNAL DETECTED -  `date`"
-    echo experiment file: $EXP_FILE_PATH
-    echo "++++++++++++++++++++++++++++++++++++++"
-
-    echo Copy files from $SCRATCH_RESULTS_PATH to $CLUSTER_RESULTS_PATH.
-    rsync -a $SCRATCH_RESULTS_PATH* $CLUSTER_RESULTS_PATH
-    sleep 1
-    echo "---------------"
-    echo "File copy done."
-    echo "---------------"
-
-
-    # resubmit the job pointing to the last checkpoint file.
-    most_recent_chp=$(find $SCRATCH_RESULTS_PATH -name checkpoint* | head -n 1 | awk -F '/fdq_results/' '{print $2}')
-    most_recent_chp_path=${CLUSTER_RESULTS_PATH}/${most_recent_chp}
-    echo "Most recent checkpoint_path: $most_recent_chp_path"
-
-    sed -e "s|^RESUME_CHPT_PATH=.*|RESUME_CHPT_PATH=$most_recent_chp_path|g" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
-    rm $SCRATCH_SUBMIT_FILE_PATH
-    mv $SCRATCH_SUBMIT_FILE_PATH.resub $SCRATCH_SUBMIT_FILE_PATH
-
-    sleep 1
-    echo submitting new job with the following command:
-    echo "sbatch --job-name=fdq-test $SCRATCH_SUBMIT_FILE_PATH"
-    sbatch --job-name=fdq-test $SCRATCH_SUBMIT_FILE_PATH
-    sleep 1
-    exit 0
-}
-
 trap 'sig_handler_USR1' USR1
 trap 'sig_handler_USR2' USR2
 
@@ -122,11 +123,9 @@ if [ "$RUN_TRAIN" == true ]; then
 
     if [ "$RESUME_CHPT_PATH" == None ]; then
         fdq $EXP_FILE_PATH &
-
     elif [ -f "$RESUME_CHPT_PATH" ]; then
         echo "Resuming training from checkpoint: $RESUME_CHPT_PATH"
         fdq $EXP_FILE_PATH -rp $RESUME_CHPT_PATH &
-
     else
         echo "ERROR: Checkpoint path does not exist: $RESUME_CHPT_PATH"
     fi
@@ -134,23 +133,18 @@ if [ "$RUN_TRAIN" == true ]; then
     fdq_pid=$!
     wait $fdq_pid
     RETVALUE=$?
-
     train_stop=$(date +%s.%N)
 
     echo ------------------------------------------------------------
     echo "TRAINING DONE - Copying results back to storage cluster"
     echo ------------------------------------------------------------
-
     sleep 1
-
     copy_start=$(date +%s.%N)
     rsync -a $SCRATCH_RESULTS_PATH* $CLUSTER_RESULTS_PATH
     copy_end=$(date +%s.%N)
-
     echo ------------------------------------------------------------
     echo "Copying results back to storage cluster - DONE"
     echo ------------------------------------------------------------
-
     train_time=$(echo "$train_stop - $train_start" | bc)
     copy_time=$(echo "$copy_end - $copy_start" | bc)
     script_time=$(echo "$copy_end - $script_start" | bc)
@@ -165,17 +159,12 @@ if [ "$IS_TEST" == true ]; then
     echo ------------------------------------------------------------
     echo "RUNNING TEST"
     echo ------------------------------------------------------------
-
     test_start=$(date +%s.%N)
-
     fdq $EXP_FILE_PATH -nt -ta
-
     fdq_pid=$!
     wait $fdq_pid
     RETVALUE=$?
-
     test_stop=$(date +%s.%N)
-
     test_time=$(echo "$test_stop - $test_start" | bc)
     echo ------------------------------------------------------------
     echo "Test time: $test_time s"
@@ -186,17 +175,14 @@ fi
 # --------------------------------------------------------------
 # Submit new job for test
 # --------------------------------------------------------------
-
 if [ "$RUN_TEST" == true ]; then
     if [ $RETVALUE -eq 0 ]; then
         echo ------------------------------------------------------------
         echo "Launching test job.."
         echo ------------------------------------------------------------
-
         sed  -e "s|IS_TEST=false|IS_TEST=true|g" -e "s|RUN_TRAIN=true|RUN_TRAIN=false|g" -e "s|RUN_TEST=true|RUN_TEST=false|g" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
         rm $SCRATCH_SUBMIT_FILE_PATH
         mv $SCRATCH_SUBMIT_FILE_PATH.resub $SCRATCH_SUBMIT_FILE_PATH
-
         sleep 1
         echo submitting new job with the following command:
         echo "sbatch --job-name=fdq-test $SCRATCH_SUBMIT_FILE_PATH"
