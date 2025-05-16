@@ -17,12 +17,13 @@ script_start=$(date +%s.%N)
 
 RUN_TRAIN=#run_train#
 RUN_TEST=#run_test# # test will be run automatically, but not necessarily in this job
-IS_TEST=#is_test# # if true, start test in this job
+IS_TEST=#is_test# # if True, start test in this job
 AUTO_RESUBMIT=#auto_resubmit# # resubmit the job if stopped due to time constraints
 RESUME_CHPT_PATH=#resume_chpt_path# # path to checkpoint file to resume training
 EXP_FILE_PATH=#exp_file_path#
-SCRATCH_RESULTS_PATH=#temp_results_path#
-CLUSTER_RESULTS_PATH=#cluster_results_path#
+SCRATCH_RESULTS_PATH=#scratch_results_path#
+SCRATCH_DATA_PATH=#scratch_data_path#
+RESULTS_PATH=#results_path#
 SUBMIT_FILE_PATH=#submit_file_path#
 PY_MODULE=#python_env_module#
 UV_MODULE=#uv_env_module#
@@ -47,7 +48,8 @@ echo "AUTO_RESUBMIT: $AUTO_RESUBMIT"
 echo "RESUME_CHPT_PATH: $RESUME_CHPT_PATH"
 echo "EXP_FILE_PATH: $EXP_FILE_PATH"
 echo "SCRATCH_RESULTS_PATH: $SCRATCH_RESULTS_PATH"
-echo "CLUSTER_RESULTS_PATH: $CLUSTER_RESULTS_PATH"
+echo "SCRATCH_DATA_PATH: $SCRATCH_DATA_PATH"
+echo "RESULTS_PATH: $RESULTS_PATH"
 echo "PYTHON MODULE: $PY_MODULE"
 echo "UV MODULE: $UV_MODULE"
 echo "FDQ VERSION: $FDQ_VERSION"
@@ -64,6 +66,9 @@ uv pip install fdq==$FDQ_VERSION
 
 echo "UV environment ready...!"
 
+mkdir -p $SCRATCH_RESULTS_PATH
+mkdir -p $SCRATCH_DATA_PATH
+mkdir -p $RESULTS_PATH
 
 # ----------------------------------------------------------------------------------
 # Stop signal handler
@@ -75,17 +80,17 @@ sig_handler_USR1()
     echo experiment file: $EXP_FILE_PATH
     echo "++++++++++++++++++++++++++++++++++++++"
 
-    echo Copy files from $SCRATCH_RESULTS_PATH to $CLUSTER_RESULTS_PATH.
-    rsync -a $SCRATCH_RESULTS_PATH* $CLUSTER_RESULTS_PATH
+    echo Copy files from $SCRATCH_RESULTS_PATH to $RESULTS_PATH.
+    rsync -a $SCRATCH_RESULTS_PATH* $RESULTS_PATH
     sleep 1
     echo "---------------"
     echo "File copy done."
     echo "---------------"
 
-    if [ "$AUTO_RESUBMIT" == true ]; then
+    if [ "$AUTO_RESUBMIT" == True ]; then
         # resubmit the job pointing to the last checkpoint file.
         most_recent_chp=$(find $SCRATCH_RESULTS_PATH -name checkpoint* | head -n 1 | awk -F '/fdq_results/' '{print $2}')
-        most_recent_chp_path=${CLUSTER_RESULTS_PATH}/${most_recent_chp}
+        most_recent_chp_path=${RESULTS_PATH}/${most_recent_chp}
         echo "Most recent checkpoint_path: $most_recent_chp_path"
 
         sed -e "s|^RESUME_CHPT_PATH=.*|RESUME_CHPT_PATH=$most_recent_chp_path|g" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
@@ -108,8 +113,8 @@ sig_handler_USR2()
     echo "copy files back to cluster and stop!"
     echo "++++++++++++++++++++++++++++++++++++++"
 
-    echo Copy files from $SCRATCH_RESULTS_PATH to $CLUSTER_RESULTS_PATH.
-    rsync -a $SCRATCH_RESULTS_PATH* $CLUSTER_RESULTS_PATH
+    echo Copy files from $SCRATCH_RESULTS_PATH to $RESULTS_PATH.
+    rsync -a $SCRATCH_RESULTS_PATH* $RESULTS_PATH
     echo "---------------"
     echo "File copy done."
     echo "---------------"
@@ -119,14 +124,14 @@ sig_handler_USR2()
 trap 'sig_handler_USR1' USR1
 trap 'sig_handler_USR2' USR2
 
-if [ "$RUN_TRAIN" == true ]; then
+if [ "$RUN_TRAIN" == True ]; then
     echo ------------------------------------------------------------
     echo "RUNNING TRAINING"
     echo ------------------------------------------------------------
 
     train_start=$(date +%s.%N)
 
-    if [ -z "$RESUME_CHPT_PATH" ]; then
+    if [ "$RESUME_CHPT_PATH" == None ]; then
         fdq $EXP_FILE_PATH &
     elif [ -f "$RESUME_CHPT_PATH" ]; then
         echo "Resuming training from checkpoint: $RESUME_CHPT_PATH"
@@ -145,7 +150,7 @@ if [ "$RUN_TRAIN" == true ]; then
     echo ------------------------------------------------------------
     sleep 1
     copy_start=$(date +%s.%N)
-    rsync -a $SCRATCH_RESULTS_PATH* $CLUSTER_RESULTS_PATH
+    rsync -a $SCRATCH_RESULTS_PATH* $RESULTS_PATH
     copy_end=$(date +%s.%N)
     echo ------------------------------------------------------------
     echo "Copying results back to storage cluster - DONE"
@@ -160,7 +165,7 @@ if [ "$RUN_TRAIN" == true ]; then
     echo ------------------------------------------------------------
 fi
 
-if [ "$IS_TEST" == true ]; then
+if [ "$IS_TEST" == True ]; then
     echo ------------------------------------------------------------
     echo "RUNNING TEST"
     echo ------------------------------------------------------------
@@ -180,12 +185,12 @@ fi
 # --------------------------------------------------------------
 # Submit new job for test
 # --------------------------------------------------------------
-if [ "$RUN_TEST" == true ]; then
+if [ "$RUN_TEST" == True ]; then
     if [ $RETVALUE -eq 0 ]; then
         echo ------------------------------------------------------------
         echo "Launching test job.."
         echo ------------------------------------------------------------
-        sed  -e "s|IS_TEST=false|IS_TEST=true|g" -e "s|RUN_TRAIN=true|RUN_TRAIN=false|g" -e "s|RUN_TEST=true|RUN_TEST=false|g" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
+        sed  -e "s|IS_TEST=False|IS_TEST=True|g" -e "s|RUN_TRAIN=True|RUN_TRAIN=False|g" -e "s|RUN_TEST=True|RUN_TEST=False|g" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
         rm $SCRATCH_SUBMIT_FILE_PATH
         mv $SCRATCH_SUBMIT_FILE_PATH.resub $SCRATCH_SUBMIT_FILE_PATH
         sleep 1

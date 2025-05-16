@@ -22,10 +22,10 @@ def get_nb_exp_epochs(path):
 def find_experiment_result_dirs(experiment):
     if experiment.is_slurm and experiment.inargs.train_model:
         wprint(
-            "WARNING: This is a slurm TRAINING session - looking only for results in temp_results_path!"
+            "WARNING: This is a slurm TRAINING session - looking only for results in scratch_results_path!"
         )
         outbasepath = experiment.exp_def.get("slurm_cluster", {}).get(
-            "temp_results_path"
+            "scratch_results_path"
         )
 
     elif experiment.is_slurm and not experiment.inargs.train_model:

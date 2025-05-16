@@ -3,6 +3,7 @@ import os
 import json
 import copy
 import getpass
+import subprocess
 
 
 def recursive_dict_update(d_parent, d_child):
@@ -104,10 +105,9 @@ def parse_input_file(exp_file_path):
 
 def main():
     if len(sys.argv) != 2:
-        print(
+        raise ValueError(
             "Error: Exactly one argument is required which is the path to the JSON file."
         )
-        print("Usage: python fdqsubmit.py <path_to_json_file>")
 
     template_path = "/cluster/home/stmd/dev/fonduecaquelon/src/fdq/fdq.submit.template"
     submit_path = template_path.replace(".submit.template", ".run")
@@ -137,8 +137,9 @@ def main():
         "uv_env_module": None,
         "fdq_version": None,
         "exp_file_path": None,
-        "temp_results_path": "/scratch/fdq_results/",
-        "cluster_results_path": None,
+        "scratch_results_path": "/scratch/fdq_results/",
+        "scratch_data_path": "/scratch/fdq_data/",
+        "results_path": None,
         "submit_file_path": None,
     }
 
@@ -147,11 +148,17 @@ def main():
         if val is not None:
             job_config[key] = val
 
-    job_config["job_name"] = in_args.globals.project[:20]
+    job_config["job_name"] = in_args.globals.project[:20].replace(" ", "_")
     job_config["user"] = getpass.getuser()
-    job_config["exp_file_path"] = sys.argv[1]
-    job_config["cluster_results_path"] = os.path.expanduser(in_args.store.results_path)
+    job_config["results_path"] = in_args.store.results_path
+    job_config["log_path"] = job_config["log_path"]
     job_config["submit_file_path"] = submit_path
+
+    # job_config["exp_file_path"] = os.path.expanduser(sys.argv[1])
+    exp_file_path = os.path.expanduser(sys.argv[1])
+    if not os.path.isabs(exp_file_path):
+        exp_file_path = os.path.abspath(exp_file_path)
+    job_config["exp_file_path"] = exp_file_path
 
     if not job_config["run_train"] and not job_config["run_test"]:
         job_config["is_test"] = True
@@ -161,6 +168,10 @@ def main():
             raise ValueError(
                 f"Value for mandatory key'{key}' is None. Please update your config file!"
             )
+        elif value == "":
+            job_config[key] = "None"
+        elif isinstance(value, str) and value.startswith("~/"):
+            job_config[key] = os.path.expanduser(value)
 
     with open(template_path, "r") as f:
         template_content = f.read()
@@ -168,22 +179,18 @@ def main():
     for key, value in job_config.items():
         template_content = template_content.replace(f"#{key}#", str(value))
 
+    template_content = template_content.replace("//", "/")
+
     with open(submit_path, "w") as f:
         f.write(template_content)
 
+    result = subprocess.run(
+        f"sbatch {submit_path}", shell=True, capture_output=True, text=True
+    )
+    print(result.stdout)
+
     print("done")
 
-
-# submit_file_path
-# "/cluster/home/stmd/dev/fonduecaquelon/src/fdq/fdq.submit"
-
-# exp_file_path
-# "/cluster/home/stmd/dev/fonduecaquelon/experiment_templates/segment_pets/segment_pets.json"
-
-# cluster_results_path
-# "/cluster/home/stmd/data/ML_data/results/"
-
-# test only submission
 
 if __name__ == "__main__":
     main()

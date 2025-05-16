@@ -90,13 +90,13 @@ class fdqExperiment:
         if isinstance(slurm_job_id, str) and slurm_job_id.isdigit():
             self.is_slurm = True
             self.slurm_job_id = slurm_job_id
-            self.cluster_data_path = self.exp_def.get("slurm_cluster", {}).get(
-                "cluster_data_path"
+            self.scratch_data_path = self.exp_def.get("slurm_cluster", {}).get(
+                "scratch_data_path"
             )
         else:
             self.is_slurm = False
             self.slurm_job_id = None
-            self.cluster_data_path = None
+            self.scratch_data_path = None
         self.previous_slurm_job_id = None
         # ------------- CUDA / CPU -------------------------
         if torch.cuda.is_available() and bool(self.exp_def.train.args.use_GPU):
@@ -123,10 +123,10 @@ class fdqExperiment:
             if self.is_slurm:
                 folder_name += f"__{self.slurm_job_id}"
                 res_base_path = self.exp_def.get("slurm_cluster", {}).get(
-                    "temp_results_path"
+                    "scratch_results_path"
                 )
                 if res_base_path is None:
-                    raise ValueError("Error, temp_results_path was not defined.")
+                    raise ValueError("Error, scratch_results_path was not defined.")
 
             else:
                 res_base_path = self.exp_file.get("store", {}).get("results_path", None)
@@ -734,11 +734,11 @@ class fdqExperiment:
     def copy_data_to_scratch(self):
         """Copy all datasets to scratch dir, and update the paths."""
 
-        if self.cluster_data_path is None:
+        if self.scratch_data_path is None:
             return
 
-        if not os.path.exists(self.cluster_data_path):
-            os.makedirs(self.cluster_data_path)
+        if not os.path.exists(self.scratch_data_path):
+            os.makedirs(self.scratch_data_path)
 
         iprint("----------------------------------------------------")
         iprint("Copy datasets to temporary scratch location...")
@@ -747,14 +747,14 @@ class fdqExperiment:
         for data_name, data_source in self.exp_def.data.items():
             try:
                 # cleanup old data first -> in case this is a debugging run with dirty data
-                dst_path = os.path.join(self.cluster_data_path, data_name)
+                dst_path = os.path.join(self.scratch_data_path, data_name)
                 if os.path.exists(dst_path):
                     shutil.rmtree(dst_path)
                 # shutil.copytree(data_source.args.base_path, dst_path)
                 os.system(f"rsync -au {data_source.args.base_path} {dst_path}")
             except Exception as exc:
                 raise ValueError(
-                    f"Unable to copy {data_source.args.base_path} to  to scratch location at {self.cluster_data_path}!"
+                    f"Unable to copy {data_source.args.base_path} to  to scratch location at {self.scratch_data_path}!"
                 ) from exc
 
             data_source.args.base_path = dst_path
