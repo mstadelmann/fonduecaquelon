@@ -403,7 +403,7 @@ def main():
     template_content = template_content.replace("//", "/")
 
     if slurm_conf.additional_pip_packages is None:
-        template_content.replace("#additional_pip_packages#", "")
+        template_content = template_content.replace("#additional_pip_packages#", "")
     elif isinstance(slurm_conf.additional_pip_packages, list):
         additional_pip_packages = "\n".join(
             [f"uv pip install {pkg}" for pkg in slurm_conf.additional_pip_packages]
