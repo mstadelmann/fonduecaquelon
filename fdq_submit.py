@@ -1,5 +1,6 @@
 import sys
 import os
+import re
 import json
 import copy
 import getpass
@@ -73,6 +74,8 @@ VENV="fdqenv" module load $UV_MODULE
 uv venv fdqenv
 source /scratch/fdqenv/bin/activate
 uv pip install fdq==$FDQ_VERSION
+
+#additional_pip_packages#
 
 echo "UV environment ready...!"
 
@@ -321,8 +324,6 @@ def main():
             "Error: Exactly one argument is required which is the path to the JSON file."
         )
 
-    template_path = "/cluster/home/stmd/dev/fonduecaquelon/src/fdq/fdq.submit.template"
-
     in_args = parse_input_file(sys.argv[1])
     slurm_conf = in_args.slurm_cluster
 
@@ -400,6 +401,19 @@ def main():
     for key, value in job_config.items():
         template_content = template_content.replace(f"#{key}#", str(value))
     template_content = template_content.replace("//", "/")
+
+    if slurm_conf.additional_pip_packages is None:
+        template_content.replace("#additional_pip_packages#", "")
+    elif isinstance(slurm_conf.additional_pip_packages, list):
+        additional_pip_packages = "\n".join(
+            [f"uv pip install {pkg}" for pkg in slurm_conf.additional_pip_packages]
+        )
+        template_content = template_content.replace(
+            "#additional_pip_packages#", additional_pip_packages
+        )
+    else:
+        raise ValueError("Error: additional_pip_packages must be a list of strings.")
+
     with open(submit_path, "w") as f:
         f.write(template_content)
 
@@ -407,6 +421,16 @@ def main():
     result = subprocess.run(
         f"sbatch {submit_path}", shell=True, capture_output=True, text=True
     )
+
+    # rename submit file with job id
+    match = re.search(r"(\d+)\s*$", result.stdout)
+    if match:
+        new_submit_path = os.path.join(
+            os.path.dirname(submit_path),
+            f"{match.group(1)}__{os.path.basename(submit_path)}",
+        )
+        os.rename(submit_path, new_submit_path)
+
     print(result.stdout)
     print("done")
 

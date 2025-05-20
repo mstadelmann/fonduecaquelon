@@ -49,3 +49,19 @@ To run an experiment with FDQ, you need to define your [experiment loop](experim
 ```
 
 allows you to access the model in your training loop via `experiment.models["ccUNET"]`. The same dictionary-based structure applies to losses and data loaders as well. This setup enables you to define and manage as many models, losses, and data loaders as needed for your experiment.
+
+### Install additional pip packages
+If your experiment needs extra Python packages, you can install them on the worker by specifying them in your configuration. Just add the required package names (and optionally the version) under a `additional_pip_packages` section in your experiment setup file. This ensures all dependencies are installed automatically before your code runs.
+
+Example:
+
+```json
+    "slurm_cluster": {
+        "fdq_version": "0.0.7",
+        "...": "...",
+        "additional_pip_packages": [
+            "monai==1.4.0",
+            "prettytable"
+        ]
+    }
+```
