@@ -8,7 +8,6 @@ import shutil
 import argparse
 import importlib
 import funkybob
-from tqdm import tqdm
 from datetime import datetime
 from fdq.ui_functions import iprint, wprint, show_train_progress
 from fdq.misc import (
@@ -194,7 +193,7 @@ class fdqExperiment:
     def parse_and_clean_args(self):
         self.experiment_file_path = self.inargs.experimentfile
 
-        with open(self.experiment_file_path, "r", encoding="utf8") as fp:
+        with open(self.experiment_file_path, encoding="utf8") as fp:
             try:
                 self.exp_file = json.load(fp)
             except Exception as exc:
@@ -223,7 +222,7 @@ class fdqExperiment:
                     f"Error: File {self.parent_file_path} not found."
                 )
 
-            with open(self.parent_file_path, "r", encoding="utf8") as fp:
+            with open(self.parent_file_path, encoding="utf8") as fp:
                 try:
                     parent_expfile = json.load(fp)
                 except Exception as exc:
@@ -590,8 +589,7 @@ class fdqExperiment:
         store_processing_infos(self)
 
     def check_early_stop(self):
-        """
-        1) Stop training if the validation los over last last N epochs did not further decrease.
+        """1) Stop training if the validation los over last last N epochs did not further decrease.
         We want at least N epochs in each training start, also if its a resume from checkpoint training.
         (--> Therefore, (cur_epoch - self.start_epoch) > self.early_stop_val_loss)
 
@@ -726,7 +724,6 @@ class fdqExperiment:
 
     def copy_data_to_scratch(self):
         """Copy all datasets to scratch dir, and update the paths."""
-
         if self.scratch_data_path is None:
             return
 

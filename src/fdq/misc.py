@@ -3,15 +3,11 @@ import os
 import cv2
 import torch
 import random
-import git
 import sys
-import time
 import numpy as np
-import inspect
 import copy
 import wandb
 import matplotlib.pyplot as plt
-import subprocess as sp
 from matplotlib.ticker import MaxNLocator
 from fdq.ui_functions import iprint, wprint, eprint
 from datetime import datetime
@@ -156,8 +152,7 @@ class DictToObj:
 
 
 def replace_tilde_with_abs_path(d):
-    """
-    Recursively traverse a dictionary and replace string values starting with "~/"
+    """Recursively traverse a dictionary and replace string values starting with "~/"
     with their absolute paths.
     """
     for key, value in d.items():
@@ -294,7 +289,6 @@ def avoid_nondeterministic(experiment, seed_overwrite=0):
     for the corresponding set of size parameters. Due to benchmarking noise and different
     hardware, the benchmark may select different algorithms on subsequent runs, even on the same machine.
     """
-
     if experiment.random_seed is None:
         experiment.random_seed = seed_overwrite
         random.seed(experiment.random_seed)
@@ -305,8 +299,7 @@ def avoid_nondeterministic(experiment, seed_overwrite=0):
 
 
 def save_train_history(experiment):
-    """save training history to json and pdf"""
-
+    """Save training history to json and pdf"""
     try:
         out_json = os.path.join(experiment.results_dir, "history.json")
         out_pdf = os.path.join(experiment.results_dir, "history.pdf")
@@ -338,8 +331,7 @@ def save_train_history(experiment):
 
 
 def showImg_cv(tensor_image, window_name="Image"):
-    """
-    Displays a PyTorch tensor image using OpenCV.
+    """Displays a PyTorch tensor image using OpenCV.
 
     Supports:
     - [H, W]  (2D grayscale)
@@ -419,7 +411,6 @@ def save_tensorboard(experiment, images=None, scalars=None, text=None):
     Train and Val loss are logged automatically.
     Images are expected to be in shape [B,C,D,H,W]
     """
-
     if not experiment.useTensorboard:
         return
 
@@ -473,7 +464,6 @@ def save_tensorboard(experiment, images=None, scalars=None, text=None):
 
 def init_wandb(experiment):
     """Initialize weights and biases"""
-
     if experiment.exp_def.store.wandb_project is None:
         raise ValueError(
             "Wandb project name is not set. Please set it in the experiment definition."

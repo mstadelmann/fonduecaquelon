@@ -287,7 +287,7 @@ def parse_input_file(exp_file_path):
         sys.exit(1)
 
     try:
-        with open(exp_file_path, "r") as file:
+        with open(exp_file_path) as file:
             exp_file = json.load(file)
     except json.JSONDecodeError:
         raise ValueError(f"Error: The file '{exp_file_path}' is not a valid JSON file.")
@@ -305,7 +305,7 @@ def parse_input_file(exp_file_path):
         if not os.path.exists(parent_file_path):
             raise FileNotFoundError(f"Error: File {parent_file_path} not found.")
 
-        with open(parent_file_path, "r", encoding="utf8") as fp:
+        with open(parent_file_path, encoding="utf8") as fp:
             try:
                 parent_expfile = json.load(fp)
             except Exception as exc:

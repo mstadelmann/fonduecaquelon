@@ -25,8 +25,7 @@ def getIntInput(message, drange=[0, 5000]):  # pylint: disable=W0102
 
 
 def getYesNoInput(message):
-    """
-    UI helper function to get yes/no input from user.
+    """UI helper function to get yes/no input from user.
     Returns True if 'y' is entered, False otherwise.
     """
     tmode = None
@@ -117,22 +116,19 @@ def show_train_progress(experiment):
 
 
 def iprint(msg):
-    """
-    Info print: plots information string in green.
+    """Info print: plots information string in green.
     """
     cprint(msg, text_color="green")
 
 
 def wprint(msg):
-    """
-    Warning print: plots warning string in yellow.
+    """Warning print: plots warning string in yellow.
     """
     cprint(msg, text_color="yellow")
 
 
 def eprint(msg):
-    """
-    Error print: plots error string in red.
+    """Error print: plots error string in red.
     """
     cprint(msg, text_color="red")
 

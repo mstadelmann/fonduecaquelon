@@ -1,10 +1,8 @@
-import os
 import sys
 
 import torch
 import torch.multiprocessing
 import torch.nn.functional as F
-from PIL import Image
 
 
 from fdq.ui_functions import getIntInput, startProgBar

@@ -12,7 +12,7 @@ def get_nb_exp_epochs(path):
     path = os.path.join(path, "history.json")
 
     try:
-        with open(path, "r", encoding="utf8") as f:
+        with open(path, encoding="utf8") as f:
             data = json.load(f)
         return len(data["train"])
     except Exception:

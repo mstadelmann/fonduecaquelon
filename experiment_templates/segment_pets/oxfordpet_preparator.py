@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 from urllib.request import urlretrieve
 
-from fdq.transformers import ResizeMax, ResizeMaxDimPad
+from fdq.transformers import ResizeMaxDimPad
 
 # based on https://github.com/qubvel-org/segmentation_models.pytorch
 

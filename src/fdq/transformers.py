@@ -48,7 +48,7 @@ class ResizeMaxDimPad(Transform):
         return inpt
 
 
-class ResizeMax(object):
+class ResizeMax:
     def __init__(self, max_size=256, interpolation=Image.NEAREST):
         self.max_size = max_size
         self.interpolation = interpolation

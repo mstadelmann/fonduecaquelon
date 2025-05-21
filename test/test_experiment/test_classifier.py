@@ -15,7 +15,10 @@ from fdq.testing import run_test, find_model_path
 
 
 class TestMNISTClassifier(unittest.TestCase):
+    """Unit tests for the MNIST classifier experiment."""
+
     def test_run_train(self):
+        """Test the training process and result validation for the MNIST classifier experiment."""
         exp_path = os.path.join(
             os.path.split(os.path.abspath(__file__))[0],
             "mnist_testexp_dense.json",
