@@ -202,10 +202,7 @@ def store_processing_infos(experiment):
         json.dump(experiment.run_info, write_file, indent=4, sort_keys=True)
 
 
-
-
 def collect_processing_infos(experiment=None):
-
     try:
         sysname = os.uname()[1]
     except Exception:
@@ -259,8 +256,6 @@ def collect_processing_infos(experiment=None):
         data["start_epoch"] = experiment.start_epoch
     else:
         data["job_continuation"] = False
-
-
 
     try:
         # add nb model parameters to info file
@@ -525,8 +520,6 @@ def init_wandb(experiment):
         eprint(f"Error: {e}")
         experiment.useWandb = False
         return False
-        
-
 
 
 @torch.no_grad()
@@ -567,8 +560,11 @@ def save_wandb(experiment, images=None, scalars=None):
                 )
 
         for image in images:
-            img = image["data"]
             captions = image.get("captions", None)
 
-            images = wandb.Image(img, caption=captions)
-            wandb.log({image["name"]: images})
+            if image.get("data") is not None:
+                img = image["data"]
+            elif image.get("path") is not None:
+                img = image["path"]
+
+            wandb.log({image["name"]: wandb.Image(img, caption=captions)})
