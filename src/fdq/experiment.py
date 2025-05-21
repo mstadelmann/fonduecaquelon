@@ -470,7 +470,10 @@ class fdqExperiment:
                 )
             elif largs.class_name is not None:
                 cls = self.instantiate_class(class_path=largs.class_name)
-            self.losses[loss_name] = cls(**largs.args.to_dict())
+            if largs.args is not None:
+                self.losses[loss_name] = cls(**largs.args.to_dict())
+            else:
+                self.losses[loss_name] = cls()
 
     def load_checkpoint(self, path):
         """Load checkpoint to resume training."""
