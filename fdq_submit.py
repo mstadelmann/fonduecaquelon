@@ -1,7 +1,6 @@
 import sys
 import os
-
-# import re
+import re
 import json
 import copy
 import getpass
@@ -423,18 +422,20 @@ def main():
         f"sbatch {submit_path}", shell=True, capture_output=True, text=True
     )
 
-    print(result.stdout)
+    match = re.search(r"(\d+)\s*$", result.stdout)
+    if match:
+        # new_submit_path = os.path.join(
+        #     os.path.dirname(submit_path),
+        #     f"{match.group(1)}__{os.path.basename(submit_path)}",
+        # )
+        # os.rename(submit_path, new_submit_path)
+        print(
+            f"Submitted batch job {match.group(1)} with the submit file: {submit_path}."
+        )
+    else:
+        print(result.stdout)
 
-    # rename submit file with job id
-    # match = re.search(r"(\d+)\s*$", result.stdout)
-    # if match:
-    #     new_submit_path = os.path.join(
-    #         os.path.dirname(submit_path),
-    #         f"{match.group(1)}__{os.path.basename(submit_path)}",
-    #     )
-    #     os.rename(submit_path, new_submit_path)
-
-    print("done")
+    print("done.")
 
 
 if __name__ == "__main__":
