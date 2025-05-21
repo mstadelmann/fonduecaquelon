@@ -62,6 +62,7 @@ extend-select = [
   "UP", # pyupgrade
   "D",  # pydocstyle
 ]
+ignore = ["D100","D102"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

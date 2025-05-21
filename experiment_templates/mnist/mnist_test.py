@@ -28,6 +28,14 @@ except ImportError:
 
 
 def createEvaluator(experiment):
+    """Evaluates the given experiment on the MNIST dataset using different test modes.
+
+    Args:
+        experiment: An experiment object containing model, data, and configuration.
+
+    Returns:
+        accuracy (float or None): The computed accuracy of the model, or None if not applicable.
+    """
     test_loader = experiment.data["MNIST"].test_data_loader
 
     accuracy = None

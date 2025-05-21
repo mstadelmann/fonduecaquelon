@@ -589,7 +589,9 @@ class fdqExperiment:
         store_processing_infos(self)
 
     def check_early_stop(self):
-        """1) Stop training if the validation los over last last N epochs did not further decrease.
+        """Check if training should be stopped.
+
+        1) Stop training if the validation los over last last N epochs did not further decrease.
         We want at least N epochs in each training start, also if its a resume from checkpoint training.
         (--> Therefore, (cur_epoch - self.start_epoch) > self.early_stop_val_loss)
 

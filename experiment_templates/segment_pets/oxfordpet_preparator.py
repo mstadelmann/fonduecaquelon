@@ -17,6 +17,8 @@ from fdq.transformers import ResizeMaxDimPad
 
 
 class OxfordPetDataset(torch.utils.data.Dataset):
+    """A PyTorch Dataset for the Oxford-IIIT Pet dataset, supporting train/validation/test splits and optional binary masks."""
+
     def __init__(
         self,
         root,
@@ -25,6 +27,15 @@ class OxfordPetDataset(torch.utils.data.Dataset):
         transform_mask=None,
         binary=False,
     ):
+        """Initialize the OxfordPetDataset.
+
+        Args:
+            root (str): Root directory of the dataset.
+            mode (str): One of 'train', 'valid', or 'test' to specify the dataset split.
+            transform_image (callable, optional): Transformation to apply to images.
+            transform_mask (callable, optional): Transformation to apply to masks.
+            binary (bool, optional): If True, convert masks to binary format.
+        """
         assert mode in {"train", "valid", "test"}
 
         self.root = root
@@ -40,9 +51,11 @@ class OxfordPetDataset(torch.utils.data.Dataset):
         self.filenames = self._read_split()  # read train/valid/test splits
 
     def __len__(self):
+        """Return the number of samples in the dataset."""
         return len(self.filenames)
 
     def __getitem__(self, idx):
+        """Retrieve the image and mask pair at the specified index."""
         filename = self.filenames[idx]
         image_path = os.path.join(self.images_directory, filename + ".jpg")
         mask_path = os.path.join(self.masks_directory, filename + ".png")
@@ -100,6 +113,7 @@ class OxfordPetDataset(torch.utils.data.Dataset):
 
 
 def createDatasets(experiment):
+    """Creates and returns data loaders and dataset statistics for the Oxford Pet dataset based on the experiment configuration."""
     dargs = experiment.exp_def.data.OXPET.args
 
     pin_mem = False if not experiment.is_cuda else dargs.get("pin_memory", False)
@@ -192,6 +206,8 @@ def createDatasets(experiment):
 
 
 class TqdmUpTo(tqdm):
+    """A tqdm progress bar subclass that provides an 'update_to' method for use with urlretrieve reporthook."""
+
     def update_to(self, b=1, bsize=1, tsize=None):
         if tsize is not None:
             self.total = tsize
@@ -199,6 +215,7 @@ class TqdmUpTo(tqdm):
 
 
 def download_url(url, filepath):
+    """Download a file from a URL to the specified filepath, showing a progress bar."""
     directory = os.path.dirname(os.path.abspath(filepath))
     os.makedirs(directory, exist_ok=True)
     if os.path.exists(filepath):
@@ -216,6 +233,7 @@ def download_url(url, filepath):
 
 
 def extract_archive(filepath):
+    """Extracts the archive at the given filepath to its containing directory if not already extracted."""
     extract_dir = os.path.dirname(os.path.abspath(filepath))
     dst_dir = os.path.splitext(filepath)[0]
     if not os.path.exists(dst_dir):

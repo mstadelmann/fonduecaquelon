@@ -8,7 +8,8 @@ from termcolor import colored
 colorama_initialized = None
 
 
-def getIntInput(message, drange=[0, 5000]):  # pylint: disable=W0102
+def getIntInput(message, drange=[0, 5000]):
+    """UI helper function to get an integer input from the user within a specified range."""
     tmode = None
     while not isinstance(tmode, int):
         tmode = input(message)
@@ -26,6 +27,7 @@ def getIntInput(message, drange=[0, 5000]):  # pylint: disable=W0102
 
 def getYesNoInput(message):
     """UI helper function to get yes/no input from user.
+
     Returns True if 'y' is entered, False otherwise.
     """
     tmode = None
@@ -38,7 +40,8 @@ def getYesNoInput(message):
     return tmode.lower() == "y"
 
 
-def getFloatInput(message, drange=[-10, 10]):  # pylint: disable=W0102
+def getFloatInput(message, drange=[-10, 10]):
+    """UI helper function to get a float input from the user within a specified range."""
     tmode = None
     while not isinstance(tmode, float):
         tmode = input(message)
@@ -55,7 +58,10 @@ def getFloatInput(message, drange=[-10, 10]):  # pylint: disable=W0102
 
 
 class CustomProgressBar(progressbar.ProgressBar):
+    """A customizable progress bar that can be activated or deactivated."""
+
     def __init__(self, *args, **kwargs):
+        """Initializes the CustomProgressBar, optionally setting its active state."""
         if "is_active" in kwargs:
             self.is_active = kwargs["is_active"]
             del kwargs["is_active"]
@@ -77,6 +83,7 @@ class CustomProgressBar(progressbar.ProgressBar):
 
 
 def startProgBar(nbstepts, message=None, is_active=True):
+    """Starts and returns a progress bar with the specified number of steps and optional message."""
     if message is not None:
         print(message)
     pbar = CustomProgressBar(
@@ -89,6 +96,7 @@ def startProgBar(nbstepts, message=None, is_active=True):
 
 
 def show_train_progress(experiment):
+    """Displays training and validation loss progress for the given experiment."""
     print(
         f"\nProject: {experiment.project} | Experiment name: {experiment.experimentName}"
     )
@@ -116,25 +124,22 @@ def show_train_progress(experiment):
 
 
 def iprint(msg):
-    """Info print: plots information string in green.
-    """
+    """Info print: plots information string in green."""
     cprint(msg, text_color="green")
 
 
 def wprint(msg):
-    """Warning print: plots warning string in yellow.
-    """
+    """Warning print: plots warning string in yellow."""
     cprint(msg, text_color="yellow")
 
 
 def eprint(msg):
-    """Error print: plots error string in red.
-    """
+    """Error print: plots error string in red."""
     cprint(msg, text_color="red")
 
 
 def cprint(msg, text_color=None, bg_color=None):
-    # pylint: disable=W0603
+    """Prints a message with optional text and background color in the terminal."""
     global colorama_initialized
     if "colorama_initialized" not in globals():
         colorama_initialized = True

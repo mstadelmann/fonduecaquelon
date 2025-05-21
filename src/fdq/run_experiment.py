@@ -11,6 +11,7 @@ from fdq.ui_functions import iprint
 
 
 def main() -> None:
+    """Main entry point for running an FDQ experiment based on command-line arguments."""
     parser = argparse.ArgumentParser(description="FCQ deep learning framework.")
     parser.add_argument(
         "experimentfile", type=str, help="Path to experiment definition file."

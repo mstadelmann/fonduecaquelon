@@ -20,6 +20,7 @@ def get_nb_exp_epochs(path):
 
 
 def find_experiment_result_dirs(experiment):
+    """Finds and returns the experiment result directory and its subfolders for the given experiment."""
     if experiment.is_slurm and experiment.inargs.train_model:
         wprint(
             "WARNING: This is a slurm TRAINING session - looking only for results in scratch_results_path!"
@@ -135,6 +136,7 @@ def find_model_path(experiment):
 
 
 def save_test_results(test_results, experiment):
+    """Save the test results of an experiment to a JSON file."""
     if test_results is not None:
         now = datetime.now()
         dt_string = now.strftime("%Y%m%d_%H_%M")
@@ -156,6 +158,7 @@ def save_test_results(test_results, experiment):
 
 
 def save_test_info(experiment, model=None, weights=None):
+    """Save test configuration information to a JSON file."""
     now = datetime.now()
     dt_string = now.strftime("%Y%m%d_%H_%M")
     results_fp = os.path.join(experiment.test_dir, f"test_config_{dt_string}.json")
@@ -233,6 +236,7 @@ def _load_test_models(experiment):
 
 
 def run_test(experiment):
+    """Runs the test procedure for the given experiment."""
     iprint("-------------------------------------------")
     iprint("Starting Test...")
     iprint("-------------------------------------------")

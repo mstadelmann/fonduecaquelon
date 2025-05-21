@@ -9,6 +9,7 @@ from datetime import datetime
 
 
 def get_template():
+    """Return the SLURM job submission script template as a string."""
     return """#!/bin/bash
 #SBATCH --time=#job_time#
 #SBATCH --job-name=fdq-#job_name#
@@ -222,6 +223,15 @@ fi
 
 
 def recursive_dict_update(d_parent, d_child):
+    """Recursively update the parent dictionary with values from the child dictionary.
+
+    Args:
+        d_parent (dict): The dictionary to be updated.
+        d_child (dict): The dictionary whose values will update the parent.
+
+    Returns:
+        dict: A deep copy of the updated parent dictionary.
+    """
     for key, value in d_child.items():
         if (
             isinstance(value, dict)
@@ -236,24 +246,30 @@ def recursive_dict_update(d_parent, d_child):
 
 
 class DictToObj:
+    """A class that converts a dictionary into an object, allowing attribute-style access to keys, including nested dictionaries."""
+
     def __init__(self, dictionary):
+        """Initialize the object by setting attributes from the given dictionary, converting nested dictionaries to DictToObj."""
         for key, value in dictionary.items():
             if isinstance(value, dict):
                 value = DictToObj(value)
             setattr(self, key, value)
 
     def __getattr__(self, name):
-        # if attribute not found
+        """Return None if the requested attribute is not found."""
         return None
 
     def __repr__(self):
+        """Return the string representation for debugging."""
         keys = ", ".join(self.__dict__.keys())
         return f"<{self.__class__.__name__}: {keys}>"
 
     def __str__(self):
+        """Return the string representation of the object."""
         return self.__repr__()
 
     def __iter__(self):
+        """Return an iterator over the object's dictionary items."""
         return iter(self.__dict__.items())
 
     def keys(self):
@@ -282,6 +298,14 @@ class DictToObj:
 
 
 def parse_input_file(exp_file_path):
+    """Parse the experiment JSON file, handle parent inheritance, and return a DictToObj representation.
+
+    Args:
+        exp_file_path (str): Path to the experiment JSON file.
+
+    Returns:
+        DictToObj: Parsed experiment configuration as an object.
+    """
     if not os.path.isfile(exp_file_path):
         print(f"Error: The file '{exp_file_path}' does not exist.")
         sys.exit(1)
@@ -319,6 +343,7 @@ def parse_input_file(exp_file_path):
 
 
 def main():
+    """Main entry point for submitting a job to SLURM using the provided experiment JSON file."""
     if len(sys.argv) != 2:
         raise ValueError(
             "Error: Exactly one argument is required which is the path to the JSON file."

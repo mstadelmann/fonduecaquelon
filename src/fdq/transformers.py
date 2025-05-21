@@ -6,7 +6,15 @@ from torchvision.transforms.v2 import Transform
 
 
 class ResizeMaxDimPad(Transform):
+    """Transformer that resizes an image so its largest dimension matches max_dim and pads the rest to make it square."""
+
     def __init__(self, max_dim: int, interpol_mode="bilinear"):
+        """Initialize the ResizeMaxDimPad transformer.
+
+        Args:
+            max_dim (int): The maximum dimension (height or width) for the output image.
+            interpol_mode (str): Interpolation mode to use for resizing. Options are 'nearest', 'linear', 'bilinear', or 'bicubic'.
+        """
         super().__init__()
         self.max_dim = max_dim
         self.interpol_mode = interpol_mode
@@ -49,7 +57,15 @@ class ResizeMaxDimPad(Transform):
 
 
 class ResizeMax:
+    """Transformer that resizes an image so that its longest edge does not exceed a specified maximum size."""
+
     def __init__(self, max_size=256, interpolation=Image.NEAREST):
+        """Initialize the ResizeMax transformer.
+
+        Args:
+            max_size (int): The maximum size for the longest edge of the image.
+            interpolation: Interpolation method to use for resizing.
+        """
         self.max_size = max_size
         self.interpolation = interpolation
 

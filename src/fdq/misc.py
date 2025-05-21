@@ -16,7 +16,10 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 class FCQmode:
+    """Class to manage operation and test modes for the FondueCaquelon project."""
+
     def __init__(self) -> None:
+        """Initialize the FCQmode object with default operation and test modes, and create dynamic setters."""
         self._op_mode = "init"
         self.allowed_op_modes = [
             "init",  # initial state
@@ -42,6 +45,7 @@ class FCQmode:
             setattr(self, mode, self._create_setter("_test_mode", mode))
 
     def __repr__(self):
+        """Return the string representation of the FCQmode object."""
         if self._op_mode == "test":
             return f"<{self.__class__.__name__}: {self._op_mode} / {self._test_mode}>"
         else:
@@ -92,6 +96,7 @@ class FCQmode:
 
 
 def recursive_dict_update(d_parent, d_child):
+    """Recursively update the parent dictionary with values from the child dictionary, merging nested dictionaries."""
     for key, value in d_child.items():
         if (
             isinstance(value, dict)
@@ -106,24 +111,30 @@ def recursive_dict_update(d_parent, d_child):
 
 
 class DictToObj:
+    """A class that converts a dictionary into an object, recursively handling nested dictionaries."""
+
     def __init__(self, dictionary):
+        """Initialize the object by converting a dictionary into attributes, recursively handling nested dictionaries."""
         for key, value in dictionary.items():
             if isinstance(value, dict):
                 value = DictToObj(value)
             setattr(self, key, value)
 
     def __getattr__(self, name):
-        # if attribute not found
+        """Return None if the requested attribute is not found."""
         return None
 
     def __repr__(self):
+        """Return the string representation of the object."""
         keys = ", ".join(self.__dict__.keys())
         return f"<{self.__class__.__name__}: {keys}>"
 
     def __str__(self):
+        """Return the string representation of the object."""
         return self.__repr__()
 
     def __iter__(self):
+        """Return an iterator over the object's dictionary items."""
         return iter(self.__dict__.items())
 
     def keys(self):
@@ -152,7 +163,9 @@ class DictToObj:
 
 
 def replace_tilde_with_abs_path(d):
-    """Recursively traverse a dictionary and replace string values starting with "~/"
+    """Fix user paths.
+
+    Recursively traverse a dictionary and replace string values starting with "~/"
     with their absolute paths.
     """
     for key, value in d.items():
@@ -163,6 +176,15 @@ def replace_tilde_with_abs_path(d):
 
 
 def get_subset(dataset, subset_ratio):
+    """Return a random subset of the dataset according to the given ratio.
+
+    Args:
+        dataset: The dataset to subset.
+        subset_ratio (float): The ratio of the dataset to include in the subset (0 < subset_ratio <= 1).
+
+    Returns:
+        Subset of the dataset if subset_ratio < 1, otherwise the original dataset.
+    """
     if subset_ratio >= 1:
         return dataset
     n_dataset = len(dataset)
@@ -172,6 +194,7 @@ def get_subset(dataset, subset_ratio):
 
 
 def print_nb_weights(experiment, show_details=False):
+    """Print the number of parameters for each model in the experiment."""
     for model_name, model in experiment.models.items():
         iprint("----------------------------------")
         iprint(f"Model: {model_name}")
@@ -181,6 +204,7 @@ def print_nb_weights(experiment, show_details=False):
 
 
 def remove_file(path):
+    """Remove the file at the given path if it exists."""
     if path is not None:
         try:
             os.remove(path)
@@ -198,6 +222,7 @@ def store_processing_infos(experiment):
 
 
 def collect_processing_infos(experiment=None):
+    """Collect and return processing information about the current experiment and environment."""
     try:
         sysname = os.uname()[1]
     except Exception:
@@ -279,6 +304,7 @@ def collect_processing_infos(experiment=None):
 
 def avoid_nondeterministic(experiment, seed_overwrite=0):
     """Avoid nondeterministic behavior.
+
     https://pytorch.org/docs/stable/notes/randomness.html
 
     The cuDNN library, used by CUDA convolution operations, can be a source of
@@ -299,7 +325,7 @@ def avoid_nondeterministic(experiment, seed_overwrite=0):
 
 
 def save_train_history(experiment):
-    """Save training history to json and pdf"""
+    """Save training history to json and pdf."""
     try:
         out_json = os.path.join(experiment.results_dir, "history.json")
         out_pdf = os.path.join(experiment.results_dir, "history.pdf")
@@ -378,6 +404,7 @@ def showImg_cv(tensor_image, window_name="Image"):
 
 
 def init_tensorboard(experiment):
+    """Initialize TensorBoard for the experiment and provide usage instructions."""
     if not experiment.useTensorboard:
         return
     experiment.tb_writer = SummaryWriter(f"{experiment.results_dir}/tb/")
@@ -389,6 +416,7 @@ def init_tensorboard(experiment):
 
 
 def add_graph(experiment):
+    """Add the model graph to TensorBoard using a sample input from the training data loader."""
     sample = next(iter(experiment.data[list(experiment.data)[0]].train_data_loader))
     if isinstance(sample, tuple) or isinstance(sample, list):
         dummy_imput = sample[0]
@@ -463,7 +491,7 @@ def save_tensorboard(experiment, images=None, scalars=None, text=None):
 
 
 def init_wandb(experiment):
-    """Initialize weights and biases"""
+    """Initialize weights and biases."""
     if experiment.exp_def.store.wandb_project is None:
         raise ValueError(
             "Wandb project name is not set. Please set it in the experiment definition."
@@ -519,6 +547,7 @@ def save_wandb(experiment, images=None, scalars=None):
     Args:
         experiment (class): experiment object.
         images (list): stacked list of [[image_name, image_data]].
+        scalars (dict, optional): Dictionary of scalar values to log.
 
     Returns:
         type: Description of returned object.
