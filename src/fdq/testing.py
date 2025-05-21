@@ -237,6 +237,8 @@ def run_test(experiment):
     iprint("Starting Test...")
     iprint("-------------------------------------------")
 
+    experiment.file_store_cnt = 0
+
     _set_test_mode(experiment)
     _load_test_models(experiment)
 

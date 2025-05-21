@@ -68,6 +68,8 @@ class fdqExperiment:
         self.best_train_model_path = {}
         self.checkpoint_path = None
         self._results_dir = None
+        self._results_output_dir = None
+        self.file_store_cnt = 0
         self._test_dir = None
         self._valLoss = float("inf")
         self._trainLoss = float("inf")
@@ -547,31 +549,19 @@ class fdqExperiment:
         torch.save(checkpoint, self.checkpoint_path)
 
     def get_next_export_fn(self, name=None, file_ending="jpg"):
-        if self.mode.is_test():
-            if name is None:
-                path = os.path.join(
-                    self.test_dir, f"test_image_{self.test_output_id:02}.{file_ending}"
-                )
-            else:
-                path = os.path.join(
-                    self.test_dir,
-                    f"test_image_{self.test_output_id:02}__{name}.{file_ending}",
-                )
-
-            self.test_output_id += 1
-
+        if self.mode.op_mode.test:
+            start_str = "test_image"
+            dest_dir = self.test_dir
         else:
-            if name is None:
-                path = os.path.join(
-                    self.results_output_dir,
-                    f"out_e{self.current_epoch:02}_{self.train_output_id:02}.{file_ending}",
-                )
-            else:
-                path = os.path.join(
-                    self.results_output_dir,
-                    f"out_e{self.current_epoch:02}_{self.train_output_id:02}__{name}.{file_ending}",
-                )
-            self.train_output_id += 1
+            start_str = f"train_out_e{self.current_epoch:02}"
+            dest_dir = self.results_output_dir
+
+        name_str = "" if name is None else f"__{name}"
+        path = os.path.join(
+            dest_dir, f"{start_str}_{self.file_store_cnt:02}{name_str}.{file_ending}"
+        )
+
+        self.file_store_cnt += 1
 
         return path
 
