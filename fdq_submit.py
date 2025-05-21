@@ -1,6 +1,7 @@
 import sys
 import os
-import re
+
+# import re
 import json
 import copy
 import getpass
@@ -422,16 +423,17 @@ def main():
         f"sbatch {submit_path}", shell=True, capture_output=True, text=True
     )
 
-    # rename submit file with job id
-    match = re.search(r"(\d+)\s*$", result.stdout)
-    if match:
-        new_submit_path = os.path.join(
-            os.path.dirname(submit_path),
-            f"{match.group(1)}__{os.path.basename(submit_path)}",
-        )
-        os.rename(submit_path, new_submit_path)
-
     print(result.stdout)
+
+    # rename submit file with job id
+    # match = re.search(r"(\d+)\s*$", result.stdout)
+    # if match:
+    #     new_submit_path = os.path.join(
+    #         os.path.dirname(submit_path),
+    #         f"{match.group(1)}__{os.path.basename(submit_path)}",
+    #     )
+    #     os.rename(submit_path, new_submit_path)
+
     print("done")
 
 
