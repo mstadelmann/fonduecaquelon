@@ -429,9 +429,9 @@ def main():
         #     f"{match.group(1)}__{os.path.basename(submit_path)}",
         # )
         # os.rename(submit_path, new_submit_path)
-        print(
-            f"Submitted batch job {match.group(1)} with the submit file: {submit_path}."
-        )
+        print("Submitted batch job.")
+        print(f"Slurm Job ID {match.group(1)}")
+        print(f"Submit file: {submit_path}.")
     else:
         print(result.stdout)
 
