@@ -21,8 +21,8 @@ def get_template():
 #SBATCH --partition=#partition#
 #SBATCH --account=#account#
 #SBATCH --mail-user=#user#@zhaw.ch
-#SBATCH --output=#log_path#/%j_%N__fdq_runner.out
-#SBATCH --error=#log_path#/%j_%N__fdq_runner.err
+#SBATCH --output=#log_path#/%j_%N__#job_name#.out
+#SBATCH --error=#log_path#/%j_%N__#job_name#.err
 #SBATCH --signal=B:SIGUSR1@#stop_grace_time#
 
 script_start=$(date +%s.%N)
@@ -385,22 +385,28 @@ def main():
         if val is not None:
             job_config[key] = val
 
-    job_config["job_name"] = in_args.globals.project[:20].replace(" ", "_")
-    job_config["user"] = getpass.getuser()
-    job_config["results_path"] = in_args.store.results_path
-    job_config["log_path"] = job_config["log_path"]
-
     # set exp file path
     exp_file_path = os.path.expanduser(sys.argv[1])
     if not os.path.isabs(exp_file_path):
         exp_file_path = os.path.abspath(exp_file_path)
     job_config["exp_file_path"] = exp_file_path
+    exp_name = os.path.basename(exp_file_path).split(".")[0]
+
+    job_config["job_name"] = exp_name[:20].replace(" ", "_")
+    job_config["user"] = getpass.getuser()
+    job_config["results_path"] = in_args.store.results_path
+    job_config["log_path"] = job_config["log_path"]
 
     # define path of submit script
     dt_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    submit_path = os.path.join(
+    base_path = os.path.join(
         os.path.expanduser(job_config["log_path"]),
-        f"{dt_str}_fdq_{job_config['job_name']}.submit",
+        "submitted_jobs",
+    )
+    os.makedirs(base_path, exist_ok=True)
+    submit_path = os.path.join(
+        base_path,
+        f"{dt_str}__{job_config['job_name']}.submit",
     )
     job_config["submit_file_path"] = submit_path
 
@@ -450,10 +456,10 @@ def main():
     match = re.search(r"(\d+)\s*$", result.stdout)
     if match:
         # new_submit_path = os.path.join(
-        #     os.path.dirname(submit_path),
+        #     os.path.expanduser(job_config["log_path"]),
         #     f"{match.group(1)}__{os.path.basename(submit_path)}",
         # )
-        # os.rename(submit_path, new_submit_path)
+        # shutil.copy2(submit_path, new_submit_path)
         print("Submitted batch job.")
         print(f"Slurm Job ID {match.group(1)}")
         print(f"Submit file: {submit_path}.")
