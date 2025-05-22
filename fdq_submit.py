@@ -113,8 +113,8 @@ sig_handler_USR1()
 
         sleep 1
         echo submitting new job with the following command:
-        echo "sbatch --job-name=fdq-test $SCRATCH_SUBMIT_FILE_PATH"
-        sbatch --job-name=fdq-test $SCRATCH_SUBMIT_FILE_PATH
+        echo "sbatch $SCRATCH_SUBMIT_FILE_PATH"
+        sbatch $SCRATCH_SUBMIT_FILE_PATH
         sleep 1
     fi
     exit 0
