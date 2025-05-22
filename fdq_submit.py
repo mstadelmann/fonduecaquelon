@@ -351,6 +351,10 @@ def main():
 
     in_args = parse_input_file(sys.argv[1])
     slurm_conf = in_args.slurm_cluster
+    if slurm_conf is None:
+        raise ValueError(
+            "Error: The 'slurm_cluster' section in the JSON config file is required to submit a job to the queue!"
+        )
 
     job_config = {
         "job_name": None,
