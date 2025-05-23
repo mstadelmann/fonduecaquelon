@@ -61,30 +61,8 @@ def main() -> None:
         np.random.seed(random_seed)
         torch.manual_seed(random_seed)
 
-    # if experiment.inargs.print_model:
-    #     experiment.init_models()
-    #     iprint("\n-----------------------------------------------------------")
-    #     iprint(experiment.model)
-    #     iprint("-----------------------------------------------------------\n")
-
-    #     try:
-    #         experiment.setupData()
-    #         iprint(
-    #             f"Saving model graph to: {experiment.results_dir}/{experiment.networkName}_graph.png"
-    #         )
-
-    #         draw_graph(
-    #             experiment.model,
-    #             input_size=experiment.model_input_shape,
-    #             device=experiment.device,
-    #             save_graph=True,
-    #             filename=experiment.networkName + "_graph",
-    #             directory=experiment.results_dir,
-    #             expand_nested=False,
-    #         )
-    #     except Exception as e:
-    #         wprint("Failed to draw graph!")
-    #         print(e)
+    if experiment.inargs.print_model:
+        experiment.print_model()
 
     if experiment.inargs.train_model:
         experiment.prepareTraining()

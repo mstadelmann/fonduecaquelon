@@ -9,6 +9,7 @@ import argparse
 import importlib
 import funkybob
 from datetime import datetime
+from torchview import draw_graph
 from fdq.ui_functions import iprint, wprint, show_train_progress
 from fdq.misc import (
     remove_file,
@@ -289,6 +290,8 @@ class fdqExperiment:
         return getattr(module, class_name)
 
     def init_models(self, instantiate=True):
+        if self.models != {}:
+            return
         for model_name, model_def in self.exp_def.models:
             if model_def.path is not None:
                 if os.path.exists(model_def.path):
@@ -329,6 +332,8 @@ class fdqExperiment:
             self.models[model_name].eval()
 
     def setupData(self):
+        if self.data != {}:
+            return
         self.copy_data_to_scratch()
         for data_name, data_source in self.exp_def.data.items():
             processor = self.import_class(file_path=data_source.processor)
@@ -754,3 +759,43 @@ class fdqExperiment:
         iprint("----------------------------------------------------")
         iprint("Copy datasets to temporary scratch location... Done!")
         iprint("----------------------------------------------------")
+
+    def print_model(self):
+        self.setupData()
+        self.init_models()
+        iprint("\n-----------------------------------------------------------")
+        iprint("Print model definition")
+        iprint("-----------------------------------------------------------\n")
+
+        for model_name, model in self.models.items():
+
+            iprint("\n-----------------------------------------------------------")
+            iprint(model_name)
+            iprint("\n-----------------------------------------------------------")
+            iprint(model)
+            iprint("-----------------------------------------------------------\n")
+
+        try:
+
+            iprint(f"Saving model graph to: {self.results_dir}/{model_name}_graph.png")
+
+            sample = next(iter(self.data[next(iter(self.data))].train_data_loader))
+            if isinstance(sample, tuple):
+                sample = sample[0]
+            if isinstance(sample, list):
+                sample = sample[0]
+            if isinstance(sample, dict):
+                sample = next(iter(sample.values()))
+
+            draw_graph(
+                model,
+                input_size=sample.shape,
+                device=self.device,
+                save_graph=True,
+                filename=model_name + "_graph",
+                directory=self.results_dir,
+                expand_nested=False,
+            )
+        except Exception as e:
+            wprint("Failed to draw graph!")
+            print(e)
