@@ -396,7 +396,7 @@ def main():
     job_config["exp_file_path"] = exp_file_path
     exp_name = os.path.basename(exp_file_path).split(".")[0]
 
-    job_config["job_name"] = exp_name[:20].replace(" ", "_")
+    job_config["job_name"] = exp_name[:30].replace(" ", "_")
     job_config["user"] = getpass.getuser()
     job_config["results_path"] = in_args.store.results_path
     job_config["log_path"] = job_config["log_path"]
@@ -410,7 +410,7 @@ def main():
     os.makedirs(base_path, exist_ok=True)
     submit_path = os.path.join(
         base_path,
-        f"{dt_str}__{job_config['job_name']}.submit",
+        f"{dt_str}__{exp_name.replace(" ", "_")}.submit",
     )
     job_config["submit_file_path"] = submit_path
 
