@@ -211,30 +211,6 @@ def _set_test_mode(experiment):
         ui_ask_test_mode(experiment)
 
 
-def _load_test_models(experiment):
-    for model_name, _ in experiment.exp_def.models:
-        if experiment.mode.test_mode.custom_path:
-            while True:
-                model_path = input(
-                    f"Enter path to model for '{model_name}' (or 'q' to quit)."
-                )
-                if model_path == "q":
-                    sys.exit()
-                elif os.path.exists(model_path):
-                    experiment.inference_model_paths[model_name] = model_path
-                    break
-                else:
-                    eprint(f"Error: File {model_path} not found.")
-
-        else:
-            experiment._results_dir, net_name = find_model_path(experiment)
-            experiment.inference_model_paths[model_name] = os.path.join(
-                experiment._results_dir, net_name
-            )
-
-        experiment.load_models()
-
-
 def run_test(experiment):
     """Runs the test procedure for the given experiment."""
     iprint("-------------------------------------------")
@@ -244,7 +220,7 @@ def run_test(experiment):
     experiment.file_store_cnt = 0
 
     _set_test_mode(experiment)
-    _load_test_models(experiment)
+    experiment.load_trained_models()
 
     experiment.copy_files_to_test_dir(experiment.experiment_file_path)
     if experiment.parent_file_path is not None:

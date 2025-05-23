@@ -73,13 +73,7 @@ def main() -> None:
         run_test(experiment)
 
     if experiment.inargs.dump_model:
-        iprint("Dumping the best model of the last experiment")
-        raise NotImplementedError(
-            "Model dumping is not implemented yet. Please implement it in the fdqExperiment class."
-        )
-        # res_folder, net_name = find_model_path(experiment)
-        # experiment.load_models(os.path.join(res_folder, net_name))
-        # experiment.dump_model(res_folder)
+        experiment.dump_model()
 
     iprint("done")
 
