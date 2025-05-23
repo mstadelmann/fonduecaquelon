@@ -70,6 +70,33 @@ return {
 ```
 These values can then be accessed from your training loop.
 
+### Train
+Define the path to your training loop in the train section. FDQ expects this file to provide the following function:
+
+```python
+def train(experiment: fdqExperiment):
+```
+
+Within the training loop, you can access the training arguments, model, and data as follows:
+
+```python
+nb_epochs = experiment.exp_def.train.args.epochs
+data_loader = experiment.data["OXPET"].train_data_loader
+model = experiment.models["ccUNET"]
+```
+
+See [train_oxpets.py](experiment_templates/segment_pets/train_oxpets.py) for an example.
+
+
+### Test
+Similar to the training loop, the test loop can be defined in a custom file (this can also be the same file as the training loop). FDQ expects the specified file to provide the following function:
+
+```python
+def createEvaluator(experiment: fdqExperiment):
+```
+
+See [oxpets_test.py](experiment_templates/segment_pets/oxpets_test.py) for an example.
+
 ### Install additional pip packages
 If your experiment needs extra Python packages, you can install them on the worker by specifying them in your configuration. Just add the required package names (and optionally the version) under a `additional_pip_packages` section in your experiment setup file. This ensures all dependencies are installed automatically before your code runs.
 
