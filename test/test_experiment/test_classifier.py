@@ -37,7 +37,7 @@ class TestMNISTClassifier(unittest.TestCase):
         experiment = fdqExperiment(args)
         experiment.mode.unittest()
         experiment.prepareTraining()
-        experiment.trainer.train(experiment)
+        experiment.trainer.fdq_train(experiment)
 
         res_dir = experiment.results_dir
 

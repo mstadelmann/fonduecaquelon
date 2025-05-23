@@ -722,7 +722,7 @@ class fdqExperiment:
         module_name = os.path.splitext(os.path.basename(evaluator_path))[0]
         currentEvaluator = importlib.import_module(module_name)
 
-        return currentEvaluator.createEvaluator(self)
+        return currentEvaluator.fdq_test(self)
 
     def copy_data_to_scratch(self):
         """Copy all datasets to scratch dir, and update the paths."""

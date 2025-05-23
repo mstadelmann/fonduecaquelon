@@ -4,7 +4,7 @@ from fdq.ui_functions import startProgBar
 # THIS IS A VERY BASIC DEMO AND NEEDS TO BE UPDATED!
 
 
-def createEvaluator(experiment):
+def fdq_test(experiment):
     """Evaluate the experiment on the OXPET test dataset and return the mean loss as accuracy."""
     test_loader = experiment.data["OXPET"].test_data_loader
 

@@ -7,7 +7,7 @@ from fdq.ui_functions import startProgBar, iprint
 from fdq.misc import print_nb_weights
 
 
-def train(experiment: fdqExperiment) -> None:
+def fdq_train(experiment: fdqExperiment) -> None:
     """Train the model using the provided experiment configuration.
 
     Args:

@@ -88,7 +88,7 @@ def main() -> None:
 
     if experiment.inargs.train_model:
         experiment.prepareTraining()
-        experiment.trainer.train(experiment)
+        experiment.trainer.fdq_train(experiment)
         experiment.clean_up()
 
     if experiment.inargs.test_model_auto or experiment.inargs.test_model_ia:

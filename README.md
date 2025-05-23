@@ -74,7 +74,7 @@ These values can then be accessed from your training loop.
 Define the path to your training loop in the train section. FDQ expects this file to provide the following function:
 
 ```python
-def train(experiment: fdqExperiment):
+def fdq_train(experiment: fdqExperiment):
 ```
 
 Within the training loop, you can access the training arguments, model, and data as follows:
@@ -92,7 +92,7 @@ See [train_oxpets.py](experiment_templates/segment_pets/train_oxpets.py) for an 
 Similar to the training loop, the test loop can be defined in a custom file (this can also be the same file as the training loop). FDQ expects the specified file to provide the following function:
 
 ```python
-def createEvaluator(experiment: fdqExperiment):
+def fdq_test(experiment: fdqExperiment):
 ```
 
 See [oxpets_test.py](experiment_templates/segment_pets/oxpets_test.py) for an example.

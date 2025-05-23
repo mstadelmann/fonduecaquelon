@@ -27,7 +27,7 @@ except ImportError:
     matplotlib.use("Agg")  # Fallback to Agg for headless environments
 
 
-def createEvaluator(experiment):
+def fdq_test(experiment):
     """Evaluates the given experiment on the MNIST dataset using different test modes.
 
     Args:
