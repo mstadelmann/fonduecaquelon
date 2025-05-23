@@ -5,6 +5,8 @@ from torch import nn
 
 
 class simpleNet(nn.Module):
+    """A simple fully connected neural network for classification tasks."""
+
     def __init__(
         self,
         nb_in_channels=1,
@@ -12,6 +14,14 @@ class simpleNet(nn.Module):
         nodes_per_layer=[84, 50],
         nb_out_channels=10,
     ):
+        """Initialize the simpleNet neural network.
+
+        Args:
+            nb_in_channels (int): Number of input channels.
+            input_shape (list): Shape of the input (height, width).
+            nodes_per_layer (list): List with the number of nodes in each hidden layer.
+            nb_out_channels (int): Number of output channels/classes.
+        """
         super().__init__()
 
         self.nb_in_channels = nb_in_channels
@@ -43,6 +53,7 @@ class simpleNet(nn.Module):
         return x
 
     def example(self):
+        """Generate a random tensor example input for the network."""
         return torch.rand(1, self.nb_in_channels, 165, 270)
 
 

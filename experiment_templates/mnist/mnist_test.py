@@ -1,10 +1,8 @@
-import os
 import sys
 
 import torch
 import torch.multiprocessing
 import torch.nn.functional as F
-from PIL import Image
 
 
 from fdq.ui_functions import getIntInput, startProgBar
@@ -29,7 +27,15 @@ except ImportError:
     matplotlib.use("Agg")  # Fallback to Agg for headless environments
 
 
-def createEvaluator(experiment):
+def fdq_test(experiment):
+    """Evaluates the given experiment on the MNIST dataset using different test modes.
+
+    Args:
+        experiment: An experiment object containing model, data, and configuration.
+
+    Returns:
+        accuracy (float or None): The computed accuracy of the model, or None if not applicable.
+    """
     test_loader = experiment.data["MNIST"].test_data_loader
 
     accuracy = None

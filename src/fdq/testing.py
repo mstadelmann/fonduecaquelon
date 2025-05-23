@@ -12,7 +12,7 @@ def get_nb_exp_epochs(path):
     path = os.path.join(path, "history.json")
 
     try:
-        with open(path, "r", encoding="utf8") as f:
+        with open(path, encoding="utf8") as f:
             data = json.load(f)
         return len(data["train"])
     except Exception:
@@ -20,6 +20,7 @@ def get_nb_exp_epochs(path):
 
 
 def find_experiment_result_dirs(experiment):
+    """Finds and returns the experiment result directory and its subfolders for the given experiment."""
     if experiment.is_slurm and experiment.inargs.train_model:
         wprint(
             "WARNING: This is a slurm TRAINING session - looking only for results in scratch_results_path!"
@@ -135,6 +136,7 @@ def find_model_path(experiment):
 
 
 def save_test_results(test_results, experiment):
+    """Save the test results of an experiment to a JSON file."""
     if test_results is not None:
         now = datetime.now()
         dt_string = now.strftime("%Y%m%d_%H_%M")
@@ -156,6 +158,7 @@ def save_test_results(test_results, experiment):
 
 
 def save_test_info(experiment, model=None, weights=None):
+    """Save test configuration information to a JSON file."""
     now = datetime.now()
     dt_string = now.strftime("%Y%m%d_%H_%M")
     results_fp = os.path.join(experiment.test_dir, f"test_config_{dt_string}.json")
@@ -208,37 +211,16 @@ def _set_test_mode(experiment):
         ui_ask_test_mode(experiment)
 
 
-def _load_test_models(experiment):
-    for model_name, _ in experiment.exp_def.models:
-        if experiment.mode.test_mode.custom_path:
-            while True:
-                model_path = input(
-                    f"Enter path to model for '{model_name}' (or 'q' to quit)."
-                )
-                if model_path == "q":
-                    sys.exit()
-                elif os.path.exists(model_path):
-                    experiment.inference_model_paths[model_name] = model_path
-                    break
-                else:
-                    eprint(f"Error: File {model_path} not found.")
-
-        else:
-            experiment._results_dir, net_name = find_model_path(experiment)
-            experiment.inference_model_paths[model_name] = os.path.join(
-                experiment._results_dir, net_name
-            )
-
-        experiment.load_models()
-
-
 def run_test(experiment):
+    """Runs the test procedure for the given experiment."""
     iprint("-------------------------------------------")
     iprint("Starting Test...")
     iprint("-------------------------------------------")
 
+    experiment.file_store_cnt = 0
+
     _set_test_mode(experiment)
-    _load_test_models(experiment)
+    experiment.load_trained_models()
 
     experiment.copy_files_to_test_dir(experiment.experiment_file_path)
     if experiment.parent_file_path is not None:

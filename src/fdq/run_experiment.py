@@ -11,6 +11,7 @@ from fdq.ui_functions import iprint
 
 
 def main() -> None:
+    """Main entry point for running an FDQ experiment based on command-line arguments."""
     parser = argparse.ArgumentParser(description="FCQ deep learning framework.")
     parser.add_argument(
         "experimentfile", type=str, help="Path to experiment definition file."
@@ -60,47 +61,19 @@ def main() -> None:
         np.random.seed(random_seed)
         torch.manual_seed(random_seed)
 
-    # if experiment.inargs.print_model:
-    #     experiment.init_models()
-    #     iprint("\n-----------------------------------------------------------")
-    #     iprint(experiment.model)
-    #     iprint("-----------------------------------------------------------\n")
-
-    #     try:
-    #         experiment.setupData()
-    #         iprint(
-    #             f"Saving model graph to: {experiment.results_dir}/{experiment.networkName}_graph.png"
-    #         )
-
-    #         draw_graph(
-    #             experiment.model,
-    #             input_size=experiment.model_input_shape,
-    #             device=experiment.device,
-    #             save_graph=True,
-    #             filename=experiment.networkName + "_graph",
-    #             directory=experiment.results_dir,
-    #             expand_nested=False,
-    #         )
-    #     except Exception as e:
-    #         wprint("Failed to draw graph!")
-    #         print(e)
+    if experiment.inargs.print_model:
+        experiment.print_model()
 
     if experiment.inargs.train_model:
         experiment.prepareTraining()
-        experiment.trainer.train(experiment)
+        experiment.trainer.fdq_train(experiment)
         experiment.clean_up()
 
     if experiment.inargs.test_model_auto or experiment.inargs.test_model_ia:
         run_test(experiment)
 
     if experiment.inargs.dump_model:
-        iprint("Dumping the best model of the last experiment")
-        raise NotImplementedError(
-            "Model dumping is not implemented yet. Please implement it in the fdqExperiment class."
-        )
-        # res_folder, net_name = find_model_path(experiment)
-        # experiment.load_models(os.path.join(res_folder, net_name))
-        # experiment.dump_model(res_folder)
+        experiment.dump_model()
 
     iprint("done")
 
