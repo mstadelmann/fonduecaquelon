@@ -1,10 +1,9 @@
 import json
 import os
-import sys
 from datetime import datetime
 
 
-from fdq.ui_functions import iprint, eprint, wprint, getIntInput
+from fdq.ui_functions import iprint, wprint, getIntInput
 
 
 def get_nb_exp_epochs(path):

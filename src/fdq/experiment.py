@@ -775,7 +775,6 @@ class fdqExperiment:
         iprint("-----------------------------------------------------------\n")
 
         try:
-
             sample = next(iter(self.data[next(iter(self.data))].train_data_loader))
             if isinstance(sample, tuple):
                 sample = sample[0]
@@ -894,7 +893,6 @@ class fdqExperiment:
         iprint("-----------------------------------------------------------\n")
 
         for model_name, model in self.models.items():
-
             iprint("\n-----------------------------------------------------------")
             iprint(model_name)
             iprint("\n-----------------------------------------------------------")
@@ -902,7 +900,6 @@ class fdqExperiment:
             iprint("-----------------------------------------------------------\n")
 
         try:
-
             iprint(f"Saving model graph to: {self.results_dir}/{model_name}_graph.png")
 
             sample = next(iter(self.data[next(iter(self.data))].train_data_loader))

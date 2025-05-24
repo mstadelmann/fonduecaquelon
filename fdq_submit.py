@@ -410,7 +410,7 @@ def main():
     os.makedirs(base_path, exist_ok=True)
     submit_path = os.path.join(
         base_path,
-        f"{dt_str}__{exp_name.replace(" ", "_")}.submit",
+        f"{dt_str}__{exp_name.replace(' ', '_')}.submit",
     )
     job_config["submit_file_path"] = submit_path
 
