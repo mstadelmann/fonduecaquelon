@@ -390,7 +390,13 @@ class fdqExperiment:
 
         This is run at the end of every epoch.
         """
-        for model_name, model in self.models.items():
+        for model_name, model_def in self.exp_def.models:
+            if model_def.freeze:
+                # skip frozen models
+                continue
+
+            model = self.models[model_name]
+
             if self.exp_def.store.get("save_last_model", False):
                 remove_file(self.last_model_path.get(model_name))
                 self.last_model_path[model_name] = os.path.join(
@@ -536,14 +542,20 @@ class fdqExperiment:
                 f"Error, checkpoint epoch {self.start_epoch + 1} already reached defined nb epochs ({self.nb_epochs})."
             )
 
-        for model_name, _ in self.exp_def.models:
+        for model_name, model_def in self.exp_def.models:
+            if model_def.freeze:
+                iprint(f"Skipping loading of frozen model {model_name}.")
+                continue
             self.models[model_name].load_state_dict(
                 checkpoint["model_state_dict"][model_name]
             )
 
-            self.optimizers[model_name].load_state_dict(
-                checkpoint["optimizer"][model_name]
-            )
+            if checkpoint["optimizer"] is None:
+                self.optimizers[model_name] = None
+            else:
+                self.optimizers[model_name].load_state_dict(
+                    checkpoint["optimizer"][model_name]
+                )
 
     def save_checkpoint(self):
         if self.checkpoint_frequency is None or self.checkpoint_frequency == 0:
@@ -569,9 +581,12 @@ class fdqExperiment:
                 else:
                     optimizer_state[optim_name] = optim.state_dict()
 
-        model_state = {
-            model_name: model.state_dict() for model_name, model in self.models.items()
-        }
+        model_state = {}
+        for model_name, model_def in self.exp_def.models:
+            if model_def.freeze:
+                model_state[model_name] = "FROZEN"
+            else:
+                model_state[model_name] = self.models[model_name].state_dict()
 
         checkpoint = {
             "epoch": self.current_epoch,
