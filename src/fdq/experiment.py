@@ -63,7 +63,7 @@ class fdqExperiment:
         self.start_epoch = 0
         self.data = {}
         self.models = {}
-        self.inference_model_paths = {}
+        self.trained_model_paths = {}
         self.optimizers = {}
         self.lr_schedulers = {}
         self.losses = {}
@@ -320,15 +320,33 @@ class fdqExperiment:
                     f"Error, model {model_name} must have a path or module defined."
                 )
 
-            if instantiate:
+            # load trained model from path
+            if model_def.trained_model_path is not None:
+                if not os.path.exists(model_def.trained_model_path):
+                    raise FileNotFoundError(
+                        f"Error, trained model path {model_def.trained_model_path} does not exist."
+                    )
+                self.models[model_name] = torch.load(
+                    model_def.trained_model_path, weights_only=False
+                ).to(self.device)
+                self.models[model_name].eval()
+
+            # or instantiate new model with random weights
+            elif instantiate:
                 self.models[model_name] = cls(**model_def.args.to_dict()).to(
                     self.device
                 )
 
+            # frozen model? disable grad tracking
+            if model_def.freeze:
+                iprint(f"Freezing model {model_name} parameters.")
+                for param in self.models[model_name].parameters():
+                    param.requires_grad = False
+
     def load_models(self):
         self.init_models(instantiate=False)
         for model_name, _ in self.exp_def.models:
-            path = self.inference_model_paths[model_name]
+            path = self.trained_model_paths[model_name]
             iprint(f"Loading model {model_name} from {path}")
             self.models[model_name] = torch.load(path, weights_only=False).to(
                 self.device
@@ -345,14 +363,14 @@ class fdqExperiment:
                     if model_path == "q":
                         sys.exit()
                     elif os.path.exists(model_path):
-                        self.inference_model_paths[model_name] = model_path
+                        self.trained_model_paths[model_name] = model_path
                         break
                     else:
                         eprint(f"Error: File {model_path} not found.")
 
             else:
                 self._results_dir, net_name = find_model_path(self)
-                self.inference_model_paths[model_name] = os.path.join(
+                self.trained_model_paths[model_name] = os.path.join(
                     self._results_dir, net_name
                 )
 
@@ -439,6 +457,12 @@ class fdqExperiment:
 
     def createOptimizer(self):
         for model_name, margs in self.exp_def.models:
+            if margs.optimizer is None:
+                iprint(f"No optimizer defined for model {model_name}")
+                # -> either its frozen, or manually defined within train loop
+                self.optimizers[model_name] = None
+                continue
+
             cls = self.instantiate_class(margs.optimizer.class_name)
 
             optimizer = cls(
@@ -456,9 +480,9 @@ class fdqExperiment:
 
         for model_name, margs in self.exp_def.models:
             if self.optimizers[model_name] is None:
-                raise ValueError(
-                    f"ERROR - optimizer for model {model_name} is not set!"
-                )
+                # no optimizer defined for this model
+                self.lr_schedulers[model_name] = None
+                continue
             if margs.lr_scheduler is None:
                 self.lr_schedulers[model_name] = None
                 continue
@@ -536,12 +560,14 @@ class fdqExperiment:
         iprint(f"Saving checkpoint to {self.checkpoint_path}")
 
         if self.optimizers == {}:
-            optimizer_state = "No optimizers used"
+            optimizer_state = None
         else:
-            optimizer_state = {
-                optim_name: optim.state_dict()
-                for optim_name, optim in self.optimizers.items()
-            }
+            optimizer_state = {}
+            for optim_name, optim in self.optimizers.items():
+                if optim is None:
+                    optimizer_state[optim_name] = None
+                else:
+                    optimizer_state[optim_name] = optim.state_dict()
 
         model_state = {
             model_name: model.state_dict() for model_name, model in self.models.items()

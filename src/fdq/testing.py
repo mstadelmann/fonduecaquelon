@@ -156,7 +156,7 @@ def save_test_results(test_results, experiment):
             )
 
 
-def save_test_info(experiment, model=None, weights=None):
+def save_test_info(experiment, model_path=None, weights=None):
     """Save test configuration information to a JSON file."""
     now = datetime.now()
     dt_string = now.strftime("%Y%m%d_%H_%M")
@@ -164,7 +164,7 @@ def save_test_info(experiment, model=None, weights=None):
 
     with open(results_fp, "w", encoding="utf-8") as f:
         json.dump(
-            {"model": model, "weights": weights},
+            {"model": model_path, "weights": weights},
             f,
             ensure_ascii=False,
             indent=4,
@@ -227,7 +227,7 @@ def run_test(experiment):
 
     save_test_info(
         experiment,
-        model=experiment.inference_model_paths,
+        model_path=experiment.trained_model_paths,
     )
     experiment.setupData()
     experiment.createLosses()
