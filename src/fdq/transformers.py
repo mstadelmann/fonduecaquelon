@@ -1,95 +1,379 @@
-from PIL import Image
 import torch
-import torchvision.transforms.functional as TF
 import torch.nn.functional as F
-from torchvision.transforms.v2 import Transform
+from torchvision.transforms import v2 as transforms
 
 
-class ResizeMaxDimPad(Transform):
-    """Transformer that resizes an image so its largest dimension matches max_dim and pads the rest to make it square."""
+def resize_max_dim_pad(img, max_dim, interpol_mode, mode, value):
+    c, h, w = img.shape
 
-    def __init__(self, max_dim: int, interpol_mode="bilinear"):
-        """Initialize the ResizeMaxDimPad transformer.
+    # Scale to max_dim
+    scale = max_dim / max(h, w)
+    new_h, new_w = int(h * scale), int(w * scale)
 
-        Args:
-            max_dim (int): The maximum dimension (height or width) for the output image.
-            interpol_mode (str): Interpolation mode to use for resizing. Options are 'nearest', 'linear', 'bilinear', or 'bicubic'.
-        """
-        super().__init__()
-        self.max_dim = max_dim
-        self.interpol_mode = interpol_mode
+    # Resize
+    img = F.interpolate(
+        img.unsqueeze(0),
+        size=(new_h, new_w),
+        mode=interpol_mode,
+        # align_corners=False,
+    ).squeeze(0)
 
-        if interpol_mode not in ["nearest", "linear", "bilinear", "bicubic"]:
-            raise ValueError("Mode must be 'bilinear' or 'nearest'")
+    # Padding
+    pad_h = max_dim - new_h
+    pad_w = max_dim - new_w
+    pad_top = pad_h // 2
+    pad_bottom = pad_h - pad_top
+    pad_left = pad_w // 2
+    pad_right = pad_w - pad_left
 
-    def transform(self, inpt: torch.Tensor, params=None):
-        if not isinstance(inpt, torch.Tensor):
-            raise TypeError("Input must be a torch.Tensor")
+    img = F.pad(img, (pad_left, pad_right, pad_top, pad_bottom), mode, value)
 
-        # Input shape: (C, H, W)
-        c, h, w = inpt.shape
+    return img
 
-        # Scale to max_dim
-        scale = self.max_dim / max(h, w)
-        new_h, new_w = int(h * scale), int(w * scale)
 
-        # Resize
-        inpt = F.interpolate(
-            inpt.unsqueeze(0),
-            size=(new_h, new_w),
-            mode=self.interpol_mode,
-            # align_corners=False,
-        ).squeeze(0)
+def add_padding(img, pad, mode="constant", value=0):
+    """Add padding to an N-dimensional input tensor.
 
-        # Padding
-        pad_h = self.max_dim - new_h
-        pad_w = self.max_dim - new_w
-        pad_top = pad_h // 2
-        pad_bottom = pad_h - pad_top
-        pad_left = pad_w // 2
-        pad_right = pad_w - pad_left
+    Img = N-di m input tensor
+    pad = padding values (tuple)
+    mode = padding mode (constant, edge, replicate, circular)
+        Default = 'constant'
+    value =  fill value for 'constant' padding. Default: 0
+    pad = (1,1) :        pad last dim by 1 on both sides
+    pad = (1,1,2,2):     pad last dim by 1 on both sides,
+                         pad second last dim by 2 on both sides
+    pad = (1,1,2,2,3,3): pad last dim by 1 on both sides,
+                         pad second last dim by 2 on both sides,
+                         pad third last dim by 3 on both sides
+    """
+    if mode not in ["constant", "edge", "replicate", "circular"]:
+        raise ValueError(f"Padding mode {mode} not supported!")
 
-        inpt = F.pad(
-            inpt, (pad_left, pad_right, pad_top, pad_bottom), mode="constant", value=0
+    return torch.nn.functional.pad(input=img, pad=pad, mode=mode, value=value)
+
+
+def remove_padding(img, pad):
+    """Removes padding from tensor.
+
+    img = N-di m input tensor
+    pad = padding values (tuple) - same format as used in add_padding
+    """
+    req_pad_dim = img.dim() * 2
+    pad = pad + [0] * (req_pad_dim - len(pad))
+    ps_start = pad[::2]
+    ps_stop = pad[1::2]
+
+    for dim in range(img.dim()):
+        if ps_stop[dim] == 0:
+            ps_stop[dim] = img.shape[dim]
+        else:
+            ps_stop[dim] = img.shape[dim] - ps_stop[dim]
+
+    if img.dim() == 4:
+        return img[
+            ps_start[0] : ps_stop[0],
+            ps_start[1] : ps_stop[1],
+            ps_start[2] : ps_stop[2],
+            ps_start[3] : ps_stop[3],
+        ]
+    elif img.dim() == 5:
+        return img[
+            ps_start[0] : ps_stop[0],
+            ps_start[1] : ps_stop[1],
+            ps_start[2] : ps_stop[2],
+            ps_start[3] : ps_stop[3],
+            ps_start[4] : ps_stop[4],
+        ]
+    else:
+        raise ValueError("Only 4D and 5D tensors are supported!")
+
+
+def get_transformers(t_defs):
+    """Compose a sequence of transformers specified by their names or configuration dictionaries.
+
+    Args:
+        t_defs (list): List of transformer names or configuration dictionaries.
+
+    Returns:
+        torchvision.transforms.Compose: Composed transformer.
+    """
+    return transforms.Compose([get_transformer(t) for t in t_defs])
+
+
+def get_transformer(t_defs):
+    """Tensor Transformers for image processing.
+
+    Stack3D
+    Morphes a 2D image to 3D by stacking the image along a new D dimension
+    [B,C,H,W] -> [B,C,D,H,W]
+    where d is set by the parameter 'stack_n'
+
+    Resize_HW:
+    Resizes images to Resize_IMG_SIZE_H x Resize_IMG_SIZE_W (must be defined in settings file)
+
+    ResizeMaxDimPad:
+    Resizes an image so its largest dimension matches 'max_dim' and pads the rest to make it square.
+    - max_dim (int): Maximum dimension for the resized image.
+    - interpol_mode (str): Interpolation mode for resizing. Default is 'bilinear'.
+    - mode (str): Padding mode, can be 'constant', 'edge', 'replicate', or 'circular'. Default is 'constant'.
+    - value (int): Fill value for 'constant' padding. Default is 0.
+
+    CLAMP_abs:
+    Clamps input tensor to [lower,upper]
+    (clamp = clip)
+
+    CLAMP_perc:
+    Clamps input tensor by percentiles [lower_perc,upper_perc]
+
+    ReRange:
+    Re-ranges input tensor from [in_min, in_max] to [out_min, out_max]
+
+    ReRange_minmax:
+    Re-ranges input tensor to [out_min, out_max]
+
+    Gaussian_Blur:
+    Blurs the image using the parameters 'blur_kernel_size' and 'blur_sigma'.
+
+    Padding:
+    Pads the input tensor using the parameters
+    - padding_size (tuple)
+    - padding_mode (Default = 'constant')
+    - padding_value (Default = 0)
+
+    UnPadding:
+    Removes padding from the input tensor (e.g. to compute metrics on original image size)
+
+    ADD:
+    Adds the input tensor by the value specified in the parameter 'value'.
+
+    DIV:
+    Divides the input tensor by the value specified in the parameter 'value'.
+
+    MULT:
+    Multiplies the input tensor by the value specified in the parameter 'value'.
+
+    NORM:
+    Normalize a tensor image with 'mean' and 'stdev'.
+
+
+    RandomHorizontalFlip
+
+    ToTensor::
+    https://pytorch.org/vision/main/generated/torchvision.transforms.ToTensor.html
+    Converts a PIL Image or numpy.ndarray (H x W x C) in the range [0, 255] to a
+    torch.FloatTensor of shape (C x H x W) in the range [0.0, 1.0] if the PIL Image
+    belongs to one of the modes (L, LA, P, I, F, RGB, YCbCr, RGBA, CMYK, 1) or if the
+    numpy.ndarray has dtype = np.uint8
+
+    Float32:
+    Converts input tenor to Float32
+
+    Uint8:
+    Converts input tenor to Uint8
+
+    RGB_Normalize:
+    Channel-wise normalize RGB images in the range[0,1] according to mean/stdev of imageNET.
+
+    RGB2GRAY:
+    Converts RGB image to grayscale image.
+
+    ToPil:
+    Converts a tensor to a PIL image.
+
+    Squeeze:
+    Squeezes the input tensor.
+
+    LOG:
+    Applies the natural logarithm to the input tensor.
+
+    EXP:
+    Applies the exponential function to the input tensor.
+    """
+    all_required_params = {
+        "Stack3D": {"stack_n": [int]},
+        "Resize_HW": {"h": [int], "w": [int]},
+        "ResizeMaxDimPad": {"max_dim": [int]},
+        "CLAMP_abs": {"lower": [float, int], "upper": [float, int]},
+        "CLAMP_perc": {"lower_perc": [float], "upper_perc": [float]},
+        "ReRange": {
+            "in_min": [float, int],
+            "in_max": [float, int],
+            "out_min": [float, int],
+            "out_max": [float, int],
+        },
+        "ReRange_minmax": {"out_min": [float, int], "out_max": [float, int]},
+        "Gaussian_Blur": {"blur_kernel_size": int, "blur_sigma": float},
+        "Padding": {
+            "padding_size": [list, int],
+            "padding_mode": [str],
+            "padding_value": [int],
+        },
+        "UnPadding": {"padding_size": [list, int]},
+        "ADD": {"value": [float, int]},
+        "MULT": {"value": [float, int]},
+        "DIV": {"value": [float, int]},
+        "NORM": {"mean": [float], "stdev": [float]},
+    }
+
+    if isinstance(t_defs, dict):
+        keys = list(t_defs.keys())
+        if len(keys) != 1:
+            raise ValueError(
+                f"Transformation {t_defs} does not correspond to the expected format!"
+            )
+        transformer_name = keys[0]
+        parameters = t_defs[transformer_name]
+    elif isinstance(t_defs, str):
+        transformer_name = t_defs
+        parameters = None
+    else:
+        raise ValueError(
+            f"Transformation {t_defs} does not correspond to the expected format!"
+        )
+    required_params = all_required_params.get(transformer_name, {})
+
+    # check if all required parameters are present and datatypes are correct
+    for req_param, req_type in required_params.items():
+        if req_param not in parameters:
+            raise ValueError(
+                f"Parameter {req_param} is missing for transformation {transformer_name}."
+            )
+        if type(parameters[req_param]) not in req_type:
+            raise ValueError(
+                f"Parameter {req_param} for transformation {transformer_name} is not correct."
+            )
+
+    if transformer_name == "Stack3D":
+        stack_n = parameters.get("stack_n")
+        # [B,C,H,W] -> [B,C,D,H,W] -> dim = 2
+        transformer = transforms.Lambda(lambda t: torch.stack([t] * stack_n, dim=2))
+
+    elif transformer_name == "Resize_HW":
+        transformer = transforms.Resize(
+            (parameters.get("h"), parameters.get("w")), antialias=True
         )
 
-        return inpt
+    elif transformer_name == "ResizeMaxDimPad":
+        transformer = transforms.Lambda(
+            lambda t: resize_max_dim_pad(
+                t,
+                max_dim=parameters.get("max_dim"),
+                interpol_mode=parameters.get("interpol_mode", "bilinear"),
+                mode=parameters.get("mode", "constant"),
+                value=parameters.get("value", 0),
+            )
+        )
 
+    elif transformer_name == "CLAMP_abs":
+        transformer = transforms.Lambda(
+            lambda t: torch.clamp(t, parameters.get("lower"), parameters.get("upper"))
+        )
 
-class ResizeMax:
-    """Transformer that resizes an image so that its longest edge does not exceed a specified maximum size."""
+    elif transformer_name == "CLAMP_perc":
 
-    def __init__(self, max_size=256, interpolation=Image.NEAREST):
-        """Initialize the ResizeMax transformer.
-
-        Args:
-            max_size (int): The maximum size for the longest edge of the image.
-            interpolation: Interpolation method to use for resizing.
-        """
-        self.max_size = max_size
-        self.interpolation = interpolation
-
-    def __call__(self, img):
-        # Handle PIL Image
-        if isinstance(img, Image.Image):
-            w, h = img.size
-            scale = min(self.max_size / w, self.max_size / h)
-            new_w, new_h = int(w * scale), int(h * scale)
-            return TF.resize(img, (new_h, new_w), interpolation=self.interpolation)
-
-        # Handle Tensor (C, H, W) or (H, W)
-        elif isinstance(img, torch.Tensor):
-            if img.ndim == 3:
-                _, h, w = img.shape
-            elif img.ndim == 2:
-                h, w = img.shape
+        def _rdm_reduce(tensor):
+            # random reduce tensor size for quantile computation -> estimation
+            n = 12582912  # random defined as 8*3*32*128*128
+            if tensor.numel() > n:
+                n = min(n, tensor.numel())
+                random_indices = torch.randperm(tensor.numel())[:n]
+                return tensor.view(-1)[random_indices]
             else:
-                raise ValueError("Unsupported tensor shape: expected 2D or 3D tensor")
+                return tensor
 
-            scale = min(self.max_size / w, self.max_size / h)
-            new_w, new_h = int(w * scale), int(h * scale)
+        transformer = transforms.Lambda(
+            lambda t: torch.clamp(
+                t,
+                torch.quantile(_rdm_reduce(t), parameters.get("lower_perc")),
+                torch.quantile(_rdm_reduce(t), parameters.get("upper_perc")),
+            )
+        )
 
-            return TF.resize(img, [new_h, new_w], interpolation=self.interpolation)
+    elif transformer_name == "ReRange":
+        in_min = parameters.get("in_min")
+        in_max = parameters.get("in_max")
+        out_min = parameters.get("out_min")
+        out_max = parameters.get("out_max")
+        transformer = transforms.Lambda(
+            lambda t: ((t - in_min) * (out_max - out_min)) / (in_max - in_min) + out_min
+        )
 
-        else:
-            raise TypeError(f"Unsupported image type: {type(img)}")
+    elif transformer_name == "ReRange_minmax":
+        out_min = parameters.get("out_min")
+        out_max = parameters.get("out_max")
+        transformer = transforms.Lambda(
+            lambda t: ((t - t.min()) * (out_max - out_min)) / (t.max() - t.min())
+            + out_min
+        )
+
+    elif transformer_name == "Gaussian_Blur":
+        transformer = transforms.GaussianBlur(
+            kernel_size=parameters.get("blur_kernel_size"),
+            sigma=parameters.get("blur_sigma"),
+        )
+
+    elif transformer_name == "Padding":
+        transformer = transforms.Lambda(
+            lambda t: add_padding(
+                t,
+                pad=parameters.get("padding_size"),
+                mode=parameters.get("padding_mode"),
+                value=parameters.get("padding_value"),
+            )
+        )
+
+    elif transformer_name == "UnPadding":
+        transformer = transforms.Lambda(
+            lambda t: remove_padding(t, pad=parameters.get("padding_size"))
+        )
+
+    elif transformer_name == "ADD":
+        transformer = transforms.Lambda(lambda t: t + parameters.get("value"))
+
+    elif transformer_name == "DIV":
+        transformer = transforms.Lambda(lambda t: t / parameters.get("value"))
+
+    elif transformer_name == "NORM":
+        transformer = transforms.Normalize(
+            mean=(parameters.get("mean"),), std=(parameters.get("stdev"),)
+        )
+
+    elif transformer_name == "MULT":
+        transformer = transforms.Lambda(lambda t: t * parameters.get("value"))
+
+    elif transformer_name == "RandomHorizontalFlip":
+        transformer = transforms.RandomHorizontalFlip()
+
+    elif transformer_name == "ToTensor":
+        transformer = transforms.ToTensor()
+
+    elif transformer_name == "Float32":
+        transformer = transforms.Lambda(lambda t: t.type(torch.float32))
+
+    elif transformer_name == "Uint8":
+        transformer = transforms.Lambda(lambda t: t.type(torch.uint8))
+
+    elif transformer_name == "RGB_Normalize":
+        transformer = transforms.Normalize(
+            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+        )
+
+    elif transformer_name == "RGB2GRAY":
+        transformer = transforms.Grayscale(num_output_channels=1)
+
+    elif transformer_name == "ToPil":
+        transformer = transforms.Lambda(lambda t: transforms.ToPILImage()(t))
+
+    elif transformer_name == "Squeeze":
+        transformer = transforms.Lambda(lambda t: t.squeeze())
+
+    elif transformer_name == "LOG":
+        transformer = transforms.Lambda(lambda t: torch.log(t))
+
+    elif transformer_name == "EXP":
+        transformer = transforms.Lambda(lambda t: torch.exp(t))
+
+    else:
+        raise ValueError(f"Transformation {t_defs} is not supported!")
+
+    return transformer

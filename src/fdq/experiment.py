@@ -15,6 +15,7 @@ from datetime import datetime
 from torchview import draw_graph
 from fdq.ui_functions import iprint, eprint, wprint, show_train_progress, getIntInput
 from fdq.testing import find_model_path
+from fdq.transformers import get_transformers
 from fdq.misc import (
     remove_file,
     store_processing_infos,
@@ -63,6 +64,7 @@ class fdqExperiment:
         self.start_epoch = 0
         self.data = {}
         self.models = {}
+        self.transformers = {}
         self.trained_model_paths = {}
         self.optimizers = {}
         self.lr_schedulers = {}
@@ -116,6 +118,8 @@ class fdqExperiment:
             wprint("NO CUDA available - CPU mode")
             self.device = torch.device("cpu")
             self.is_cuda = False
+        # ------------- Misc ------------------------------
+        self.prepare_transformers()
 
     @property
     def results_dir(self):
@@ -807,6 +811,20 @@ class fdqExperiment:
         iprint("----------------------------------------------------")
         iprint("Copy datasets to temporary scratch location... Done!")
         iprint("----------------------------------------------------")
+
+    def prepare_transformers(self):
+        """Prepare transformers for the experiment."""
+        if self.exp_def.transforms is None:
+            return
+        elif not isinstance(self.exp_file["transforms"], dict):
+            raise ValueError(
+                "Error, transforms must be a dictionary with transform names as keys."
+            )
+
+        for transformer_name, transformer_def in self.exp_def.transforms.items():
+            self.transformers[transformer_name] = get_transformers(
+                t_defs=transformer_def
+            )
 
     def dump_model(self):
         self.setupData()

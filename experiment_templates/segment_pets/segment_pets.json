@@ -3,6 +3,24 @@
         "project": "Segment OXPET segmentation",
         "author": "Marc"
     },
+    "transforms": {
+        "resize_and_pad_bilinear": [
+            {
+                "ResizeMaxDimPad": {
+                    "max_dim": 256,
+                    "interpol_mode": "bilinear"
+                }
+            }
+        ],
+        "resize_and_pad_nearest": [
+            {
+                "ResizeMaxDimPad": {
+                    "max_dim": 256,
+                    "interpol_mode": "nearest"
+                }
+            }
+        ]
+    },
     "data": {
         "OXPET": {
             "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxfordpet_preparator.py",
@@ -18,8 +36,7 @@
                 "test_batch_size": 1,
                 "shuffle_train": true,
                 "shuffle_val": false,
-                "shuffle_test": false,
-                "max_img_size": 256
+                "shuffle_test": false
             }
         }
     },
@@ -62,7 +79,7 @@
     "train": {
         "path": "~/dev/fonduecaquelon/experiment_templates/segment_pets/train_oxpets.py",
         "args": {
-            "epochs": 150,
+            "epochs": 3,
             "use_GPU": true,
             "use_AMP": false,
             "accumulate_grad_batches": 1,
@@ -90,7 +107,7 @@
         "use_wandb": true,
         "wandb_project": "ox_pet_test",
         "wandb_entity": "stmd",
-        "wandb_key": "126aea51c74a8e5533f79411f171a1a2860a2e4b"
+        "wandb_key": "126aea51c74a8e5533f79411f171a1a2860a2e3a"
     },
     "test": {
         "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxpets_test.py",

@@ -11,7 +11,6 @@ import torch.nn.functional as F
 from tqdm import tqdm
 from urllib.request import urlretrieve
 
-from fdq.transformers import ResizeMaxDimPad
 
 # based on https://github.com/qubvel-org/segmentation_models.pytorch
 
@@ -127,15 +126,8 @@ def createDatasets(experiment):
     if not (os.path.exists(annotations_path) and os.path.exists(images_path)):
         OxfordPetDataset.download(dargs.base_path)
 
-    max_img_size = experiment.exp_def.data.OXPET.args.get("max_img_size", 256)
-
-    # transform = transforms.Compose([ResizeMax(max_img_size)])
-    transform_img = transforms.Compose(
-        [ResizeMaxDimPad(max_dim=max_img_size, interpol_mode="bilinear")]
-    )
-    transform_mask = transforms.Compose(
-        [ResizeMaxDimPad(max_dim=max_img_size, interpol_mode="nearest")]
-    )
+    transform_img = experiment.transformers["resize_and_pad_bilinear"]
+    transform_mask = experiment.transformers["resize_and_pad_nearest"]
 
     train_set = OxfordPetDataset(
         dargs.base_path,

@@ -28,9 +28,7 @@ def createDatasets(experiment):
     if not os.path.exists(dargs.base_path):
         os.makedirs(dargs.base_path)
 
-    transform = transforms.Compose(
-        [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
-    )
+    transform = experiment.transformers["resize_norm_inp"]
 
     train_all_set = datasets.MNIST(
         dargs.base_path, train=True, download=True, transform=transform

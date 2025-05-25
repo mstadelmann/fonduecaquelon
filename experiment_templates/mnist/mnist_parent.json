@@ -4,6 +4,17 @@
         "author": "Marc",
         "set_random_seed": 22
     },
+    "transforms": {
+        "resize_norm_inp": [
+            "ToTensor",
+            {
+                "NORM": {
+                    "mean": 0.1307,
+                    "stdev": 0.3081
+                }
+            }
+        ]
+    },
     "data": {
         "MNIST": {
             "processor": "~/dev/fonduecaquelon/experiment_templates/mnist/mnist_preparator.py",
