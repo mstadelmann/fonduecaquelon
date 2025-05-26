@@ -7,7 +7,7 @@ from fdq.ui_functions import startProgBar, iprint
 from fdq.misc import print_nb_weights
 
 
-def train(experiment: fdqExperiment) -> None:
+def fdq_train(experiment: fdqExperiment) -> None:
     """Train the model using the provided experiment configuration.
 
     Args:
@@ -18,6 +18,7 @@ def train(experiment: fdqExperiment) -> None:
 
     data = experiment.data["MNIST"]
     model = experiment.models["simpleNet"]
+    device_type = "cuda" if experiment.device == torch.device("cuda") else "cpu"
 
     for epoch in range(experiment.start_epoch, experiment.nb_epochs):
         experiment.current_epoch = epoch
@@ -36,27 +37,15 @@ def train(experiment: fdqExperiment) -> None:
             inputs = inputs.to(experiment.device).type(torch.float32)
             targets = targets.to(experiment.device)
 
-            if experiment.useAMP:
-                device_type = (
-                    "cuda" if experiment.device == torch.device("cuda") else "cpu"
-                )
-
-                with torch.autocast(device_type=device_type, enabled=True):
-                    output = experiment.model(inputs)
-                    train_loss_tensor = (
-                        experiment.losses["cp"](output, targets)
-                        / experiment.gradacc_iter
-                    )
-
-                experiment.scaler.scale(train_loss_tensor).backward()
-
-            else:
+            with torch.autocast(device_type=device_type, enabled=experiment.useAMP):
                 output = model(inputs)
                 train_loss_tensor = (
                     experiment.losses["cp"](output, targets) / experiment.gradacc_iter
                 )
-
-                train_loss_tensor.backward()
+                if experiment.useAMP:
+                    experiment.scaler.scale(train_loss_tensor).backward()
+                else:
+                    train_loss_tensor.backward()
 
             experiment.update_gradients(
                 b_idx=nb_tbatch, loader_name="MNIST", model_name="simpleNet"

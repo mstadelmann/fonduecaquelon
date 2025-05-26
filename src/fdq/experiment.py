@@ -2,15 +2,20 @@ import os
 import sys
 import json
 import math
+import time
 import torch
+import torch_tensorrt
+from torch_tensorrt import Input
 import wandb
 import shutil
 import argparse
 import importlib
 import funkybob
-from tqdm import tqdm
 from datetime import datetime
-from fdq.ui_functions import iprint, wprint, show_train_progress
+from torchview import draw_graph
+from fdq.ui_functions import iprint, eprint, wprint, show_train_progress, getIntInput
+from fdq.testing import find_model_path
+from fdq.transformers import get_transformers
 from fdq.misc import (
     remove_file,
     store_processing_infos,
@@ -59,7 +64,8 @@ class fdqExperiment:
         self.start_epoch = 0
         self.data = {}
         self.models = {}
-        self.inference_model_paths = {}
+        self.transformers = {}
+        self.trained_model_paths = {}
         self.optimizers = {}
         self.lr_schedulers = {}
         self.losses = {}
@@ -68,6 +74,8 @@ class fdqExperiment:
         self.best_train_model_path = {}
         self.checkpoint_path = None
         self._results_dir = None
+        self._results_output_dir = None
+        self.file_store_cnt = 0
         self._test_dir = None
         self._valLoss = float("inf")
         self._trainLoss = float("inf")
@@ -110,6 +118,8 @@ class fdqExperiment:
             wprint("NO CUDA available - CPU mode")
             self.device = torch.device("cpu")
             self.is_cuda = False
+        # ------------- Misc ------------------------------
+        self.prepare_transformers()
 
     @property
     def results_dir(self):
@@ -192,7 +202,7 @@ class fdqExperiment:
     def parse_and_clean_args(self):
         self.experiment_file_path = self.inargs.experimentfile
 
-        with open(self.experiment_file_path, "r", encoding="utf8") as fp:
+        with open(self.experiment_file_path, encoding="utf8") as fp:
             try:
                 self.exp_file = json.load(fp)
             except Exception as exc:
@@ -221,7 +231,7 @@ class fdqExperiment:
                     f"Error: File {self.parent_file_path} not found."
                 )
 
-            with open(self.parent_file_path, "r", encoding="utf8") as fp:
+            with open(self.parent_file_path, encoding="utf8") as fp:
                 try:
                     parent_expfile = json.load(fp)
                 except Exception as exc:
@@ -288,6 +298,8 @@ class fdqExperiment:
         return getattr(module, class_name)
 
     def init_models(self, instantiate=True):
+        if self.models != {}:
+            return
         for model_name, model_def in self.exp_def.models:
             if model_def.path is not None:
                 if os.path.exists(model_def.path):
@@ -312,22 +324,65 @@ class fdqExperiment:
                     f"Error, model {model_name} must have a path or module defined."
                 )
 
-            if instantiate:
+            # load trained model from path
+            if model_def.trained_model_path is not None:
+                if not os.path.exists(model_def.trained_model_path):
+                    raise FileNotFoundError(
+                        f"Error, trained model path {model_def.trained_model_path} does not exist."
+                    )
+                self.models[model_name] = torch.load(
+                    model_def.trained_model_path, weights_only=False
+                ).to(self.device)
+                self.models[model_name].eval()
+
+            # or instantiate new model with random weights
+            elif instantiate:
                 self.models[model_name] = cls(**model_def.args.to_dict()).to(
                     self.device
                 )
 
+            # frozen model? disable grad tracking
+            if model_def.freeze:
+                iprint(f"Freezing model {model_name} parameters.")
+                for param in self.models[model_name].parameters():
+                    param.requires_grad = False
+
     def load_models(self):
         self.init_models(instantiate=False)
         for model_name, _ in self.exp_def.models:
-            path = self.inference_model_paths[model_name]
+            path = self.trained_model_paths[model_name]
             iprint(f"Loading model {model_name} from {path}")
             self.models[model_name] = torch.load(path, weights_only=False).to(
                 self.device
             )
             self.models[model_name].eval()
 
+    def load_trained_models(self):
+        for model_name, _ in self.exp_def.models:
+            if self.mode.test_mode.custom_path:
+                while True:
+                    model_path = input(
+                        f"Enter path to model for '{model_name}' (or 'q' to quit)."
+                    )
+                    if model_path == "q":
+                        sys.exit()
+                    elif os.path.exists(model_path):
+                        self.trained_model_paths[model_name] = model_path
+                        break
+                    else:
+                        eprint(f"Error: File {model_path} not found.")
+
+            else:
+                self._results_dir, net_name = find_model_path(self)
+                self.trained_model_paths[model_name] = os.path.join(
+                    self._results_dir, net_name
+                )
+
+            self.load_models()
+
     def setupData(self):
+        if self.data != {}:
+            return
         self.copy_data_to_scratch()
         for data_name, data_source in self.exp_def.data.items():
             processor = self.import_class(file_path=data_source.processor)
@@ -339,7 +394,13 @@ class fdqExperiment:
 
         This is run at the end of every epoch.
         """
-        for model_name, model in self.models.items():
+        for model_name, model_def in self.exp_def.models:
+            if model_def.freeze:
+                # skip frozen models
+                continue
+
+            model = self.models[model_name]
+
             if self.exp_def.store.get("save_last_model", False):
                 remove_file(self.last_model_path.get(model_name))
                 self.last_model_path[model_name] = os.path.join(
@@ -377,26 +438,6 @@ class fdqExperiment:
                 self.best_train_model_path[model_name] = best_train_model_path
                 torch.save(model, best_train_model_path)
 
-    def dump_model(self, res_folder=None):
-        # https://pytorch.org/tutorials/advanced/cpp_export.html
-        iprint("Start model dumping")
-
-        example = torch.rand(
-            1, self.nb_in_channels, self.net_input_size[0], self.net_input_size[1]
-        ).to(self.device)
-
-        # jit tracer to serialize model using example
-        # this only works if there is no flow control applied in the model.
-        # otherwise, the model has to be annotated and the torch script compiler applied.
-        traced_script_module = torch.jit.trace(self.model, example)
-
-        # test network
-        # test_out = traced_script_module(example)
-        # print(test_out)
-
-        iprint(f"Storing model to {os.path.join(res_folder, 'serialized_model.fdqpt')}")
-        traced_script_module.save(os.path.join(res_folder, "serialized_model.fdqpt"))
-
     def prepareTraining(self):
         self.mode.train()
         self.setupData()
@@ -426,6 +467,12 @@ class fdqExperiment:
 
     def createOptimizer(self):
         for model_name, margs in self.exp_def.models:
+            if margs.optimizer is None:
+                iprint(f"No optimizer defined for model {model_name}")
+                # -> either its frozen, or manually defined within train loop
+                self.optimizers[model_name] = None
+                continue
+
             cls = self.instantiate_class(margs.optimizer.class_name)
 
             optimizer = cls(
@@ -443,9 +490,9 @@ class fdqExperiment:
 
         for model_name, margs in self.exp_def.models:
             if self.optimizers[model_name] is None:
-                raise ValueError(
-                    f"ERROR - optimizer for model {model_name} is not set!"
-                )
+                # no optimizer defined for this model
+                self.lr_schedulers[model_name] = None
+                continue
             if margs.lr_scheduler is None:
                 self.lr_schedulers[model_name] = None
                 continue
@@ -470,7 +517,10 @@ class fdqExperiment:
                 )
             elif largs.class_name is not None:
                 cls = self.instantiate_class(class_path=largs.class_name)
-            self.losses[loss_name] = cls(**largs.args.to_dict())
+            if largs.args is not None:
+                self.losses[loss_name] = cls(**largs.args.to_dict())
+            else:
+                self.losses[loss_name] = cls()
 
     def load_checkpoint(self, path):
         """Load checkpoint to resume training."""
@@ -496,14 +546,20 @@ class fdqExperiment:
                 f"Error, checkpoint epoch {self.start_epoch + 1} already reached defined nb epochs ({self.nb_epochs})."
             )
 
-        for model_name, _ in self.exp_def.models:
+        for model_name, model_def in self.exp_def.models:
+            if model_def.freeze:
+                iprint(f"Skipping loading of frozen model {model_name}.")
+                continue
             self.models[model_name].load_state_dict(
                 checkpoint["model_state_dict"][model_name]
             )
 
-            self.optimizers[model_name].load_state_dict(
-                checkpoint["optimizer"][model_name]
-            )
+            if checkpoint["optimizer"] is None:
+                self.optimizers[model_name] = None
+            else:
+                self.optimizers[model_name].load_state_dict(
+                    checkpoint["optimizer"][model_name]
+                )
 
     def save_checkpoint(self):
         if self.checkpoint_frequency is None or self.checkpoint_frequency == 0:
@@ -520,16 +576,21 @@ class fdqExperiment:
         iprint(f"Saving checkpoint to {self.checkpoint_path}")
 
         if self.optimizers == {}:
-            optimizer_state = "No optimizers used"
+            optimizer_state = None
         else:
-            optimizer_state = {
-                optim_name: optim.state_dict()
-                for optim_name, optim in self.optimizers.items()
-            }
+            optimizer_state = {}
+            for optim_name, optim in self.optimizers.items():
+                if optim is None:
+                    optimizer_state[optim_name] = None
+                else:
+                    optimizer_state[optim_name] = optim.state_dict()
 
-        model_state = {
-            model_name: model.state_dict() for model_name, model in self.models.items()
-        }
+        model_state = {}
+        for model_name, model_def in self.exp_def.models:
+            if model_def.freeze:
+                model_state[model_name] = "FROZEN"
+            else:
+                model_state[model_name] = self.models[model_name].state_dict()
 
         checkpoint = {
             "epoch": self.current_epoch,
@@ -544,31 +605,19 @@ class fdqExperiment:
         torch.save(checkpoint, self.checkpoint_path)
 
     def get_next_export_fn(self, name=None, file_ending="jpg"):
-        if self.mode.is_test():
-            if name is None:
-                path = os.path.join(
-                    self.test_dir, f"test_image_{self.test_output_id:02}.{file_ending}"
-                )
-            else:
-                path = os.path.join(
-                    self.test_dir,
-                    f"test_image_{self.test_output_id:02}__{name}.{file_ending}",
-                )
-
-            self.test_output_id += 1
-
+        if self.mode.op_mode.test:
+            start_str = "test_image"
+            dest_dir = self.test_dir
         else:
-            if name is None:
-                path = os.path.join(
-                    self.results_output_dir,
-                    f"out_e{self.current_epoch:02}_{self.train_output_id:02}.{file_ending}",
-                )
-            else:
-                path = os.path.join(
-                    self.results_output_dir,
-                    f"out_e{self.current_epoch:02}_{self.train_output_id:02}__{name}.{file_ending}",
-                )
-            self.train_output_id += 1
+            start_str = f"train_out_e{self.current_epoch:02}"
+            dest_dir = self.results_output_dir
+
+        name_str = "" if name is None else f"__{name}"
+        path = os.path.join(
+            dest_dir, f"{start_str}_{self.file_store_cnt:02}{name_str}.{file_ending}"
+        )
+
+        self.file_store_cnt += 1
 
         return path
 
@@ -597,7 +646,8 @@ class fdqExperiment:
         store_processing_infos(self)
 
     def check_early_stop(self):
-        """
+        """Check if training should be stopped.
+
         1) Stop training if the validation los over last last N epochs did not further decrease.
         We want at least N epochs in each training start, also if its a resume from checkpoint training.
         (--> Therefore, (cur_epoch - self.start_epoch) > self.early_stop_val_loss)
@@ -729,11 +779,10 @@ class fdqExperiment:
         module_name = os.path.splitext(os.path.basename(evaluator_path))[0]
         currentEvaluator = importlib.import_module(module_name)
 
-        return currentEvaluator.createEvaluator(self)
+        return currentEvaluator.fdq_test(self)
 
     def copy_data_to_scratch(self):
         """Copy all datasets to scratch dir, and update the paths."""
-
         if self.scratch_data_path is None:
             return
 
@@ -762,3 +811,173 @@ class fdqExperiment:
         iprint("----------------------------------------------------")
         iprint("Copy datasets to temporary scratch location... Done!")
         iprint("----------------------------------------------------")
+
+    def prepare_transformers(self):
+        """Prepare transformers for the experiment."""
+        if self.exp_def.transforms is None:
+            return
+        elif not isinstance(self.exp_file["transforms"], dict):
+            raise ValueError(
+                "Error, transforms must be a dictionary with transform names as keys."
+            )
+
+        for transformer_name, transformer_def in self.exp_def.transforms.items():
+            self.transformers[transformer_name] = get_transformers(
+                t_defs=transformer_def
+            )
+
+    def dump_model(self):
+        self.setupData()
+        self.init_models(instantiate=False)
+        iprint("\n-----------------------------------------------------------")
+        iprint("Dump model")
+        iprint("-----------------------------------------------------------\n")
+
+        try:
+            sample = next(iter(self.data[next(iter(self.data))].train_data_loader))
+            if isinstance(sample, tuple):
+                sample = sample[0]
+            if isinstance(sample, list):
+                sample = sample[0]
+            if isinstance(sample, dict):
+                sample = next(iter(sample.values()))
+
+            example = torch.rand_like(sample)
+
+            sel_mode = getIntInput(
+                "Dump:\n"
+                "  1) last exp best model\n"
+                "  2) last exp last model\n"
+                "  3) custom exp best model\n"
+                "  4) custom exp last model\n"
+                "  5) define custom path\n"
+            )
+
+            if sel_mode == 1:
+                self.mode.best()
+            elif sel_mode == 2:
+                self.mode.last()
+            elif sel_mode == 3:
+                self.mode.custom_best()
+            elif sel_mode == 4:
+                self.mode.custom_last()
+            elif sel_mode == 5:
+                self.mode.custom_path()
+
+            self.load_trained_models()
+
+            for model_name, model in self.models.items():
+                iprint(f"Compiling {model_name}...")
+                model.eval()
+                model.to(self.device)
+                example = example.to(self.device)
+
+                inputs = [
+                    Input(
+                        example.shape,
+                        dtype=example.dtype,
+                        device={"device_type": "cuda" if self.is_cuda else "cpu"},
+                    )
+                ]
+
+                traced_model = torch.jit.trace(model, example, strict=False)
+                optimized_model = torch_tensorrt.compile(
+                    traced_model,
+                    ir="ts",
+                    inputs=inputs,
+                    enabled_precisions={torch.float32},
+                    debug=True,
+                )
+
+                # Warm-up
+                for _ in range(3):
+                    _ = model(example)
+                    _ = optimized_model(example)
+
+                # Measure time for original model
+                times = []
+                for _ in range(10):
+                    start = time.time()
+                    _ = model(example)
+                    if self.is_cuda:
+                        torch.cuda.synchronize()
+                    times.append(time.time() - start)
+                avg_time_model = sum(times) / len(times)
+
+                # Measure time for optimized model
+                times_opt = []
+                for _ in range(10):
+                    start = time.time()
+                    _ = optimized_model(example)
+                    if self.is_cuda:
+                        torch.cuda.synchronize()
+                    times_opt.append(time.time() - start)
+                avg_time_optimized = sum(times_opt) / len(times_opt)
+
+                print(f"Average time (original model): {avg_time_model:.6f} s")
+                print(f"Average time (optimized model): {avg_time_optimized:.6f} s")
+
+                print("done")
+
+                # workspace_size = 20 << 30
+                # min_block_size = 7
+                # torch_executed_ops = {}
+                # optimized_model = torch_tensorrt.compile(
+                #     model,
+                #     ir="torch_compile",
+                #     inputs=example,
+                #     enabled_precisions={torch.half},
+                #     debug=True,
+                #     workspace_size=workspace_size,
+                #     min_block_size=min_block_size,
+                #     torch_executed_ops=torch_executed_ops,
+                # )
+
+                save_path = os.path.join(
+                    self.results_dir, f"{model_name}_optimized_model.ts"
+                )
+                torch.jit.save(optimized_model, save_path)
+                iprint(f"Optimized model saved to {save_path}")
+
+        except Exception as e:
+            wprint("Failed to dump model!")
+            print(e)
+            raise e
+
+    def print_model(self):
+        self.setupData()
+        self.init_models()
+        iprint("\n-----------------------------------------------------------")
+        iprint("Print model definition")
+        iprint("-----------------------------------------------------------\n")
+
+        for model_name, model in self.models.items():
+            iprint("\n-----------------------------------------------------------")
+            iprint(model_name)
+            iprint("\n-----------------------------------------------------------")
+            iprint(model)
+            iprint("-----------------------------------------------------------\n")
+
+        try:
+            iprint(f"Saving model graph to: {self.results_dir}/{model_name}_graph.png")
+
+            sample = next(iter(self.data[next(iter(self.data))].train_data_loader))
+            if isinstance(sample, tuple):
+                sample = sample[0]
+            if isinstance(sample, list):
+                sample = sample[0]
+            if isinstance(sample, dict):
+                sample = next(iter(sample.values()))
+
+            draw_graph(
+                model,
+                input_size=sample.shape,
+                device=self.device,
+                save_graph=True,
+                filename=model_name + "_graph",
+                directory=self.results_dir,
+                expand_nested=False,
+            )
+        except Exception as e:
+            wprint("Failed to draw graph!")
+            print(e)

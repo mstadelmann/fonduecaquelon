@@ -7,6 +7,17 @@ from torchvision import transforms, datasets
 
 
 def createDatasets(experiment):
+    """Creates MNIST  DataLoaders.
+
+    Creates and returns MNIST dataset DataLoaders for training, validation, and testing,
+    along with sample and batch counts, based on the experiment configuration.
+
+    Args:
+        experiment: An experiment object containing configuration for dataset preparation.
+
+    Returns:
+        dict: A dictionary with DataLoaders and dataset statistics.
+    """
     # create_transformers(experiment)
 
     dargs = experiment.exp_def.data.MNIST.args
@@ -17,9 +28,7 @@ def createDatasets(experiment):
     if not os.path.exists(dargs.base_path):
         os.makedirs(dargs.base_path)
 
-    transform = transforms.Compose(
-        [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
-    )
+    transform = experiment.transformers["resize_norm_inp"]
 
     train_all_set = datasets.MNIST(
         dargs.base_path, train=True, download=True, transform=transform
@@ -65,7 +74,7 @@ def createDatasets(experiment):
         shuffle=dargs.shuffle_train,
         num_workers=dargs.num_workers,
         pin_memory=pin_mem,
-        drop_last=drop_last
+        drop_last=drop_last,
     )
 
     test_loader = DataLoader(
@@ -74,7 +83,7 @@ def createDatasets(experiment):
         shuffle=dargs.shuffle_test,
         num_workers=dargs.num_workers,
         pin_memory=pin_mem,
-        drop_last=drop_last
+        drop_last=drop_last,
     )
 
     if n_val_samples > 0:
@@ -84,7 +93,7 @@ def createDatasets(experiment):
             shuffle=dargs.shuffle_val,
             num_workers=dargs.num_workers,
             pin_memory=pin_mem,
-            drop_last=drop_last
+            drop_last=drop_last,
         )
     else:
         val_loader = None
