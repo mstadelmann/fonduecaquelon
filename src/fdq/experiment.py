@@ -2,10 +2,7 @@ import os
 import sys
 import json
 import math
-import time
 import torch
-import torch_tensorrt
-from torch_tensorrt import Input
 import wandb
 import shutil
 import argparse
@@ -13,9 +10,10 @@ import importlib
 import funkybob
 from datetime import datetime
 from torchview import draw_graph
-from fdq.ui_functions import iprint, eprint, wprint, show_train_progress, getIntInput
+from fdq.ui_functions import iprint, eprint, wprint, show_train_progress
 from fdq.testing import find_model_path
 from fdq.transformers import get_transformers
+from fdq.dump import dump_model
 from fdq.misc import (
     remove_file,
     store_processing_infos,
@@ -827,122 +825,7 @@ class fdqExperiment:
             )
 
     def dump_model(self):
-        self.setupData()
-        self.init_models(instantiate=False)
-        iprint("\n-----------------------------------------------------------")
-        iprint("Dump model")
-        iprint("-----------------------------------------------------------\n")
-
-        try:
-            sample = next(iter(self.data[next(iter(self.data))].train_data_loader))
-            if isinstance(sample, tuple):
-                sample = sample[0]
-            if isinstance(sample, list):
-                sample = sample[0]
-            if isinstance(sample, dict):
-                sample = next(iter(sample.values()))
-
-            example = torch.rand_like(sample)
-
-            sel_mode = getIntInput(
-                "Dump:\n"
-                "  1) last exp best model\n"
-                "  2) last exp last model\n"
-                "  3) custom exp best model\n"
-                "  4) custom exp last model\n"
-                "  5) define custom path\n"
-            )
-
-            if sel_mode == 1:
-                self.mode.best()
-            elif sel_mode == 2:
-                self.mode.last()
-            elif sel_mode == 3:
-                self.mode.custom_best()
-            elif sel_mode == 4:
-                self.mode.custom_last()
-            elif sel_mode == 5:
-                self.mode.custom_path()
-
-            self.load_trained_models()
-
-            for model_name, model in self.models.items():
-                iprint(f"Compiling {model_name}...")
-                model.eval()
-                model.to(self.device)
-                example = example.to(self.device)
-
-                inputs = [
-                    Input(
-                        example.shape,
-                        dtype=example.dtype,
-                        device={"device_type": "cuda" if self.is_cuda else "cpu"},
-                    )
-                ]
-
-                traced_model = torch.jit.trace(model, example, strict=False)
-                optimized_model = torch_tensorrt.compile(
-                    traced_model,
-                    ir="ts",
-                    inputs=inputs,
-                    enabled_precisions={torch.float32},
-                    debug=True,
-                )
-
-                # Warm-up
-                for _ in range(3):
-                    _ = model(example)
-                    _ = optimized_model(example)
-
-                # Measure time for original model
-                times = []
-                for _ in range(10):
-                    start = time.time()
-                    _ = model(example)
-                    if self.is_cuda:
-                        torch.cuda.synchronize()
-                    times.append(time.time() - start)
-                avg_time_model = sum(times) / len(times)
-
-                # Measure time for optimized model
-                times_opt = []
-                for _ in range(10):
-                    start = time.time()
-                    _ = optimized_model(example)
-                    if self.is_cuda:
-                        torch.cuda.synchronize()
-                    times_opt.append(time.time() - start)
-                avg_time_optimized = sum(times_opt) / len(times_opt)
-
-                print(f"Average time (original model): {avg_time_model:.6f} s")
-                print(f"Average time (optimized model): {avg_time_optimized:.6f} s")
-
-                print("done")
-
-                # workspace_size = 20 << 30
-                # min_block_size = 7
-                # torch_executed_ops = {}
-                # optimized_model = torch_tensorrt.compile(
-                #     model,
-                #     ir="torch_compile",
-                #     inputs=example,
-                #     enabled_precisions={torch.half},
-                #     debug=True,
-                #     workspace_size=workspace_size,
-                #     min_block_size=min_block_size,
-                #     torch_executed_ops=torch_executed_ops,
-                # )
-
-                save_path = os.path.join(
-                    self.results_dir, f"{model_name}_optimized_model.ts"
-                )
-                torch.jit.save(optimized_model, save_path)
-                iprint(f"Optimized model saved to {save_path}")
-
-        except Exception as e:
-            wprint("Failed to dump model!")
-            print(e)
-            raise e
+        dump_model(self)
 
     def print_model(self):
         self.setupData()

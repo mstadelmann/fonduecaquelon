@@ -28,7 +28,7 @@ def find_experiment_result_dirs(experiment):
             "scratch_results_path"
         )
 
-    elif experiment.is_slurm and not experiment.inargs.train_model:
+    elif experiment.is_slurm and not experiment.mode.op_mode.train:
         wprint(
             "WARNING: This is a slurm INFERENCE session - looking for results in regular path!"
         )
