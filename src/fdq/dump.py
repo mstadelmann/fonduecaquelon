@@ -67,7 +67,12 @@ def get_example_tensor(experiment):
     if isinstance(sample, dict):
         sample = next(iter(sample.values()))
 
-    return user_set_dtype(torch.rand_like(sample).to(experiment.device))
+    print(f"Shape of sample tensor: {sample.shape}")
+
+    if not getYesNoInput("Use tensor data from dataset (y) or random tensor (n)?"):
+        sample = torch.rand_like(sample)
+
+    return user_set_dtype(sample.to(experiment.device))
 
 
 def select_model(experiment):
@@ -176,10 +181,13 @@ def dump_model(experiment):
             else:
                 jit_model = model
 
-            if getYesNoInput("Save JIT model? (y/n)"):
-                save_path = os.path.join(experiment.results_dir, f"{model_name}_jit.ts")
-                torch.jit.save(jit_model, save_path)
-                iprint(f"Traced model saved to {save_path}")
+            if jit_traced or jit_scripted:
+                if getYesNoInput("Save JIT model? (y/n)"):
+                    save_path = os.path.join(
+                        experiment.results_dir, f"{model_name}_jit.ts"
+                    )
+                    torch.jit.save(jit_model, save_path)
+                    iprint(f"Traced model saved to {save_path}")
 
         except Exception as e:
             wprint("Failed to JIT Trace model!")
