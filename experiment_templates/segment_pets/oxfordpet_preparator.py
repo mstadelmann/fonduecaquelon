@@ -111,47 +111,46 @@ class OxfordPetDataset(torch.utils.data.Dataset):
         extract_archive(filepath)
 
 
-def createDatasets(experiment):
+def createDatasets(experiment, args=None):
     """Creates and returns data loaders and dataset statistics for the Oxford Pet dataset based on the experiment configuration."""
-    dargs = experiment.exp_def.data.OXPET.args
 
-    pin_mem = False if not experiment.is_cuda else dargs.get("pin_memory", False)
-    drop_last = dargs.get("drop_last", True)
+    pin_mem = False if not experiment.is_cuda else args.get("pin_memory", False)
+    drop_last = args.get("drop_last", True)
 
-    if not os.path.exists(dargs.base_path):
-        os.makedirs(dargs.base_path)
+    if not os.path.exists(args.base_path):
+        os.makedirs(args.base_path)
 
-    annotations_path = os.path.join(dargs.base_path, "annotations.tar.gz")
-    images_path = os.path.join(dargs.base_path, "images.tar.gz")
+    annotations_path = os.path.join(args.base_path, "annotations.tar.gz")
+    images_path = os.path.join(args.base_path, "images.tar.gz")
     if not (os.path.exists(annotations_path) and os.path.exists(images_path)):
-        OxfordPetDataset.download(dargs.base_path)
+        OxfordPetDataset.download(args.base_path)
 
     transform_img = experiment.transformers["resize_and_pad_bilinear"]
     transform_mask = experiment.transformers["resize_and_pad_nearest"]
 
     train_set = OxfordPetDataset(
-        dargs.base_path,
+        args.base_path,
         "train",
         transform_image=transform_img,
         transform_mask=transform_mask,
     )
     val_set = OxfordPetDataset(
-        dargs.base_path,
+        args.base_path,
         "valid",
         transform_image=transform_img,
         transform_mask=transform_mask,
     )
     test_set = OxfordPetDataset(
-        dargs.base_path,
+        args.base_path,
         "test",
         transform_image=transform_img,
         transform_mask=transform_mask,
     )
 
     # subsets
-    train_set = get_subset(train_set, dargs.get("subset_train", 1))
-    val_set = get_subset(val_set, dargs.get("subset_val", 1))
-    test_set = get_subset(test_set, dargs.get("subset_test", 1))
+    train_set = get_subset(train_set, args.get("subset_train", 1))
+    val_set = get_subset(val_set, args.get("subset_val", 1))
+    test_set = get_subset(test_set, args.get("subset_test", 1))
 
     n_train = len(train_set)
     n_val = len(val_set)
@@ -159,27 +158,27 @@ def createDatasets(experiment):
 
     train_loader = DataLoader(
         train_set,
-        batch_size=dargs.train_batch_size,
-        shuffle=dargs.shuffle_train,
-        num_workers=dargs.num_workers,
+        batch_size=args.train_batch_size,
+        shuffle=args.shuffle_train,
+        num_workers=args.num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,
     )
 
     test_loader = DataLoader(
         test_set,
-        batch_size=dargs.test_batch_size,
-        shuffle=dargs.shuffle_test,
-        num_workers=dargs.num_workers,
+        batch_size=args.test_batch_size,
+        shuffle=args.shuffle_test,
+        num_workers=args.num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,
     )
 
     val_loader = DataLoader(
         val_set,
-        batch_size=dargs.val_batch_size,
-        shuffle=dargs.shuffle_val,
-        num_workers=dargs.num_workers,
+        batch_size=args.val_batch_size,
+        shuffle=args.shuffle_val,
+        num_workers=args.num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,
     )

@@ -384,7 +384,10 @@ class fdqExperiment:
         self.copy_data_to_scratch()
         for data_name, data_source in self.exp_def.data.items():
             processor = self.import_class(file_path=data_source.processor)
-            self.data[data_name] = DictToObj(processor.createDatasets(self))
+            args = self.exp_def.data.get(data_name).args
+            self.data[data_name] = DictToObj(
+                processor.createDatasets(self, args)
+            )
         self.print_dataset_infos()
 
     def save_current_model(self):
