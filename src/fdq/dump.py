@@ -188,7 +188,7 @@ def dump_model(experiment):
 
             elif getYesNoInput("JIT Script model? (y/n)\n"):
                 # By working from the Python code, the compiler can include OPS like control flow.
-                jit_model = torch.jit.script(jit_model)
+                jit_model = torch.jit.script(model)
                 config["jit_scripted"] = True
                 iprint("Model scripted successfully!")
             else:
