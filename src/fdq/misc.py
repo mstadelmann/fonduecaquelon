@@ -161,6 +161,11 @@ class DictToObj:
             return default
         return res
 
+    def set(self, key, value):
+        if isinstance(value, dict):
+            value = DictToObj(value)
+        setattr(self, key, value)
+
 
 def replace_tilde_with_abs_path(d):
     """Fix user paths.

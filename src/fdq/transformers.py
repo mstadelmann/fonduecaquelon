@@ -188,6 +188,9 @@ def get_transformer(t_defs):
 
     EXP:
     Applies the exponential function to the input tensor.
+
+    NOP:
+    Does nothing, just returns the input tensor.
     """
     all_required_params = {
         "Stack3D": {"stack_n": [int]},
@@ -372,6 +375,9 @@ def get_transformer(t_defs):
 
     elif transformer_name == "EXP":
         transformer = transforms.Lambda(lambda t: torch.exp(t))
+
+    elif transformer_name == "NOP":
+        transformer = transforms.Lambda(lambda t: t)
 
     else:
         raise ValueError(f"Transformation {t_defs} is not supported!")

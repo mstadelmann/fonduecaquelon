@@ -814,22 +814,21 @@ class fdqExperiment:
                     "val_files_path",
                 ]:
                     fps = dargs.get(file_cat)
-                    if fps is None:
+                    if not fps:
                         continue
                     if not isinstance(fps, list):
                         raise ValueError(
                             f"Error, {data_name} dataset files must be a list of file paths. Got: {fps}"
                         )
-
-                    pbar = startProgBar(len(fps), f"Copy {file_cat} files to scratch")
                     new_paths = []
-                    for i, f in enumerate(fps):
+                    pbar = startProgBar(len(fps), f"Copy {file_cat} files to scratch")
+                    for i, src_file in enumerate(fps):
                         pbar.update(i)
-                        dst_file = os.path.join(self.scratch_data_path, f[1:])
+                        rel_path = os.path.relpath(src_file, "/")
+                        dst_file = os.path.join(self.scratch_data_path, rel_path)
                         os.makedirs(os.path.dirname(dst_file), exist_ok=True)
-                        shutil.copy(f, dst_file)
+                        shutil.copy(src_file, dst_file)
                         new_paths.append(dst_file)
-
                     dargs.set(file_cat, new_paths)
                     pbar.finish()
 
