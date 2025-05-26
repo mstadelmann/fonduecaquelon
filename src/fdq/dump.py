@@ -90,7 +90,7 @@ def select_model(experiment):
     )
 
 
-def run_test(experiment, example, model, optimized_model):
+def run_test(experiment, example, model, optimized_model, config=None):
     iprint("\n-----------------------------------------------------------")
     iprint("Running test")
     iprint("-----------------------------------------------------------\n")
@@ -134,9 +134,16 @@ def run_test(experiment, example, model, optimized_model):
         out2 = out2[0]
     loss = torch.nn.L1Loss()(out1, out2)
 
+    iprint("\n-----------------------------------------------------------")
     print(f"Average time (original model): {avg_time_model:.6f} s")
     print(f"Average time (optimized model): {avg_time_optimized:.6f} s")
     print(f"MAE between outputs: {loss.item():.6f}")
+
+    if config:
+        print("\nConfiguration used for optimization:")
+        for key, value in config.items():
+            print(f"  {key}: {value}")
+    iprint("-----------------------------------------------------------\n")
 
 
 def dump_model(experiment):
@@ -155,9 +162,6 @@ def dump_model(experiment):
 
     while True:
 
-        jit_traced = False
-        jit_scripted = False
-
         example = get_example_tensor(experiment)
         inputs = [
             Input(
@@ -167,27 +171,41 @@ def dump_model(experiment):
             )
         ]
 
+        config = {
+            "jit_traced": False,
+            "jit_scripted": False,
+            "input shape": example.shape,
+            "input dtype": example.dtype,
+        }
+
         try:
 
             if getYesNoInput("\n\nJIT Trace model? (y/n)\n"):
                 # Tracing is following the execution of your module; it cannot pick up OPS like control flow.
                 jit_model = torch.jit.trace(model, example, strict=False)
-                jit_traced = True
+                config["jit_traced"] = True
+                iprint("Model traced successfully!")
 
             elif getYesNoInput("JIT Script model? (y/n)\n"):
                 # By working from the Python code, the compiler can include OPS like control flow.
                 jit_model = torch.jit.script(jit_model)
-                jit_scripted = True
+                config["jit_scripted"] = True
+                iprint("Model scripted successfully!")
             else:
                 jit_model = model
 
-            if jit_traced or jit_scripted:
+            if config["jit_traced"] or config["jit_scripted"]:
                 if getYesNoInput("Save JIT model? (y/n)"):
                     save_path = os.path.join(
                         experiment.results_dir, f"{model_name}_jit.ts"
                     )
                     torch.jit.save(jit_model, save_path)
                     iprint(f"Traced model saved to {save_path}")
+
+                    if getYesNoInput("Run test on traced model? (y/n)"):
+                        traced_model = torch.jit.load(save_path)
+                        traced_model.eval()
+                        run_test(experiment, example, model, traced_model, config)
 
         except Exception as e:
             wprint("Failed to JIT Trace model!")
@@ -201,7 +219,7 @@ def dump_model(experiment):
 
             if getYesNoInput("Compile model? (y/n)\n"):
 
-                if jit_traced or jit_scripted:
+                if config["jit_traced"] or config["jit_scripted"]:
                     inter_rep = "torchscript"
                 else:
                     inter_rep = getIntInput(
@@ -229,6 +247,14 @@ def dump_model(experiment):
                 if getYesNoInput("Enable quint8 precision? (y/n)"):
                     enabled_precisions.add(torch.quint8)
 
+                config.update(
+                    {
+                        "intermediate representation": inter_rep,
+                        "truncate double": truncate_double,
+                        "enabled precisions": enabled_precisions,
+                    }
+                )
+
                 optimized_model = torch_tensorrt.compile(
                     jit_model,
                     backend="torch_tensorrt",
@@ -241,7 +267,7 @@ def dump_model(experiment):
                 iprint("Model compiled successfully!")
 
                 if getYesNoInput("Run test on compiled model? (y/n)"):
-                    run_test(experiment, example, model, optimized_model)
+                    run_test(experiment, example, model, optimized_model, config)
 
                 if getYesNoInput("Save optimized model? (y/n)"):
                     save_path = os.path.join(
