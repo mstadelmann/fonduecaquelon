@@ -10,7 +10,7 @@ import importlib
 import funkybob
 from datetime import datetime
 from torchview import draw_graph
-from fdq.ui_functions import iprint, eprint, wprint, show_train_progress
+from fdq.ui_functions import iprint, eprint, wprint, show_train_progress, startProgBar
 from fdq.testing import find_model_path
 from fdq.transformers import get_transformers
 from fdq.dump import dump_model
@@ -792,19 +792,46 @@ class fdqExperiment:
         iprint("----------------------------------------------------")
 
         for data_name, data_source in self.exp_def.data.items():
-            try:
-                # cleanup old data first -> in case this is a debugging run with dirty data
-                dst_path = os.path.join(self.scratch_data_path, data_name)
-                if os.path.exists(dst_path):
-                    shutil.rmtree(dst_path)
-                # shutil.copytree(data_source.args.base_path, dst_path)
-                os.system(f"rsync -au {data_source.args.base_path} {dst_path}")
-            except Exception as exc:
-                raise ValueError(
-                    f"Unable to copy {data_source.args.base_path} to  to scratch location at {self.scratch_data_path}!"
-                ) from exc
+            dargs = data_source.args
+            if dargs.base_path is not None:
+                try:
+                    # cleanup old data first -> in case this is a debugging run with dirty data
+                    dst_path = os.path.join(self.scratch_data_path, data_name)
+                    if os.path.exists(dst_path):
+                        shutil.rmtree(dst_path)
+                    os.system(f"rsync -au {dargs.base_path} {dst_path}")
+                except Exception as exc:
+                    raise ValueError(
+                        f"Unable to copy {dargs.base_path} to  to scratch location at {self.scratch_data_path}!"
+                    ) from exc
 
-            data_source.args.base_path = dst_path
+                dargs.base_path = dst_path
+            else:
+
+                for file_cat in [
+                    "train_files_path",
+                    "test_files_path",
+                    "val_files_path",
+                ]:
+                    fps = dargs.get(file_cat)
+                    if fps is None:
+                        continue
+                    if not isinstance(fps, list):
+                        raise ValueError(
+                            f"Error, {data_name} dataset files must be a list of file paths. Got: {fps}"
+                        )
+
+                    pbar = startProgBar(len(fps), f"Copy {file_cat} files to scratch")
+                    new_paths = []
+                    for i, f in enumerate(fps):
+                        pbar.update(i)
+                        dst_file = os.path.join(self.scratch_data_path, f[1:])
+                        os.makedirs(os.path.dirname(dst_file), exist_ok=True)
+                        shutil.copy(f, dst_file)
+                        new_paths.append(dst_file)
+
+                    dargs.set(file_cat, new_paths)
+                    pbar.finish()
 
         iprint("----------------------------------------------------")
         iprint("Copy datasets to temporary scratch location... Done!")
