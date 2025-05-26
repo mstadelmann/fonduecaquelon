@@ -150,6 +150,9 @@ def dump_model(experiment):
 
     while True:
 
+        jit_traced = False
+        jit_scripted = False
+
         example = get_example_tensor(experiment)
         inputs = [
             Input(
@@ -164,15 +167,19 @@ def dump_model(experiment):
             if getYesNoInput("\n\nJIT Trace model? (y/n)\n"):
                 # Tracing is following the execution of your module; it cannot pick up OPS like control flow.
                 jit_model = torch.jit.trace(model, example, strict=False)
-                inter_rep = "torchscript"
+                jit_traced = True
 
             elif getYesNoInput("JIT Script model? (y/n)\n"):
                 # By working from the Python code, the compiler can include OPS like control flow.
                 jit_model = torch.jit.script(jit_model)
-                inter_rep = "torchscript"
+                jit_scripted = True
             else:
                 jit_model = model
-                inter_rep = None
+
+            if getYesNoInput("Save JIT model? (y/n)"):
+                save_path = os.path.join(experiment.results_dir, f"{model_name}_jit.ts")
+                torch.jit.save(jit_model, save_path)
+                iprint(f"Traced model saved to {save_path}")
 
         except Exception as e:
             wprint("Failed to JIT Trace model!")
@@ -182,16 +189,13 @@ def dump_model(experiment):
             else:
                 break
 
-        if getYesNoInput("Save JIT model? (y/n)"):
-            save_path = os.path.join(experiment.results_dir, f"{model_name}_jit.ts")
-            torch.jit.save(jit_model, save_path)
-            iprint(f"Traced model saved to {save_path}")
-
         try:
 
             if getYesNoInput("Compile model? (y/n)\n"):
 
-                if inter_rep is None:
+                if jit_traced or jit_scripted:
+                    inter_rep = "torchscript"
+                else:
                     inter_rep = getIntInput(
                         "Select intermediate representation:\n"
                         "  1) default: Let Torch-TensorRT decide\n"
@@ -231,6 +235,13 @@ def dump_model(experiment):
                 if getYesNoInput("Run test on compiled model? (y/n)"):
                     run_test(experiment, example, model, optimized_model)
 
+                if getYesNoInput("Save optimized model? (y/n)"):
+                    save_path = os.path.join(
+                        experiment.results_dir, f"{model_name}_optimized.ts"
+                    )
+                    torch.save(optimized_model, save_path)
+                    iprint(f"Optimized model saved to {save_path}")
+
         except Exception as e:
             wprint("Failed to compile model!")
             print(e)
@@ -252,13 +263,6 @@ def dump_model(experiment):
         #     min_block_size=min_block_size,
         #     torch_executed_ops=torch_executed_ops,
         # )
-
-        if getYesNoInput("Save optimized model? (y/n)"):
-            save_path = os.path.join(
-                experiment.results_dir, f"{model_name}_optimized.ts"
-            )
-            torch.save(optimized_model, save_path)
-            iprint(f"Optimized model saved to {save_path}")
 
         if not getYesNoInput("Dump another model? (y/n)"):
             break
