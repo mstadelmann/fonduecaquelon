@@ -31,6 +31,16 @@ def resize_max_dim_pad(img, max_dim, interpol_mode, mode, value):
     return img
 
 
+def select_2d_from_3d(img, axis, index=None):
+    if index is None:
+        index = img.shape[axis] // 2  # Default to the middle slice
+    if axis < 0 or axis >= img.dim():
+        raise ValueError(
+            f"Axis {axis} is out of bounds for the tensor with {img.dim()} dimensions."
+        )
+    return img.select(dim=axis, index=index)
+
+
 def add_padding(img, pad, mode="constant", value=0):
     """Add padding to an N-dimensional input tensor.
 
@@ -143,6 +153,9 @@ def get_transformer(t_defs):
     UnPadding:
     Removes padding from the input tensor (e.g. to compute metrics on original image size)
 
+    Get2DFrom3D:
+    Selects a 2D slice from a 3D tensor along the specified axis and index.
+
     ADD:
     Adds the input tensor by the value specified in the parameter 'value'.
 
@@ -212,6 +225,7 @@ def get_transformer(t_defs):
             "padding_value": [int],
         },
         "UnPadding": {"padding_size": [list, int]},
+        "Get2DFrom3D": {"axis": [int]},
         "ADD": {"value": [float, int]},
         "MULT": {"value": [float, int]},
         "DIV": {"value": [float, int]},
@@ -328,6 +342,13 @@ def get_transformer(t_defs):
     elif transformer_name == "UnPadding":
         transformer = transforms.Lambda(
             lambda t: remove_padding(t, pad=parameters.get("padding_size"))
+        )
+
+    elif transformer_name == "Get2DFrom3D":
+        axis = parameters.get("axis", 0)
+        index = parameters.get("index")
+        transformer = transforms.Lambda(
+            lambda t: select_2d_from_3d(t, axis=axis, index=index)
         )
 
     elif transformer_name == "ADD":
