@@ -107,7 +107,7 @@
         "use_wandb": true,
         "wandb_project": "ox_pet_test",
         "wandb_entity": "stmd",
-        "wandb_key": "126aea51c74a8e5533f79411f171a1a2860a2e3a"
+        "wandb_key": "126aea51c74a8e5533f79411f171a1a2860a2e4b"
     },
     "test": {
         "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxpets_test.py",
@@ -119,7 +119,7 @@
         }
     },
     "slurm_cluster": {
-        "fdq_version": "0.0.7",
+        "fdq_version": "0.0.13",
         "python_env_module": "python/3.12.4",
         "uv_env_module": "uv/0.6.12",
         "scratch_results_path": "/scratch/fdq_results/",
