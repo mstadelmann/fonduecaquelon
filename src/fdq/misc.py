@@ -198,13 +198,14 @@ def get_subset(dataset, subset_ratio):
     return new_set
 
 
-def print_nb_weights(experiment, show_details=False):
+def print_nb_weights(experiment):
     """Print the number of parameters for each model in the experiment."""
     for model_name, model in experiment.models.items():
         iprint("----------------------------------")
         iprint(f"Model: {model_name}")
         nbp = sum(p.numel() for p in model.parameters())
         iprint(f"nb parameters: {nbp / 1e6:.2f}M")
+        iprint(f"Using Float32, This will require {nbp * 4 / 1e9:.3f} GB of memory.")
         iprint("----------------------------------")
 
 
