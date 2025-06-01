@@ -511,28 +511,24 @@ def init_wandb(experiment):
             "Wandb key is not set. Please set it in the experiment definition."
         )
 
-    exp_name = os.path.basename(experiment.results_dir)
-    if experiment.previous_slurm_job_id is not None:
-        try:
-            exp_name_all = exp_name.split("__")
-            exp_name = (
-                exp_name_all[0]
-                + "__"
-                + exp_name_all[1]
-                + "__"
-                + experiment.previous_slurm_job_id
-                + "->"
-                + exp_name_all[2]
+    slurm_str = ""
+    if experiment.is_slurm:
+        if experiment.previous_slurm_job_id is not None:
+            slurm_str = (
+                f"__{experiment.previous_slurm_job_id}->{experiment.slurm_job_id}"
             )
-        except Exception:
-            exp_name = os.path.basename(experiment.results_dir)
+        else:
+            slurm_str = f"__{experiment.slurm_job_id}"
+
+    dt_string = experiment.creation_time.strftime("%Y%m%d_%H%M%S")
+    wandb_name = f"{dt_string}__{experiment.experimentName[:20]}__{experiment.funky_name}{slurm_str}"
 
     try:
         wandb.login(key=experiment.exp_def.store.wandb_key)
         wandb.init(
             project=experiment.exp_def.store.wandb_project,
             entity=experiment.exp_def.store.wandb_entity,
-            name=exp_name,
+            name=wandb_name,
             config=experiment.exp_file,
         )
         experiment.wandb_initialized = True
@@ -591,5 +587,7 @@ def save_wandb(experiment, images=None, scalars=None):
                 img = image["data"]
             elif image.get("path") is not None:
                 img = image["path"]
+            else:
+                continue
 
             wandb.log({image["name"]: wandb.Image(img, caption=captions)})
