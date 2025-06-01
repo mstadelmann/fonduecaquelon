@@ -16,6 +16,7 @@ classifiers = [
 ]
 dependencies = [
   "chuchichaestli==0.2.7",
+  "einops==0.8.1",
   "torch==2.7.0",
   "torch_tensorrt==2.7.0",
   "torchvision==0.22.0",
