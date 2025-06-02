@@ -180,8 +180,9 @@ def ui_ask_test_mode(experiment: Any) -> None:
     exp_mode: int = getIntInput(
         "\nExperiment Selection:\n1: Last, 2: From List, 3: Path to model\n", [1, 3]
     )
+    model_mode: int = 1  # Default value
     if exp_mode in [1, 2]:
-        model_mode: int = getIntInput(
+        model_mode = getIntInput(
             "\nModel Selection:\n1: Last Model, 2: Best Model\n", [1, 2]
         )
         if exp_mode == 1 and model_mode == 1:

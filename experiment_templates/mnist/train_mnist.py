@@ -41,7 +41,7 @@ def fdq_train(experiment: fdqExperiment) -> None:
                 loss_tensor = (
                     experiment.losses["cp"](output, targets) / experiment.gradacc_iter
                 )
-                if experiment.useAMP:
+                if experiment.useAMP and experiment.scaler is not None:
                     experiment.scaler.scale(loss_tensor).backward()
                 else:
                     loss_tensor.backward()
@@ -59,7 +59,6 @@ def fdq_train(experiment: fdqExperiment) -> None:
         pbar = startProgBar(data.n_val_samples, "validation...")
 
         for nb_batch, batch in enumerate(data.val_data_loader):
-            experiment.current_val_batch = nb_batch
             pbar.update(nb_batch * experiment.exp_def.data.MNIST.args.val_batch_size)
 
             inputs, targets = batch

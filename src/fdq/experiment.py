@@ -5,7 +5,7 @@ import math
 import shutil
 import argparse
 import importlib
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import torch
@@ -52,7 +52,7 @@ class fdqExperiment:
         self.mode: FCQmode = FCQmode()
         self.creation_time: datetime = datetime.now()
         self.finish_time: datetime | None = None
-        self.run_time: datetime | None = None
+        self.run_time: timedelta | None = None
         self.run_info: dict[str, Any] = {}
         self.gradacc_iter: int = self.exp_def.train.args.get(
             "accumulate_grad_batches", default=1
@@ -455,7 +455,7 @@ class fdqExperiment:
         self.createLosses()
 
         if self.useAMP:
-            self.scaler = torch.amp.GradScaler(device=self.device, enabled=True)
+            self.scaler = torch.amp.GradScaler(device=str(self.device), enabled=True)
 
         if self.inargs.resume_path is not None:
             iprint(
@@ -713,13 +713,14 @@ class fdqExperiment:
         length_loader = self.data[loader_name].n_train_batches
 
         if ((b_idx + 1) % self.gradacc_iter == 0) or (b_idx + 1 == length_loader):
-            if self.useAMP:
-                self.scaler.step(self.optimizers[model_name])
-                self.scaler.update()
-            else:
-                self.optimizers[model_name].step()
-
-            self.optimizers[model_name].zero_grad()
+            optimizer = self.optimizers[model_name]
+            if optimizer is not None:
+                if self.useAMP:
+                    self.scaler.step(optimizer)
+                    self.scaler.update()
+                else:
+                    optimizer.step()
+                optimizer.zero_grad()
 
     def finalize_epoch(
         self,

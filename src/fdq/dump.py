@@ -224,13 +224,13 @@ def compile_model(
         if config["jit_traced"] or config["jit_scripted"]:
             inter_rep = "torchscript"
         else:
-            inter_rep = getIntInput(
+            inter_rep_choice = getIntInput(
                 "Select intermediate representation:\n"
                 "  1) default: Let Torch-TensorRT decide\n"
                 "  2) ts: TorchScript\n",
                 drange=[1, 2],
             )
-            inter_rep = "default" if inter_rep == 1 else "ts"
+            inter_rep = "default" if inter_rep_choice == 1 else "ts"
 
         truncate_double = getYesNoInput(
             "Truncate long and double? (y/n), default = y\n"

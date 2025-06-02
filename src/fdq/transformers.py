@@ -228,19 +228,25 @@ def get_transformer_by_names(
         )
 
     elif transformer_name == "Padding":
+        pad = parameters.get("padding_size")
+        if pad is None:
+            raise ValueError("padding_size must be provided for Padding transformer.")
         transformer = transforms.Lambda(
             lambda t: add_padding(
                 t,
-                pad=parameters.get("padding_size"),
-                mode=parameters.get("padding_mode"),
-                value=parameters.get("padding_value"),
+                pad=pad,
+                mode=parameters.get("padding_mode", "constant"),
+                value=parameters.get("padding_value", 0),
             )
         )
 
     elif transformer_name == "UnPadding":
-        transformer = transforms.Lambda(
-            lambda t: remove_padding(t, pad=parameters.get("padding_size"))
-        )
+        pad = parameters.get("padding_size")
+        if not isinstance(pad, list):
+            raise ValueError(
+                "padding_size must be provided as a list for UnPadding transformer."
+            )
+        transformer = transforms.Lambda(lambda t: remove_padding(t, pad=pad))
 
     elif transformer_name == "Get2DFrom3D":
         axis = parameters.get("axis", 0)

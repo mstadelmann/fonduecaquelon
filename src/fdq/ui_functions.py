@@ -12,7 +12,7 @@ colorama_initialized: bool | None = None
 
 def getIntInput(message: str, drange: Sequence[int]) -> int:
     """UI helper function to get an integer input from the user within a specified range."""
-    tmode: int | None = None
+    tmode: str | int | None = None
     while not isinstance(tmode, int):
         tmode = input(message)
         try:
@@ -32,7 +32,7 @@ def getYesNoInput(message: str) -> bool:
 
     Returns True if 'y' is entered, False otherwise.
     """
-    tmode: str | None = None
+    tmode: str | int | None = None
     while not isinstance(tmode, str):
         tmode = input(message)
         if tmode.lower() not in ["y", "n"]:
@@ -44,7 +44,7 @@ def getYesNoInput(message: str) -> bool:
 
 def getFloatInput(message: str, drange: Sequence[float]) -> float:
     """UI helper function to get a float input from the user within a specified range."""
-    tmode: float | None = None
+    tmode: str | float | None = None
     while not isinstance(tmode, float):
         tmode = input(message)
         try:

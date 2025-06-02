@@ -1,6 +1,6 @@
 [project]
 name = "fdq"
-version = "0.0.15"
+version = "0.0.16"
 license = { file = "LICENSE" }
 authors = [
   { name = "Marc Stadelmann", email = "stdma@pm.me" },
@@ -68,6 +68,10 @@ ignore = ["D100","D102"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.mypy]
+disable_error_code = ["union-attr"]
+ignore_missing_imports = true
 
 [project.scripts]
 fdq = "fdq.run_experiment:main"
