@@ -119,7 +119,7 @@ def show_train_progress(experiment: Any) -> None:
             fig.plot(x, valLossA, label="valL", width=50, height=15)
         fig.show()
 
-    except (ImportError, AttributeError, RuntimeError):
+    except Exception:
         print("GNUplot is not available, loss is not plotted.")
 
     iprint(
