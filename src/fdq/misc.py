@@ -4,6 +4,8 @@ import copy
 import json
 import random
 from datetime import datetime
+from typing import Any
+from collections.abc import Callable, Iterator
 
 import cv2
 import torch
@@ -22,22 +24,22 @@ class FCQmode:
 
     def __init__(self) -> None:
         """Initialize the FCQmode object with default operation and test modes, and create dynamic setters."""
-        self._op_mode = "init"
-        self.allowed_op_modes = [
+        self._op_mode: str = "init"
+        self.allowed_op_modes: list[str] = [
             "init",  # initial state
             "train",  # training mode
             "test",  # testing
             "unittest",  # running unit tests
         ]
-        self._test_mode = "best"
-        self.allowed_test_modes = [
+        self._test_mode: str = "best"
+        self.allowed_test_modes: list[str] = [
             "best",  # test best model from last experiment - DEFAULT!
             "last",  # test last trained model from last experiment
             "custom_last",  # test last model from selected experiment
             "custom_best",  # test best model from selected experiment
             "custom_path",  # test with manually defined model path
         ]
-        self._locked = False  # Flag to lock the mode when set to unittest
+        self._locked: bool = False  # Flag to lock the mode when set to unittest
 
         # Dynamically create setter methods
         for mode in self.allowed_op_modes:
@@ -46,14 +48,14 @@ class FCQmode:
         for mode in self.allowed_test_modes:
             setattr(self, mode, self._create_setter("_test_mode", mode))
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return the string representation of the FCQmode object."""
         if self._op_mode == "test":
             return f"<{self.__class__.__name__}: {self._op_mode} / {self._test_mode}>"
         return f"<{self.__class__.__name__}: {self._op_mode}>"
 
-    def _create_setter(self, attribute, value):
-        def setter():
+    def _create_setter(self, attribute: str, value: str) -> Callable[[], None]:
+        def setter() -> None:
             if self._locked and attribute == "_op_mode":
                 wprint("Unittest mode is locked. Cannot change mode.")
             else:
@@ -64,17 +66,17 @@ class FCQmode:
         return setter
 
     @property
-    def op_mode(self):
+    def op_mode(self) -> Any:
         class OpMode:
             """Helper class to provide boolean properties for each allowed operation mode."""
 
-            def __init__(self, parent):
+            def __init__(self, parent: "FCQmode") -> None:
                 self.parent = parent
 
-            def __repr__(self):
+            def __repr__(self) -> str:
                 return f"<{self.__class__.__name__}: {self.parent._op_mode}>"
 
-            def __getattr__(self, name):
+            def __getattr__(self, name: str) -> bool:
                 if name in self.parent.allowed_op_modes:
                     return self.parent._op_mode == name
                 raise AttributeError(f"'OpMode' object has no attribute '{name}'")
@@ -82,17 +84,17 @@ class FCQmode:
         return OpMode(self)
 
     @property
-    def test_mode(self):
+    def test_mode(self) -> Any:
         class TestMode:
             """Helper class to provide boolean properties for each allowed test mode."""
 
-            def __init__(self, parent):
+            def __init__(self, parent: "FCQmode") -> None:
                 self.parent = parent
 
-            def __repr__(self):
+            def __repr__(self) -> str:
                 return f"<{self.__class__.__name__}: {self.parent._test_mode}>"
 
-            def __getattr__(self, name):
+            def __getattr__(self, name: str) -> bool:
                 if name in self.parent.allowed_test_modes:
                     return self.parent._test_mode == name
                 raise AttributeError(f"'TestMode' object has no attribute '{name}'")
@@ -100,7 +102,7 @@ class FCQmode:
         return TestMode(self)
 
 
-def recursive_dict_update(d_parent, d_child):
+def recursive_dict_update(d_parent: dict, d_child: dict) -> dict:
     """Recursively update the parent dictionary with values from the child dictionary, merging nested dictionaries."""
     for key, value in d_child.items():
         if (
@@ -118,40 +120,40 @@ def recursive_dict_update(d_parent, d_child):
 class DictToObj:
     """A class that converts a dictionary into an object, recursively handling nested dictionaries."""
 
-    def __init__(self, dictionary):
+    def __init__(self, dictionary: dict) -> None:
         """Initialize the object by converting a dictionary into attributes, recursively handling nested dictionaries."""
         for key, value in dictionary.items():
             if isinstance(value, dict):
                 value = DictToObj(value)
             setattr(self, key, value)
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         """Return None if the requested attribute is not found."""
         return None
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return the string representation of the object."""
         keys = ", ".join(self.__dict__.keys())
         return f"<{self.__class__.__name__}: {keys}>"
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Return the string representation of the object."""
         return self.__repr__()
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator:
         """Return an iterator over the object's dictionary items."""
         return iter(self.__dict__.items())
 
-    def keys(self):
+    def keys(self) -> Any:
         return self.__dict__.keys()
 
-    def items(self):
+    def items(self) -> Any:
         return self.__dict__.items()
 
-    def values(self):
+    def values(self) -> Any:
         return self.__dict__.values()
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         result = {}
         for key, value in self.__dict__.items():
             if isinstance(value, DictToObj):
@@ -160,19 +162,19 @@ class DictToObj:
                 result[key] = value
         return result
 
-    def get(self, key, default=None):
+    def get(self, key: str, default: Any = None) -> Any:
         res = getattr(self, key)
         if res is None:
             return default
         return res
 
-    def set(self, key, value):
+    def set(self, key: str, value: Any) -> None:
         if isinstance(value, dict):
             value = DictToObj(value)
         setattr(self, key, value)
 
 
-def replace_tilde_with_abs_path(d):
+def replace_tilde_with_abs_path(d: dict) -> None:
     """Fix user paths.
 
     Recursively traverse a dictionary and replace string values starting with "~/"
@@ -185,7 +187,7 @@ def replace_tilde_with_abs_path(d):
             d[key] = os.path.expanduser(value)
 
 
-def get_subset(dataset, subset_ratio):
+def get_subset(dataset: Any, subset_ratio: float) -> Any:
     """Return a random subset of the dataset according to the given ratio.
 
     Args:
@@ -203,7 +205,7 @@ def get_subset(dataset, subset_ratio):
     return new_set
 
 
-def print_nb_weights(experiment):
+def print_nb_weights(experiment: Any) -> None:
     """Print the number of parameters for each model in the experiment."""
     for model_name, model in experiment.models.items():
         iprint("----------------------------------")
@@ -214,7 +216,7 @@ def print_nb_weights(experiment):
         iprint("----------------------------------")
 
 
-def remove_file(path):
+def remove_file(path: str | None) -> None:
     """Remove the file at the given path if it exists."""
     if path is not None:
         try:
@@ -223,7 +225,7 @@ def remove_file(path):
             eprint(f"{path} does not exist!")
 
 
-def store_processing_infos(experiment):
+def store_processing_infos(experiment: Any) -> None:
     """Store experiment information to results directory."""
     experiment.run_info = collect_processing_infos(experiment=experiment)
     info_path = os.path.join(experiment.results_dir, "info.json")
@@ -232,7 +234,7 @@ def store_processing_infos(experiment):
         json.dump(experiment.run_info, write_file, indent=4, sort_keys=True)
 
 
-def collect_processing_infos(experiment=None):
+def collect_processing_infos(experiment: Any | None = None) -> dict:
     """Collect and return processing information about the current experiment and environment."""
     try:
         sysname = os.uname()[1]
@@ -260,7 +262,7 @@ def collect_processing_infos(experiment=None):
     except (AttributeError, KeyError):
         run_t_string = None
 
-    data = {
+    data: dict = {
         "User": username,
         "System": sysname,
         "Python V.": sys.version,
@@ -313,7 +315,7 @@ def collect_processing_infos(experiment=None):
     return data
 
 
-def avoid_nondeterministic(experiment, seed_overwrite=0):
+def avoid_nondeterministic(experiment: Any, seed_overwrite: int = 0) -> None:
     """Avoid nondeterministic behavior.
 
     https://pytorch.org/docs/stable/notes/randomness.html
@@ -335,7 +337,7 @@ def avoid_nondeterministic(experiment, seed_overwrite=0):
     torch.use_deterministic_algorithms(mode=True)
 
 
-def save_train_history(experiment):
+def save_train_history(experiment: Any) -> None:
     """Save training history to json and pdf."""
     try:
         out_json = os.path.join(experiment.results_dir, "history.json")
@@ -367,7 +369,7 @@ def save_train_history(experiment):
         wprint("Error - unable to store training history!")
 
 
-def showImg_cv(tensor_image, window_name="Image"):
+def showImg_cv(tensor_image: torch.Tensor, window_name: str = "Image") -> None:
     """Displays a PyTorch tensor image using OpenCV.
 
     Supports:
@@ -414,7 +416,7 @@ def showImg_cv(tensor_image, window_name="Image"):
     cv2.destroyAllWindows()
 
 
-def init_tensorboard(experiment):
+def init_tensorboard(experiment: Any) -> None:
     """Initialize TensorBoard for the experiment and provide usage instructions."""
     if not experiment.useTensorboard:
         return
@@ -426,7 +428,7 @@ def init_tensorboard(experiment):
     iprint("-------------------------------------------------------")
 
 
-def add_graph(experiment):
+def add_graph(experiment: Any) -> None:
     """Add the model graph to TensorBoard using a sample input from the training data loader."""
     try:
         dummy_input = None
@@ -444,7 +446,7 @@ def add_graph(experiment):
 
 
 @torch.no_grad()
-def _log_tb_images(experiment, images):
+def _log_tb_images(experiment: Any, images: list | dict | None) -> None:
     if images is not None:
         if not isinstance(images, list):
             if isinstance(images, dict):
@@ -467,7 +469,12 @@ def _log_tb_images(experiment, images):
 
 
 @torch.no_grad()
-def save_tensorboard(experiment, images=None, scalars=None, text=None):
+def save_tensorboard(
+    experiment: Any,
+    images: list | dict | None = None,
+    scalars: dict | None = None,
+    text: dict | None = None,
+) -> None:
     """Log images and scalars to tensorboard.
 
     Scalars: {name: value}
@@ -507,7 +514,7 @@ def save_tensorboard(experiment, images=None, scalars=None, text=None):
     _log_tb_images(experiment, images)
 
 
-def init_wandb(experiment):
+def init_wandb(experiment: Any) -> bool:
     """Initialize weights and biases."""
     if experiment.exp_def.store.wandb_project is None:
         raise ValueError(
@@ -559,7 +566,7 @@ def init_wandb(experiment):
 
 
 @torch.no_grad()
-def _log_wandb_images(images):
+def _log_wandb_images(images: list | dict | None) -> None:
     if images is not None:
         if not isinstance(images, list):
             if isinstance(images, dict):
@@ -583,7 +590,11 @@ def _log_wandb_images(images):
 
 
 @torch.no_grad()
-def save_wandb(experiment, images=None, scalars=None):
+def save_wandb(
+    experiment: Any,
+    images: list | dict | None = None,
+    scalars: dict | None = None,
+) -> None:
     """Track experiment data with weights and biases.
 
     Args:

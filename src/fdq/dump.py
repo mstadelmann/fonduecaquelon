@@ -1,5 +1,6 @@
 import os
 import time
+from typing import Any
 import torch
 import torch_tensorrt
 from torch_tensorrt import Input
@@ -7,9 +8,9 @@ from fdq.misc import iprint, wprint
 from fdq.ui_functions import getIntInput, getYesNoInput
 
 
-def select_experiment(experiment):
+def select_experiment(experiment: Any) -> None:
     """Interactively select and load an experiment for model dumping."""
-    sel_mode = getIntInput(
+    sel_mode: int = getIntInput(
         "Select experiment for model dumping:\n"
         "  1) last exp best model\n"
         "  2) last exp last model\n"
@@ -33,11 +34,11 @@ def select_experiment(experiment):
     experiment.load_trained_models()
 
 
-def user_set_dtype(example):
+def user_set_dtype(example: torch.Tensor) -> torch.Tensor:
     """Interactively set the dtype of the example tensor based on user input."""
     print("Example data type:", example.dtype)
     print("Example shape:", example.shape)
-    sel_mode = getIntInput(
+    sel_mode: int = getIntInput(
         "Define model tracing input dtype:\n  1) float32\n  2) float16\n  3) int8\n  4) float64\n",
         drange=[1, 4],
     )
@@ -52,10 +53,10 @@ def user_set_dtype(example):
     return example
 
 
-def get_example_tensor(experiment):
+def get_example_tensor(experiment: Any) -> torch.Tensor:
     """Interactively select and return an example tensor from the experiment's data sources."""
     sources = list(experiment.data.keys())
-    idx = (
+    idx: int = (
         getIntInput(
             f"Select data source for tracing sample shape: {[f'{i + 1}) {src}' for i, src in enumerate(sources)]}",
             drange=[1, len(sources)],
@@ -79,10 +80,10 @@ def get_example_tensor(experiment):
     return user_set_dtype(sample.to(experiment.device))
 
 
-def select_model(experiment):
+def select_model(experiment: Any) -> tuple[str, torch.nn.Module]:
     """Interactively select a model from the experiment and return its name and instance."""
     model_names = list(experiment.models.keys())
-    idx = (
+    idx: int = (
         getIntInput(
             f"Select model to dump: {[f'{i + 1}) {model}' for i, model in enumerate(model_names)]}",
             drange=[1, len(model_names)],
@@ -95,7 +96,13 @@ def select_model(experiment):
     )
 
 
-def run_test(experiment, example, model, optimized_model, config=None):
+def run_test(
+    experiment: Any,
+    example: torch.Tensor,
+    model: torch.nn.Module,
+    optimized_model: torch.nn.Module,
+    config: dict[str, Any] = None,
+) -> None:
     """Run a test comparing the original and optimized models, measuring speed and output difference."""
     iprint("\n-----------------------------------------------------------")
     iprint("Running test")
@@ -152,7 +159,13 @@ def run_test(experiment, example, model, optimized_model, config=None):
     iprint("-----------------------------------------------------------\n")
 
 
-def jit_trace_model(experiment, config, model, model_name, example):
+def jit_trace_model(
+    experiment: Any,
+    config: dict[str, Any],
+    model: torch.nn.Module,
+    model_name: str,
+    example: torch.Tensor,
+) -> tuple[torch.nn.Module, dict[str, Any]]:
     """Interactively JIT trace or script a model, optionally save and test the JIT model, and return the processed model and updated config."""
     if getYesNoInput("\n\nJIT Trace model? (y/n)\n"):
         # Tracing is following the execution of your module; it cannot pick up OPS like control flow.
@@ -182,7 +195,13 @@ def jit_trace_model(experiment, config, model, model_name, example):
     return jit_model, config
 
 
-def compile_model(config, experiment, example, model, model_name):
+def compile_model(
+    config: dict[str, Any],
+    experiment: Any,
+    example: torch.Tensor,
+    model: torch.nn.Module,
+    model_name: str,
+) -> None:
     """Compile, optionally JIT trace/script, and optimize a model using Torch-TensorRT, with interactive configuration and testing."""
     try:
         jit_model, config = jit_trace_model(
@@ -261,7 +280,7 @@ def compile_model(config, experiment, example, model, model_name):
             iprint(f"Optimized model saved to {save_path}")
 
 
-def dump_model(experiment):
+def dump_model(experiment: Any) -> None:
     """Interactively dumps, traces, scripts, compiles, tests, and saves a model from the given experiment."""
     iprint("\n-----------------------------------------------------------")
     iprint("Dump model")
@@ -279,7 +298,7 @@ def dump_model(experiment):
     while True:
         example = get_example_tensor(experiment)
 
-        config = {
+        config: dict[str, Any] = {
             "jit_traced": False,
             "jit_scripted": False,
             "input shape": example.shape,
@@ -295,20 +314,6 @@ def dump_model(experiment):
             if getYesNoInput("Try again? (y/n)"):
                 continue
             break
-
-        # workspace_size = 20 << 30
-        # min_block_size = 7
-        # torch_executed_ops = {}
-        # optimized_model = torch_tensorrt.compile(
-        #     model,
-        #     ir="torch_compile",
-        #     inputs=example,
-        #     enabled_precisions={torch.half},
-        #     debug=True,
-        #     workspace_size=workspace_size,
-        #     min_block_size=min_block_size,
-        #     torch_executed_ops=torch_executed_ops,
-        # )
 
         if not getYesNoInput("Dump another model? (y/n)"):
             break

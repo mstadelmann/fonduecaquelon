@@ -9,11 +9,11 @@ class simpleNet(nn.Module):
 
     def __init__(
         self,
-        nb_in_channels=1,
-        input_shape=[28, 28],
-        nodes_per_layer=[84, 50],
-        nb_out_channels=10,
-    ):
+        nb_in_channels: int = 1,
+        input_shape: list[int] = [28, 28],
+        nodes_per_layer: list[int] = [84, 50],
+        nb_out_channels: int = 10,
+    ) -> None:
         """Initialize the simpleNet neural network.
 
         Args:
@@ -24,23 +24,24 @@ class simpleNet(nn.Module):
         """
         super().__init__()
 
-        self.nb_in_channels = nb_in_channels
-        self.nb_out_channels = nb_out_channels
-        self.input_shape = input_shape
-        self.in_shape_flat = input_shape[0] * input_shape[1] * self.nb_in_channels
+        self.nb_in_channels: int = nb_in_channels
+        self.nb_out_channels: int = nb_out_channels
+        self.input_shape: list[int] = input_shape
+        self.in_shape_flat: int = input_shape[0] * input_shape[1] * self.nb_in_channels
 
-        self.fc_start = nn.Linear(self.in_shape_flat, nodes_per_layer[0])
+        self.fc_start: nn.Linear = nn.Linear(self.in_shape_flat, nodes_per_layer[0])
 
         # make a cleaner version of this with nn.Sequential(...)
-        self.fcvar = []
-        for i in range(len(nodes_per_layer) - 1):
-            self.fcvar.append(nn.Linear(nodes_per_layer[i], nodes_per_layer[i + 1]))
+        self.fcvar: nn.ModuleList = nn.ModuleList(
+            [
+                nn.Linear(nodes_per_layer[i], nodes_per_layer[i + 1])
+                for i in range(len(nodes_per_layer) - 1)
+            ]
+        )
 
-        self.fcvar = nn.ModuleList(self.fcvar)
+        self.fc_end: nn.Linear = nn.Linear(nodes_per_layer[-1], self.nb_out_channels)
 
-        self.fc_end = nn.Linear(nodes_per_layer[-1], self.nb_out_channels)
-
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         # can we rewrite this as = x.view(-1).unsqueeze(0) ?
         x = x.reshape(-1, self.in_shape_flat).type(torch.float32)
         x = F.relu(self.fc_start(x))
@@ -52,7 +53,7 @@ class simpleNet(nn.Module):
         x = self.fc_end(x)
         return x
 
-    def example(self):
+    def example(self) -> torch.Tensor:
         """Generate a random tensor example input for the network."""
         return torch.rand(1, self.nb_in_channels, 165, 270)
 

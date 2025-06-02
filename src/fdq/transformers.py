@@ -1,9 +1,17 @@
+from typing import Any
+from collections.abc import Callable
 import torch
 import torch.nn.functional as F
 from torchvision.transforms import v2 as transforms
 
 
-def resize_max_dim_pad(img, max_dim, interpol_mode, mode, value):
+def resize_max_dim_pad(
+    img: torch.Tensor,
+    max_dim: int,
+    interpol_mode: str,
+    mode: str,
+    value: int | float,
+) -> torch.Tensor:
     """Resizes an image tensor so its largest dimension matches 'max_dim' and pads the rest to make it square.
 
     Args:
@@ -43,7 +51,9 @@ def resize_max_dim_pad(img, max_dim, interpol_mode, mode, value):
     return img
 
 
-def select_2d_from_3d(img, axis, index=None):
+def select_2d_from_3d(
+    img: torch.Tensor, axis: int, index: int | None = None
+) -> torch.Tensor:
     """Selects a 2D slice from a 3D tensor along the specified axis and index.
 
     Args:
@@ -63,7 +73,12 @@ def select_2d_from_3d(img, axis, index=None):
     return img.select(dim=axis, index=index)
 
 
-def add_padding(img, pad, mode="constant", value=0):
+def add_padding(
+    img: torch.Tensor,
+    pad: list | tuple,
+    mode: str = "constant",
+    value: int | float = 0,
+) -> torch.Tensor:
     """Add padding to an N-dimensional input tensor.
 
     Img = N-di m input tensor
@@ -84,7 +99,7 @@ def add_padding(img, pad, mode="constant", value=0):
     return torch.nn.functional.pad(input=img, pad=pad, mode=mode, value=value)
 
 
-def remove_padding(img, pad):
+def remove_padding(img: torch.Tensor, pad: list) -> torch.Tensor:
     """Removes padding from tensor.
 
     img = N-di m input tensor
@@ -119,7 +134,7 @@ def remove_padding(img, pad):
     raise ValueError("Only 4D and 5D tensors are supported!")
 
 
-def get_transformers(t_defs):
+def get_transformers(t_defs: Any) -> transforms.Compose:
     """Compose a sequence of transformers specified by their names or configuration dictionaries.
 
     Args:
@@ -131,7 +146,9 @@ def get_transformers(t_defs):
     return transforms.Compose([get_transformer(t) for t in t_defs])
 
 
-def get_transformer_by_names(transformer_name, parameters, t_defs):
+def get_transformer_by_names(
+    transformer_name: str, parameters: dict[str, Any] | None, t_defs: Any
+) -> Callable:
     """Returns a torchvision transformer instance based on the given transformer name and parameters.
 
     Args:
@@ -170,7 +187,7 @@ def get_transformer_by_names(transformer_name, parameters, t_defs):
 
     elif transformer_name == "CLAMP_perc":
 
-        def _rdm_reduce(tensor):
+        def _rdm_reduce(tensor: torch.Tensor) -> torch.Tensor:
             # random reduce tensor size for quantile computation -> estimation
             n = 12582912  # random defined as 8*3*32*128*128
             if tensor.numel() > n:
@@ -287,7 +304,7 @@ def get_transformer_by_names(transformer_name, parameters, t_defs):
     return transformer
 
 
-def get_transformer(t_defs):
+def get_transformer(t_defs: Any) -> Callable:
     """Tensor Transformers for image processing.
 
     Stack3D
