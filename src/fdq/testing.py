@@ -14,7 +14,7 @@ def get_nb_exp_epochs(path):
         with open(path, encoding="utf8") as f:
             data = json.load(f)
         return len(data["train"])
-    except Exception:
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
         return 0
 
 
@@ -122,7 +122,7 @@ def find_model_path(experiment):
             f"No corresponding model file was found in '{experiment_res_path}'. Specify path manually!"
         )
 
-    elif len(possible_files) > 1:
+    if len(possible_files) > 1:
         wprint(
             f"Multiple corresponding models files were found in '{experiment_res_path}':"
         )

@@ -1,18 +1,20 @@
-import json
+import sys
 import os
+import copy
+import json
+import random
+from datetime import datetime
+
 import cv2
 import torch
-import random
-import sys
 import numpy as np
-import copy
-import wandb
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
-from fdq.ui_functions import iprint, wprint, eprint
-from datetime import datetime
 from torch.utils.data import random_split
 from torch.utils.tensorboard import SummaryWriter
+import wandb
+
+from fdq.ui_functions import iprint, wprint, eprint
 
 
 class FCQmode:
@@ -48,8 +50,7 @@ class FCQmode:
         """Return the string representation of the FCQmode object."""
         if self._op_mode == "test":
             return f"<{self.__class__.__name__}: {self._op_mode} / {self._test_mode}>"
-        else:
-            return f"<{self.__class__.__name__}: {self._op_mode}>"
+        return f"<{self.__class__.__name__}: {self._op_mode}>"
 
     def _create_setter(self, attribute, value):
         def setter():
@@ -65,6 +66,8 @@ class FCQmode:
     @property
     def op_mode(self):
         class OpMode:
+            """Helper class to provide boolean properties for each allowed operation mode."""
+
             def __init__(self, parent):
                 self.parent = parent
 
@@ -81,6 +84,8 @@ class FCQmode:
     @property
     def test_mode(self):
         class TestMode:
+            """Helper class to provide boolean properties for each allowed test mode."""
+
             def __init__(self, parent):
                 self.parent = parent
 
@@ -214,8 +219,8 @@ def remove_file(path):
     if path is not None:
         try:
             os.remove(path)
-        except Exception:
-            eprint(f"{path} does not exists!")
+        except FileNotFoundError:
+            eprint(f"{path} does not exist!")
 
 
 def store_processing_infos(experiment):
@@ -231,28 +236,28 @@ def collect_processing_infos(experiment=None):
     """Collect and return processing information about the current experiment and environment."""
     try:
         sysname = os.uname()[1]
-    except Exception:
+    except AttributeError:
         sysname = None
 
     try:
         username = os.getlogin()
-    except Exception:
+    except OSError:
         username = None
 
     try:
         create_dt_string = experiment.creation_time.strftime("%Y%m%d_%H_%M_%S")
-    except Exception:
+    except (AttributeError, KeyError):
         create_dt_string = None
 
     try:
         stop_dt_string = experiment.finish_time.strftime("%Y%m%d_%H_%M_%S")
-    except Exception:
+    except (AttributeError, KeyError):
         stop_dt_string = None
 
     try:
         td = experiment.run_time
         run_t_string = f"days: {td.days}, hours: {td.seconds // 3600}, minutes: {td.seconds % 3600 / 60.0:.0f}"
-    except Exception:
+    except (AttributeError, KeyError):
         run_t_string = None
 
     data = {
@@ -264,14 +269,14 @@ def collect_processing_infos(experiment=None):
         "start_datetime": create_dt_string,
         "end_datetime": stop_dt_string,
         "total_runtime": run_t_string,
-        # "epochs": f"{experiment.current_epoch + 1} / {experiment.nb_epochs}",
+        "epochs": f"{experiment.current_epoch + 1} / {experiment.nb_epochs}",
         "last_update": datetime.now().strftime("%Y%m%d_%H_%M_%S"),
-        # "is_early_stop_val_loss": experiment.early_stop_val_loss_detected,
-        # "is_early_stop_train_loss": experiment.early_stop_train_loss_detected,
-        # "is_early_stop_nan": experiment.early_stop_nan_detected,
-        # "best_train_loss_epoch": experiment.new_best_train_loss_ep_id,
-        # "best_val_loss_epoch": experiment.new_best_val_loss_ep_id,
+        "best_train_loss_epoch": experiment.new_best_train_loss_ep_id,
+        "best_val_loss_epoch": experiment.new_best_val_loss_ep_id,
     }
+
+    if experiment.early_stop_detected:
+        data["early_stop_reason"] = experiment.early_stop_detected
 
     if experiment.is_slurm:
         data["slurm_job_id"] = experiment.slurm_job_id
@@ -287,7 +292,7 @@ def collect_processing_infos(experiment=None):
         # add nb model parameters to info file
         model_weights = sum(p.numel() for p in experiment.model.parameters())
         data["Number of model parameters"] = f"{model_weights / 1e6:.2f}M"
-    except Exception:
+    except AttributeError:
         pass
 
     try:
@@ -302,7 +307,7 @@ def collect_processing_infos(experiment=None):
             "Validation set is a subset of the training set.": experiment.valset_is_train_subset,
             "Validation subset ratio": experiment.val_from_train_ratio,
         }
-    except Exception:
+    except AttributeError:
         pass
 
     return data
@@ -358,7 +363,7 @@ def save_train_history(experiment):
         fig1.savefig(out_pdf)
         plt.close(fig1)
 
-    except Exception:
+    except (OSError, AttributeError, ValueError):
         wprint("Error - unable to store training history!")
 
 
@@ -426,7 +431,7 @@ def add_graph(experiment):
     try:
         dummy_input = None
         sample = next(iter(experiment.data[list(experiment.data)[0]].train_data_loader))
-        if isinstance(sample, tuple) or isinstance(sample, list):
+        if isinstance(sample, tuple | list):
             dummy_input = sample[0]
         elif isinstance(sample, dict):
             dummy_input = next(iter(sample.values()))
@@ -434,8 +439,31 @@ def add_graph(experiment):
         for model_name, _ in experiment.exp_def.models:
             experiment.tb_writer.add_graph(experiment.models[model_name], dummy_input)
             experiment.tb_graph_stored = True
-    except Exception:
+    except (StopIteration, AttributeError, KeyError, TypeError):
         wprint("Unable to add graph to Tensorboard.")
+
+
+@torch.no_grad()
+def _log_tb_images(experiment, images):
+    if images is not None:
+        if not isinstance(images, list):
+            if isinstance(images, dict):
+                images = [images]
+            else:
+                raise ValueError(
+                    "Images must be a dictionary or a list of dictionaries."
+                )
+
+        for image in images:
+            img = image["data"]
+            dataformat = image.get("dataformats", "NCHW")
+
+            experiment.tb_writer.add_images(
+                tag=image["name"],
+                img_tensor=img,
+                global_step=experiment.current_epoch,
+                dataformats=dataformat,
+            )
 
 
 @torch.no_grad()
@@ -476,25 +504,7 @@ def save_tensorboard(experiment, images=None, scalars=None, text=None):
                 text_name, text_value, experiment.current_epoch
             )
 
-    if images is not None:
-        if not isinstance(images, list):
-            if isinstance(images, dict):
-                images = [images]
-            else:
-                raise ValueError(
-                    "Images must be a dictionary or a list of dictionaries."
-                )
-
-        for image in images:
-            img = image["data"]
-            dataformat = image.get("dataformats", "NCHW")
-
-            experiment.tb_writer.add_images(
-                tag=image["name"],
-                img_tensor=img,
-                global_step=experiment.current_epoch,
-                dataformats=dataformat,
-            )
+    _log_tb_images(experiment, images)
 
 
 def init_wandb(experiment):
@@ -503,11 +513,11 @@ def init_wandb(experiment):
         raise ValueError(
             "Wandb project name is not set. Please set it in the experiment definition."
         )
-    elif experiment.exp_def.store.wandb_entity is None:
+    if experiment.exp_def.store.wandb_entity is None:
         raise ValueError(
             "Wandb entity name is not set. Please set it in the experiment definition."
         )
-    elif experiment.exp_def.store.wandb_key is None:
+    if experiment.exp_def.store.wandb_key is None:
         raise ValueError(
             "Wandb key is not set. Please set it in the experiment definition."
         )
@@ -536,11 +546,40 @@ def init_wandb(experiment):
         iprint(f"Init Wandb -  log path: {wandb.run.dir}")
         return True
 
-    except Exception as e:
+    except (
+        wandb.errors.UsageError,
+        wandb.errors.CommError,
+        AttributeError,
+        ValueError,
+    ) as e:
         eprint("Unable to initialize wandb!")
         eprint(f"Error: {e}")
         experiment.useWandb = False
         return False
+
+
+@torch.no_grad()
+def _log_wandb_images(images):
+    if images is not None:
+        if not isinstance(images, list):
+            if isinstance(images, dict):
+                images = [images]
+            else:
+                raise ValueError(
+                    "Images must be a dictionary or a list of dictionaries."
+                )
+
+        for image in images:
+            captions = image.get("captions", None)
+
+            if image.get("data") is not None:
+                img = image["data"]
+            elif image.get("path") is not None:
+                img = image["path"]
+            else:
+                continue
+
+            wandb.log({image["name"]: wandb.Image(img, caption=captions)})
 
 
 @torch.no_grad()
@@ -571,24 +610,4 @@ def save_wandb(experiment, images=None, scalars=None):
     scalars["epoch"] = experiment.current_epoch
 
     wandb.log(scalars)
-
-    if images is not None:
-        if not isinstance(images, list):
-            if isinstance(images, dict):
-                images = [images]
-            else:
-                raise ValueError(
-                    "Images must be a dictionary or a list of dictionaries."
-                )
-
-        for image in images:
-            captions = image.get("captions", None)
-
-            if image.get("data") is not None:
-                img = image["data"]
-            elif image.get("path") is not None:
-                img = image["path"]
-            else:
-                continue
-
-            wandb.log({image["name"]: wandb.Image(img, caption=captions)})
+    _log_wandb_images(images)

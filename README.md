@@ -54,7 +54,7 @@ The model can either be a pre-installed one—such as [Chuchichaestli](https://g
 allows you to access the model in your training loop via `experiment.models["ccUNET"]`. The same dictionary-based structure applies to losses and data loaders as well. This setup enables you to define and manage as many models, losses, and data loaders as needed for your experiment.
 
 ### Data-Loader(s)
-The Data-Loader class must provide a function `createDatasets(experiment, args)` which is expected to return a dictionary, e.g.
+The Data-Loader class must provide a function `create_datasets(experiment, args)` which is expected to return a dictionary, e.g.
 ```json
 return {
     "train_data_loader": train_loader,

@@ -16,7 +16,7 @@ def resize_max_dim_pad(img, max_dim, interpol_mode, mode, value):
     Returns:
         torch.Tensor: The resized and padded image tensor.
     """
-    c, h, w = img.shape
+    _, h, w = img.shape
 
     # Scale to max_dim
     scale = max_dim / max(h, w)
@@ -108,7 +108,7 @@ def remove_padding(img, pad):
             ps_start[2] : ps_stop[2],
             ps_start[3] : ps_stop[3],
         ]
-    elif img.dim() == 5:
+    if img.dim() == 5:
         return img[
             ps_start[0] : ps_stop[0],
             ps_start[1] : ps_stop[1],
@@ -116,8 +116,7 @@ def remove_padding(img, pad):
             ps_start[3] : ps_stop[3],
             ps_start[4] : ps_stop[4],
         ]
-    else:
-        raise ValueError("Only 4D and 5D tensors are supported!")
+    raise ValueError("Only 4D and 5D tensors are supported!")
 
 
 def get_transformers(t_defs):
@@ -130,6 +129,162 @@ def get_transformers(t_defs):
         torchvision.transforms.Compose: Composed transformer.
     """
     return transforms.Compose([get_transformer(t) for t in t_defs])
+
+
+def get_transformer_by_names(transformer_name, parameters, t_defs):
+    """Returns a torchvision transformer instance based on the given transformer name and parameters.
+
+    Args:
+        transformer_name (str): The name of the transformer to create.
+        parameters (dict): Dictionary of parameters required for the transformer.
+        t_defs: The original transformer definition (used for error messages).
+
+    Returns:
+        torchvision.transforms.Transform: The corresponding transformer instance.
+    """
+    if transformer_name == "Stack3D":
+        stack_n = parameters.get("stack_n")
+        # [B,C,H,W] -> [B,C,D,H,W] -> dim = 2
+        transformer = transforms.Lambda(lambda t: torch.stack([t] * stack_n, dim=2))
+
+    elif transformer_name == "Resize_HW":
+        transformer = transforms.Resize(
+            (parameters.get("h"), parameters.get("w")), antialias=True
+        )
+
+    elif transformer_name == "ResizeMaxDimPad":
+        transformer = transforms.Lambda(
+            lambda t: resize_max_dim_pad(
+                t,
+                max_dim=parameters.get("max_dim"),
+                interpol_mode=parameters.get("interpol_mode", "bilinear"),
+                mode=parameters.get("mode", "constant"),
+                value=parameters.get("value", 0),
+            )
+        )
+
+    elif transformer_name == "CLAMP_abs":
+        transformer = transforms.Lambda(
+            lambda t: torch.clamp(t, parameters.get("lower"), parameters.get("upper"))
+        )
+
+    elif transformer_name == "CLAMP_perc":
+
+        def _rdm_reduce(tensor):
+            # random reduce tensor size for quantile computation -> estimation
+            n = 12582912  # random defined as 8*3*32*128*128
+            if tensor.numel() > n:
+                n = min(n, tensor.numel())
+                random_indices = torch.randperm(tensor.numel())[:n]
+                return tensor.view(-1)[random_indices]
+            return tensor
+
+        transformer = transforms.Lambda(
+            lambda t: torch.clamp(
+                t,
+                torch.quantile(_rdm_reduce(t), parameters.get("lower_perc")),
+                torch.quantile(_rdm_reduce(t), parameters.get("upper_perc")),
+            )
+        )
+
+    elif transformer_name == "ReRange":
+        in_min = parameters.get("in_min")
+        in_max = parameters.get("in_max")
+        out_min = parameters.get("out_min")
+        out_max = parameters.get("out_max")
+        transformer = transforms.Lambda(
+            lambda t: ((t - in_min) * (out_max - out_min)) / (in_max - in_min) + out_min
+        )
+
+    elif transformer_name == "ReRange_minmax":
+        out_min = parameters.get("out_min")
+        out_max = parameters.get("out_max")
+        transformer = transforms.Lambda(
+            lambda t: ((t - t.min()) * (out_max - out_min)) / (t.max() - t.min())
+            + out_min
+        )
+
+    elif transformer_name == "Gaussian_Blur":
+        transformer = transforms.GaussianBlur(
+            kernel_size=parameters.get("blur_kernel_size"),
+            sigma=parameters.get("blur_sigma"),
+        )
+
+    elif transformer_name == "Padding":
+        transformer = transforms.Lambda(
+            lambda t: add_padding(
+                t,
+                pad=parameters.get("padding_size"),
+                mode=parameters.get("padding_mode"),
+                value=parameters.get("padding_value"),
+            )
+        )
+
+    elif transformer_name == "UnPadding":
+        transformer = transforms.Lambda(
+            lambda t: remove_padding(t, pad=parameters.get("padding_size"))
+        )
+
+    elif transformer_name == "Get2DFrom3D":
+        axis = parameters.get("axis", 0)
+        index = parameters.get("index")
+        transformer = transforms.Lambda(
+            lambda t: select_2d_from_3d(t, axis=axis, index=index)
+        )
+
+    elif transformer_name == "ADD":
+        transformer = transforms.Lambda(lambda t: t + parameters.get("value"))
+
+    elif transformer_name == "DIV":
+        transformer = transforms.Lambda(lambda t: t / parameters.get("value"))
+
+    elif transformer_name == "NORM":
+        transformer = transforms.Normalize(
+            mean=(parameters.get("mean"),), std=(parameters.get("stdev"),)
+        )
+
+    elif transformer_name == "MULT":
+        transformer = transforms.Lambda(lambda t: t * parameters.get("value"))
+
+    elif transformer_name == "RandomHorizontalFlip":
+        transformer = transforms.RandomHorizontalFlip()
+
+    elif transformer_name == "ToTensor":
+        transformer = transforms.ToTensor()
+
+    elif transformer_name == "Float32":
+        transformer = transforms.Lambda(lambda t: t.type(torch.float32))
+
+    elif transformer_name == "Uint8":
+        transformer = transforms.Lambda(lambda t: t.type(torch.uint8))
+
+    elif transformer_name == "RGB_Normalize":
+        transformer = transforms.Normalize(
+            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+        )
+
+    elif transformer_name == "RGB2GRAY":
+        transformer = transforms.Grayscale(num_output_channels=1)
+
+    elif transformer_name == "ToPil":
+        transformer = transforms.Lambda(lambda t: transforms.ToPILImage()(t))
+
+    elif transformer_name == "Squeeze":
+        transformer = transforms.Lambda(lambda t: t.squeeze())
+
+    elif transformer_name == "LOG":
+        transformer = transforms.Lambda(torch.log)
+
+    elif transformer_name == "EXP":
+        transformer = transforms.Lambda(torch.exp)
+
+    elif transformer_name == "NOP":
+        transformer = transforms.Lambda(lambda t: t)
+
+    else:
+        raise ValueError(f"Transformation {t_defs} is not supported!")
+
+    return transformer
 
 
 def get_transformer(t_defs):
@@ -269,10 +424,9 @@ def get_transformer(t_defs):
         raise ValueError(
             f"Transformation {t_defs} does not correspond to the expected format!"
         )
-    required_params = all_required_params.get(transformer_name, {})
 
     # check if all required parameters are present and datatypes are correct
-    for req_param, req_type in required_params.items():
+    for req_param, req_type in all_required_params.get(transformer_name, {}).items():
         if req_param not in parameters:
             raise ValueError(
                 f"Parameter {req_param} is missing for transformation {transformer_name}."
@@ -282,147 +436,6 @@ def get_transformer(t_defs):
                 f"Parameter {req_param} for transformation {transformer_name} is not correct."
             )
 
-    if transformer_name == "Stack3D":
-        stack_n = parameters.get("stack_n")
-        # [B,C,H,W] -> [B,C,D,H,W] -> dim = 2
-        transformer = transforms.Lambda(lambda t: torch.stack([t] * stack_n, dim=2))
-
-    elif transformer_name == "Resize_HW":
-        transformer = transforms.Resize(
-            (parameters.get("h"), parameters.get("w")), antialias=True
-        )
-
-    elif transformer_name == "ResizeMaxDimPad":
-        transformer = transforms.Lambda(
-            lambda t: resize_max_dim_pad(
-                t,
-                max_dim=parameters.get("max_dim"),
-                interpol_mode=parameters.get("interpol_mode", "bilinear"),
-                mode=parameters.get("mode", "constant"),
-                value=parameters.get("value", 0),
-            )
-        )
-
-    elif transformer_name == "CLAMP_abs":
-        transformer = transforms.Lambda(
-            lambda t: torch.clamp(t, parameters.get("lower"), parameters.get("upper"))
-        )
-
-    elif transformer_name == "CLAMP_perc":
-
-        def _rdm_reduce(tensor):
-            # random reduce tensor size for quantile computation -> estimation
-            n = 12582912  # random defined as 8*3*32*128*128
-            if tensor.numel() > n:
-                n = min(n, tensor.numel())
-                random_indices = torch.randperm(tensor.numel())[:n]
-                return tensor.view(-1)[random_indices]
-            else:
-                return tensor
-
-        transformer = transforms.Lambda(
-            lambda t: torch.clamp(
-                t,
-                torch.quantile(_rdm_reduce(t), parameters.get("lower_perc")),
-                torch.quantile(_rdm_reduce(t), parameters.get("upper_perc")),
-            )
-        )
-
-    elif transformer_name == "ReRange":
-        in_min = parameters.get("in_min")
-        in_max = parameters.get("in_max")
-        out_min = parameters.get("out_min")
-        out_max = parameters.get("out_max")
-        transformer = transforms.Lambda(
-            lambda t: ((t - in_min) * (out_max - out_min)) / (in_max - in_min) + out_min
-        )
-
-    elif transformer_name == "ReRange_minmax":
-        out_min = parameters.get("out_min")
-        out_max = parameters.get("out_max")
-        transformer = transforms.Lambda(
-            lambda t: ((t - t.min()) * (out_max - out_min)) / (t.max() - t.min())
-            + out_min
-        )
-
-    elif transformer_name == "Gaussian_Blur":
-        transformer = transforms.GaussianBlur(
-            kernel_size=parameters.get("blur_kernel_size"),
-            sigma=parameters.get("blur_sigma"),
-        )
-
-    elif transformer_name == "Padding":
-        transformer = transforms.Lambda(
-            lambda t: add_padding(
-                t,
-                pad=parameters.get("padding_size"),
-                mode=parameters.get("padding_mode"),
-                value=parameters.get("padding_value"),
-            )
-        )
-
-    elif transformer_name == "UnPadding":
-        transformer = transforms.Lambda(
-            lambda t: remove_padding(t, pad=parameters.get("padding_size"))
-        )
-
-    elif transformer_name == "Get2DFrom3D":
-        axis = parameters.get("axis", 0)
-        index = parameters.get("index")
-        transformer = transforms.Lambda(
-            lambda t: select_2d_from_3d(t, axis=axis, index=index)
-        )
-
-    elif transformer_name == "ADD":
-        transformer = transforms.Lambda(lambda t: t + parameters.get("value"))
-
-    elif transformer_name == "DIV":
-        transformer = transforms.Lambda(lambda t: t / parameters.get("value"))
-
-    elif transformer_name == "NORM":
-        transformer = transforms.Normalize(
-            mean=(parameters.get("mean"),), std=(parameters.get("stdev"),)
-        )
-
-    elif transformer_name == "MULT":
-        transformer = transforms.Lambda(lambda t: t * parameters.get("value"))
-
-    elif transformer_name == "RandomHorizontalFlip":
-        transformer = transforms.RandomHorizontalFlip()
-
-    elif transformer_name == "ToTensor":
-        transformer = transforms.ToTensor()
-
-    elif transformer_name == "Float32":
-        transformer = transforms.Lambda(lambda t: t.type(torch.float32))
-
-    elif transformer_name == "Uint8":
-        transformer = transforms.Lambda(lambda t: t.type(torch.uint8))
-
-    elif transformer_name == "RGB_Normalize":
-        transformer = transforms.Normalize(
-            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-        )
-
-    elif transformer_name == "RGB2GRAY":
-        transformer = transforms.Grayscale(num_output_channels=1)
-
-    elif transformer_name == "ToPil":
-        transformer = transforms.Lambda(lambda t: transforms.ToPILImage()(t))
-
-    elif transformer_name == "Squeeze":
-        transformer = transforms.Lambda(lambda t: t.squeeze())
-
-    elif transformer_name == "LOG":
-        transformer = transforms.Lambda(lambda t: torch.log(t))
-
-    elif transformer_name == "EXP":
-        transformer = transforms.Lambda(lambda t: torch.exp(t))
-
-    elif transformer_name == "NOP":
-        transformer = transforms.Lambda(lambda t: t)
-
-    else:
-        raise ValueError(f"Transformation {t_defs} is not supported!")
+    transformer = get_transformer_by_names(transformer_name, parameters, t_defs)
 
     return transformer

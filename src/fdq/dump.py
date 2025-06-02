@@ -1,7 +1,7 @@
 import os
+import time
 import torch
 import torch_tensorrt
-import time
 from torch_tensorrt import Input
 from fdq.misc import iprint, wprint
 from fdq.ui_functions import getIntInput, getYesNoInput
@@ -15,7 +15,8 @@ def select_experiment(experiment):
         "  2) last exp last model\n"
         "  3) custom exp best model\n"
         "  4) custom exp last model\n"
-        "  5) define custom path\n"
+        "  5) define custom path\n",
+        drange=[1, 5],
     )
 
     if sel_mode == 1:
@@ -37,7 +38,8 @@ def user_set_dtype(example):
     print("Example data type:", example.dtype)
     print("Example shape:", example.shape)
     sel_mode = getIntInput(
-        "Define model tracing input dtype:\n  1) float32\n  2) float16\n  3) int8\n  4) float64\n"
+        "Define model tracing input dtype:\n  1) float32\n  2) float16\n  3) int8\n  4) float64\n",
+        drange=[1, 4],
     )
     if sel_mode == 1:
         example = example.float()
@@ -150,6 +152,115 @@ def run_test(experiment, example, model, optimized_model, config=None):
     iprint("-----------------------------------------------------------\n")
 
 
+def jit_trace_model(experiment, config, model, model_name, example):
+    """Interactively JIT trace or script a model, optionally save and test the JIT model, and return the processed model and updated config."""
+    if getYesNoInput("\n\nJIT Trace model? (y/n)\n"):
+        # Tracing is following the execution of your module; it cannot pick up OPS like control flow.
+        jit_model = torch.jit.trace(model, example, strict=False)
+        config["jit_traced"] = True
+        iprint("Model traced successfully!")
+
+    elif getYesNoInput("JIT Script model? (y/n)\n"):
+        # By working from the Python code, the compiler can include OPS like control flow.
+        jit_model = torch.jit.script(model)
+        config["jit_scripted"] = True
+        iprint("Model scripted successfully!")
+    else:
+        jit_model = model
+
+    if config["jit_traced"] or config["jit_scripted"]:
+        if getYesNoInput("Save JIT model? (y/n)"):
+            save_path = os.path.join(experiment.results_dir, f"{model_name}_jit.ts")
+            torch.jit.save(jit_model, save_path)
+            iprint(f"Traced model saved to {save_path}")
+
+            if getYesNoInput("Run test on traced model? (y/n)"):
+                traced_model = torch.jit.load(save_path)
+                traced_model.eval()
+                run_test(experiment, example, model, traced_model, config)
+
+    return jit_model, config
+
+
+def compile_model(config, experiment, example, model, model_name):
+    """Compile, optionally JIT trace/script, and optimize a model using Torch-TensorRT, with interactive configuration and testing."""
+    try:
+        jit_model, config = jit_trace_model(
+            experiment, config, model, model_name, example
+        )
+
+    except (RuntimeError, TypeError, ValueError) as e:
+        wprint("Failed to JIT Trace model!")
+        print(e)
+
+    inputs = [
+        Input(
+            example.shape,
+            dtype=example.dtype,
+            device={"device_type": "cuda" if experiment.is_cuda else "cpu"},
+        )
+    ]
+
+    if getYesNoInput("Compile model? (y/n)\n"):
+        if config["jit_traced"] or config["jit_scripted"]:
+            inter_rep = "torchscript"
+        else:
+            inter_rep = getIntInput(
+                "Select intermediate representation:\n"
+                "  1) default: Let Torch-TensorRT decide\n"
+                "  2) ts: TorchScript\n",
+                drange=[1, 2],
+            )
+            inter_rep = "default" if inter_rep == 1 else "ts"
+
+        truncate_double = getYesNoInput(
+            "Truncate long and double? (y/n), default = y\n"
+        )
+
+        enabled_precisions = set()
+        if getYesNoInput("Enable float32 precision? (y/n)"):
+            enabled_precisions.add(torch.float32)
+        if getYesNoInput("Enable float16 precision? (y/n)"):
+            enabled_precisions.add(torch.float16)
+        if getYesNoInput("Enable bfloat16 precision? (y/n)"):
+            enabled_precisions.add(torch.bfloat16)
+        if getYesNoInput("Enable float64 precision? (y/n)"):
+            enabled_precisions.add(torch.float64)
+        if getYesNoInput("Enable int8 precision? (y/n)"):
+            enabled_precisions.add(torch.int8)
+        if getYesNoInput("Enable quint8 precision? (y/n)"):
+            enabled_precisions.add(torch.quint8)
+
+        config.update(
+            {
+                "intermediate representation": inter_rep,
+                "truncate double": truncate_double,
+                "enabled precisions": enabled_precisions,
+            }
+        )
+
+        optimized_model = torch_tensorrt.compile(
+            jit_model,
+            backend="torch_tensorrt",
+            ir=inter_rep,
+            inputs=inputs,
+            enabled_precisions=enabled_precisions,
+            debug=True,
+            truncate_long_and_double=truncate_double,
+        )
+        iprint("Model compiled successfully!")
+
+        if getYesNoInput("Run test on compiled model? (y/n)"):
+            run_test(experiment, example, model, optimized_model, config)
+
+        if getYesNoInput("Save optimized model? (y/n)"):
+            save_path = os.path.join(
+                experiment.results_dir, f"{model_name}_optimized.ts"
+            )
+            torch.save(optimized_model, save_path)
+            iprint(f"Optimized model saved to {save_path}")
+
+
 def dump_model(experiment):
     """Interactively dumps, traces, scripts, compiles, tests, and saves a model from the given experiment."""
     iprint("\n-----------------------------------------------------------")
@@ -167,13 +278,6 @@ def dump_model(experiment):
 
     while True:
         example = get_example_tensor(experiment)
-        inputs = [
-            Input(
-                example.shape,
-                dtype=example.dtype,
-                device={"device_type": "cuda" if experiment.is_cuda else "cpu"},
-            )
-        ]
 
         config = {
             "jit_traced": False,
@@ -183,107 +287,14 @@ def dump_model(experiment):
         }
 
         try:
-            if getYesNoInput("\n\nJIT Trace model? (y/n)\n"):
-                # Tracing is following the execution of your module; it cannot pick up OPS like control flow.
-                jit_model = torch.jit.trace(model, example, strict=False)
-                config["jit_traced"] = True
-                iprint("Model traced successfully!")
+            compile_model(config, experiment, example, model, model_name)
 
-            elif getYesNoInput("JIT Script model? (y/n)\n"):
-                # By working from the Python code, the compiler can include OPS like control flow.
-                jit_model = torch.jit.script(model)
-                config["jit_scripted"] = True
-                iprint("Model scripted successfully!")
-            else:
-                jit_model = model
-
-            if config["jit_traced"] or config["jit_scripted"]:
-                if getYesNoInput("Save JIT model? (y/n)"):
-                    save_path = os.path.join(
-                        experiment.results_dir, f"{model_name}_jit.ts"
-                    )
-                    torch.jit.save(jit_model, save_path)
-                    iprint(f"Traced model saved to {save_path}")
-
-                    if getYesNoInput("Run test on traced model? (y/n)"):
-                        traced_model = torch.jit.load(save_path)
-                        traced_model.eval()
-                        run_test(experiment, example, model, traced_model, config)
-
-        except Exception as e:
-            wprint("Failed to JIT Trace model!")
-            print(e)
-            if getYesNoInput("Try again? (y/n)"):
-                continue
-            else:
-                break
-
-        try:
-            if getYesNoInput("Compile model? (y/n)\n"):
-                if config["jit_traced"] or config["jit_scripted"]:
-                    inter_rep = "torchscript"
-                else:
-                    inter_rep = getIntInput(
-                        "Select intermediate representation:\n"
-                        "  1) default: Let Torch-TensorRT decide\n"
-                        "  2) ts: TorchScript\n"
-                    )
-                    inter_rep = "default" if inter_rep == 1 else "ts"
-
-                truncate_double = getYesNoInput(
-                    "Truncate long and double? (y/n), default = y\n"
-                )
-
-                enabled_precisions = set()
-                if getYesNoInput("Enable float32 precision? (y/n)"):
-                    enabled_precisions.add(torch.float32)
-                if getYesNoInput("Enable float16 precision? (y/n)"):
-                    enabled_precisions.add(torch.float16)
-                if getYesNoInput("Enable bfloat16 precision? (y/n)"):
-                    enabled_precisions.add(torch.bfloat16)
-                if getYesNoInput("Enable float64 precision? (y/n)"):
-                    enabled_precisions.add(torch.float64)
-                if getYesNoInput("Enable int8 precision? (y/n)"):
-                    enabled_precisions.add(torch.int8)
-                if getYesNoInput("Enable quint8 precision? (y/n)"):
-                    enabled_precisions.add(torch.quint8)
-
-                config.update(
-                    {
-                        "intermediate representation": inter_rep,
-                        "truncate double": truncate_double,
-                        "enabled precisions": enabled_precisions,
-                    }
-                )
-
-                optimized_model = torch_tensorrt.compile(
-                    jit_model,
-                    backend="torch_tensorrt",
-                    ir=inter_rep,
-                    inputs=inputs,
-                    enabled_precisions=enabled_precisions,
-                    debug=True,
-                    truncate_long_and_double=truncate_double,
-                )
-                iprint("Model compiled successfully!")
-
-                if getYesNoInput("Run test on compiled model? (y/n)"):
-                    run_test(experiment, example, model, optimized_model, config)
-
-                if getYesNoInput("Save optimized model? (y/n)"):
-                    save_path = os.path.join(
-                        experiment.results_dir, f"{model_name}_optimized.ts"
-                    )
-                    torch.save(optimized_model, save_path)
-                    iprint(f"Optimized model saved to {save_path}")
-
-        except Exception as e:
+        except (RuntimeError, TypeError, ValueError) as e:
             wprint("Failed to compile model!")
             print(e)
             if getYesNoInput("Try again? (y/n)"):
                 continue
-            else:
-                break
+            break
 
         # workspace_size = 20 << 30
         # min_block_size = 7

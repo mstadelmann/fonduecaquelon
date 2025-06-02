@@ -8,7 +8,7 @@ from termcolor import colored
 colorama_initialized = None
 
 
-def getIntInput(message, drange=[0, 5000]):
+def getIntInput(message, drange):
     """UI helper function to get an integer input from the user within a specified range."""
     tmode = None
     while not isinstance(tmode, int):
@@ -19,7 +19,7 @@ def getIntInput(message, drange=[0, 5000]):
             if not drange[0] <= tmode <= drange[1]:
                 print(f"Value must be between {drange[0]} and {drange[1]}.")
                 tmode = None
-        except Exception:
+        except ValueError:
             print("Enter integer number!")
 
     return tmode
@@ -40,7 +40,7 @@ def getYesNoInput(message):
     return tmode.lower() == "y"
 
 
-def getFloatInput(message, drange=[-10, 10]):
+def getFloatInput(message, drange):
     """UI helper function to get a float input from the user within a specified range."""
     tmode = None
     while not isinstance(tmode, float):
@@ -51,7 +51,7 @@ def getFloatInput(message, drange=[-10, 10]):
             if not drange[0] <= tmode <= drange[1]:
                 print(f"Value must be between {drange[0]} and {drange[1]}.")
                 tmode = None
-        except Exception:
+        except ValueError:
             print("Enter real number!")
 
     return tmode
@@ -115,7 +115,7 @@ def show_train_progress(experiment):
             fig.plot(x, valLossA, label="valL", width=50, height=15)
         fig.show()
 
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         print("GNUplot is not available, loss is not plotted.")
 
     iprint(

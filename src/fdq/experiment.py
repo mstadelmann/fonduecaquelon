@@ -2,14 +2,14 @@ import os
 import sys
 import json
 import math
-import torch
-import wandb
 import shutil
 import argparse
 import importlib
-import funkybob
 from datetime import datetime
+import torch
+import funkybob
 from torchview import draw_graph
+import wandb
 from fdq.ui_functions import iprint, eprint, wprint, show_train_progress, startProgBar
 from fdq.testing import find_model_path
 from fdq.transformers import get_transformers
@@ -63,6 +63,8 @@ class fdqExperiment:
         self.data = {}
         self.models = {}
         self.transformers = {}
+        self.scaler = None
+        self.trainer = None
         self.trained_model_paths = {}
         self.optimizers = {}
         self.lr_schedulers = {}
@@ -264,15 +266,13 @@ class fdqExperiment:
             module_name = os.path.splitext(os.path.basename(file_path))[0]
         return importlib.import_module(module_name)
 
-    def instantiate_class(
-        self, class_path=None, file_path=None, class_name=None, *args, **kwargs
-    ):
+    def instantiate_class(self, class_path=None, file_path=None, class_name=None):
         if class_path is None and file_path is None:
             raise ValueError(
                 f"Error, class_path or file_path must be defined. Got: {class_path}, {file_path}"
             )
 
-        elif class_path is not None:
+        if class_path is not None:
             if "." not in class_path:
                 raise ValueError(
                     f"Error, class_path must be a string with the module name and class name separated by a dot. Got: {class_path}"
@@ -285,18 +285,22 @@ class fdqExperiment:
                 raise ValueError(
                     f"Error, path must be a string with the module name and class name separated by a dot. Got: {file_path}"
                 )
-            elif class_name is None:
+            if class_name is None:
                 raise ValueError(
                     f"Error, class_name must be defined if file_path is used. Got: {class_name}"
                 )
             self.add_module_to_syspath(file_path)
             module_name = os.path.basename(file_path).split(".")[0]
             module = importlib.import_module(module_name)
+        else:
+            raise ValueError(
+                f"Error, class_path or file_path must be defined. Got: {class_path}, {file_path}"
+            )
 
         return getattr(module, class_name)
 
     def init_models(self, instantiate=True):
-        if self.models != {}:
+        if self.models:
             return
         for model_name, model_def in self.exp_def.models:
             if model_def.path is not None:
@@ -379,13 +383,13 @@ class fdqExperiment:
             self.load_models()
 
     def setupData(self):
-        if self.data != {}:
+        if self.data:
             return
         self.copy_data_to_scratch()
         for data_name, data_source in self.exp_def.data.items():
             processor = self.import_class(file_path=data_source.processor)
             args = self.exp_def.data.get(data_name).args
-            self.data[data_name] = DictToObj(processor.createDatasets(self, args))
+            self.data[data_name] = DictToObj(processor.create_datasets(self, args))
         self.print_dataset_infos()
 
     def save_current_model(self):
@@ -516,6 +520,10 @@ class fdqExperiment:
                 )
             elif largs.class_name is not None:
                 cls = self.instantiate_class(class_path=largs.class_name)
+            else:
+                raise ValueError(
+                    f"Error, loss {loss_name} must have a path or class name defined."
+                )
             if largs.args is not None:
                 self.losses[loss_name] = cls(**largs.args.to_dict())
             else:
@@ -574,7 +582,7 @@ class fdqExperiment:
 
         iprint(f"Saving checkpoint to {self.checkpoint_path}")
 
-        if self.optimizers == {}:
+        if not self.optimizers:
             optimizer_state = None
         else:
             optimizer_state = {}
@@ -660,7 +668,7 @@ class fdqExperiment:
         # early stop NaN ?
         if e_stop_nan is not None:
             if all(math.isnan(x) for x in self.trainLoss_per_ep[-e_stop_nan:]):
-                self.early_stop_nan_detected = "NaN detected"
+                self.early_stop_detected = "NaN detected"
                 wprint(
                     "\n###############################\n"
                     f"!! Early Stop NaN EP {self.current_epoch} !!\n"
@@ -674,7 +682,7 @@ class fdqExperiment:
         if e_stop_val is not None and len(self.valLoss_per_ep) >= e_stop_val:
             # was there a new best val loss within the last N epochs?
             if min(self.valLoss_per_ep[-e_stop_val:]) != self.bestValLoss:
-                self.early_stop_nan_detected = "ValLoss_stagnated"
+                self.early_stop_detected = "ValLoss_stagnated"
                 wprint(
                     "\n###############################\n"
                     f"!! Early Stop Val Loss EP {self.current_epoch} !!\n"
@@ -690,7 +698,7 @@ class fdqExperiment:
                     f"!! Early Stop Train Loss EP {self.current_epoch} !!\n"
                     "###############################\n"
                 )
-                self.early_stop_nan_detected = "TrainLoss_stagnated"
+                self.early_stop_detected = "TrainLoss_stagnated"
                 return True
 
         return False
@@ -748,7 +756,7 @@ class fdqExperiment:
             run_t_string = f"days: {td.days}, hours: {td.seconds // 3600}, minutes: {td.seconds % 3600 / 60.0:.0f}"
             iprint(f"Current run time: {run_t_string}")
             store_processing_infos(self)
-        except Exception:
+        except (AttributeError, ValueError):
             pass
 
         save_train_history(self)
@@ -840,7 +848,7 @@ class fdqExperiment:
         """Prepare transformers for the experiment."""
         if self.exp_def.transforms is None:
             return
-        elif not isinstance(self.exp_file["transforms"], dict):
+        if not isinstance(self.exp_file["transforms"], dict):
             raise ValueError(
                 "Error, transforms must be a dictionary with transform names as keys."
             )
@@ -867,26 +875,34 @@ class fdqExperiment:
             iprint(model)
             iprint("-----------------------------------------------------------\n")
 
-        try:
-            iprint(f"Saving model graph to: {self.results_dir}/{model_name}_graph.png")
+            try:
+                iprint(
+                    f"Saving model graph to: {self.results_dir}/{model_name}_graph.png"
+                )
 
-            sample = next(iter(self.data[next(iter(self.data))].train_data_loader))
-            if isinstance(sample, tuple):
-                sample = sample[0]
-            if isinstance(sample, list):
-                sample = sample[0]
-            if isinstance(sample, dict):
-                sample = next(iter(sample.values()))
+                sample = next(iter(self.data[next(iter(self.data))].train_data_loader))
+                if isinstance(sample, tuple):
+                    sample = sample[0]
+                if isinstance(sample, list):
+                    sample = sample[0]
+                if isinstance(sample, dict):
+                    sample = next(iter(sample.values()))
 
-            draw_graph(
-                model,
-                input_size=sample.shape,
-                device=self.device,
-                save_graph=True,
-                filename=model_name + "_graph",
-                directory=self.results_dir,
-                expand_nested=False,
-            )
-        except Exception as e:
-            wprint("Failed to draw graph!")
-            print(e)
+                draw_graph(
+                    model,
+                    input_size=sample.shape,
+                    device=self.device,
+                    save_graph=True,
+                    filename=model_name + "_graph",
+                    directory=self.results_dir,
+                    expand_nested=False,
+                )
+            except (
+                StopIteration,
+                AttributeError,
+                KeyError,
+                TypeError,
+                RuntimeError,
+            ) as e:
+                wprint("Failed to draw graph!")
+                print(e)

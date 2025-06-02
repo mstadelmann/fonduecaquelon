@@ -1,12 +1,11 @@
+"""MNIST dataset preparation utilities for fonduecaquelon experiments."""
+
 import os
 from torch.utils.data import DataLoader, random_split
 from torchvision import datasets
 
-# from fdq.experiment import fdqData
-# from preparator.transformers import create_transformers
 
-
-def createDatasets(experiment, args):
+def create_datasets(experiment, args):
     """Creates MNIST  DataLoaders.
 
     Creates and returns MNIST dataset DataLoaders for training, validation, and testing,
