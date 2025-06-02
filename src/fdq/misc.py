@@ -439,7 +439,7 @@ def add_graph(experiment: Any) -> None:
             dummy_input = next(iter(sample.values()))
 
         for model_name, _ in experiment.exp_def.models:
-            experiment.tb_writer.add_graph(experiment.models[model_name], dummy_input)
+            experiment.tb_writer.add_graph(experiment.models[model_name], dummy_input.to(experiment.device))
             experiment.tb_graph_stored = True
     except (StopIteration, AttributeError, KeyError, TypeError):
         wprint("Unable to add graph to Tensorboard.")
