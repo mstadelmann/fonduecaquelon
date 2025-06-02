@@ -9,6 +9,7 @@
 test_old/
 wandb
 slurm_log/
+submit.sh
 
 # Distribution / packaging
 dist/

@@ -6,7 +6,7 @@ from torchvision import transforms, datasets
 # from preparator.transformers import create_transformers
 
 
-def createDatasets(experiment):
+def createDatasets(experiment, args):
     """Creates MNIST  DataLoaders.
 
     Creates and returns MNIST dataset DataLoaders for training, validation, and testing,
@@ -18,28 +18,25 @@ def createDatasets(experiment):
     Returns:
         dict: A dictionary with DataLoaders and dataset statistics.
     """
-    # create_transformers(experiment)
 
-    dargs = experiment.exp_def.data.MNIST.args
+    pin_mem = False if not experiment.is_cuda else args.get("pin_memory", False)
+    drop_last = args.get("drop_last", True)
 
-    pin_mem = False if not experiment.is_cuda else dargs.get("pin_memory", False)
-    drop_last = dargs.get("drop_last", True)
-
-    if not os.path.exists(dargs.base_path):
-        os.makedirs(dargs.base_path)
+    if not os.path.exists(args.base_path):
+        os.makedirs(args.base_path)
 
     transform = experiment.transformers["resize_norm_inp"]
 
     train_all_set = datasets.MNIST(
-        dargs.base_path, train=True, download=True, transform=transform
+        args.base_path, train=True, download=True, transform=transform
     )
-    test_set = datasets.MNIST(dargs.base_path, train=False, transform=transform)
+    test_set = datasets.MNIST(args.base_path, train=False, transform=transform)
 
     n_train_all = len(train_all_set)
     n_test_samples = len(test_set)
 
     # subsets
-    subset_ratio = dargs.get("subset_train", 1)
+    subset_ratio = args.get("subset_train", 1)
     if subset_ratio < 1:
         n_subset_samples = int(n_train_all * subset_ratio)
         train_all_set, _ = random_split(
@@ -47,7 +44,7 @@ def createDatasets(experiment):
         )
         n_train_all = len(train_all_set)
 
-    subset_ratio = dargs.get("subset_test", 1)
+    subset_ratio = args.get("subset_test", 1)
     if subset_ratio < 1:
         n_subset_samples = int(n_test_samples * subset_ratio)
         test_set, _ = random_split(
@@ -56,7 +53,7 @@ def createDatasets(experiment):
         n_test_samples = len(test_set)
 
     # val set = subset from train
-    val_ratio = dargs.val_ratio
+    val_ratio = args.val_ratio
     if val_ratio is not None and val_ratio > 0:
         n_val_samples = int(n_train_all * val_ratio)
         n_train_samples = n_train_all - n_val_samples
@@ -67,21 +64,22 @@ def createDatasets(experiment):
         n_val_samples = 0
         n_train_samples = n_train_all
         train_set = train_all_set
+        val_set = []
 
     train_loader = DataLoader(
         train_set,
-        batch_size=dargs.train_batch_size,
-        shuffle=dargs.shuffle_train,
-        num_workers=dargs.num_workers,
+        batch_size=args.train_batch_size,
+        shuffle=args.shuffle_train,
+        num_workers=args.num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,
     )
 
     test_loader = DataLoader(
         test_set,
-        batch_size=dargs.test_batch_size,
-        shuffle=dargs.shuffle_test,
-        num_workers=dargs.num_workers,
+        batch_size=args.test_batch_size,
+        shuffle=args.shuffle_test,
+        num_workers=args.num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,
     )
@@ -89,9 +87,9 @@ def createDatasets(experiment):
     if n_val_samples > 0:
         val_loader = DataLoader(
             val_set,
-            batch_size=dargs.val_batch_size,
-            shuffle=dargs.shuffle_val,
-            num_workers=dargs.num_workers,
+            batch_size=args.val_batch_size,
+            shuffle=args.shuffle_val,
+            num_workers=args.num_workers,
             pin_memory=pin_mem,
             drop_last=drop_last,
         )

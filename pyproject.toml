@@ -1,6 +1,6 @@
 [project]
 name = "fdq"
-version = "0.0.12"
+version = "0.0.15"
 license = { file = "LICENSE" }
 authors = [
   { name = "Marc Stadelmann", email = "stdma@pm.me" },
@@ -16,6 +16,7 @@ classifiers = [
 ]
 dependencies = [
   "chuchichaestli==0.2.7",
+  "einops==0.8.1",
   "torch==2.7.0",
   "torch_tensorrt==2.7.0",
   "torchvision==0.22.0",
