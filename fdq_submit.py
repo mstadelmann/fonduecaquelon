@@ -1,3 +1,5 @@
+"""SLURM job submission utility for fonduecaquelon experiments."""
+
 import sys
 import os
 import re
@@ -311,10 +313,12 @@ def parse_input_file(exp_file_path):
         sys.exit(1)
 
     try:
-        with open(exp_file_path) as file:
+        with open(exp_file_path, encoding="utf8") as file:
             exp_file = json.load(file)
-    except json.JSONDecodeError:
-        raise ValueError(f"Error: The file '{exp_file_path}' is not a valid JSON file.")
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Error: The file '{exp_file_path}' is not a valid JSON file."
+        ) from exc
 
     globals_def = exp_file.get("globals")
     parent = globals_def.get("parent", {})
@@ -342,20 +346,15 @@ def parse_input_file(exp_file_path):
     return DictToObj(exp_file)
 
 
-def main():
-    """Main entry point for submitting a job to SLURM using the provided experiment JSON file."""
-    if len(sys.argv) != 2:
-        raise ValueError(
-            "Error: Exactly one argument is required which is the path to the JSON file."
-        )
+def get_default_config(slurm_conf):
+    """Return a job configuration dictionary with defaults, updated from the given SLURM config.
 
-    in_args = parse_input_file(sys.argv[1])
-    slurm_conf = in_args.slurm_cluster
-    if slurm_conf is None:
-        raise ValueError(
-            "Error: The 'slurm_cluster' section in the JSON config file is required to submit a job to the queue!"
-        )
+    Args:
+        slurm_conf (dict): SLURM configuration dictionary.
 
+    Returns:
+        dict: Job configuration dictionary with updated values.
+    """
     job_config = {
         "job_name": None,
         "user": None,
@@ -389,47 +388,42 @@ def main():
         if val is not None:
             job_config[key] = val
 
-    # set exp file path
-    exp_file_path = os.path.expanduser(sys.argv[1])
-    if not os.path.isabs(exp_file_path):
-        exp_file_path = os.path.abspath(exp_file_path)
-    job_config["exp_file_path"] = exp_file_path
-    exp_name = os.path.basename(exp_file_path).split(".")[0]
+    return job_config
 
-    job_config["job_name"] = exp_name[:30].replace(" ", "_")
-    job_config["user"] = getpass.getuser()
-    job_config["results_path"] = in_args.store.results_path
-    job_config["log_path"] = job_config["log_path"]
 
-    # define path of submit script
-    dt_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_path = os.path.join(
-        os.path.expanduser(job_config["log_path"]),
-        "submitted_jobs",
-    )
-    os.makedirs(base_path, exist_ok=True)
-    submit_path = os.path.join(
-        base_path,
-        f"{dt_str}__{exp_name.replace(' ', '_')}.submit",
-    )
-    job_config["submit_file_path"] = submit_path
+def check_config(job_config):
+    """Check if all mandatory job configuration values are set and expand user paths.
 
-    # if this is a pure test job, set the is_test flag
-    if not job_config["run_train"] and not job_config["run_test"]:
-        job_config["is_test"] = True
+    Args:
+        job_config (dict): The job configuration dictionary to validate and update.
 
-    # check if all mandatory configs are set
+    Returns:
+        dict: The validated and updated job configuration dictionary.
+
+    Raises:
+        ValueError: If any mandatory configuration value is None.
+    """
     for key, value in job_config.items():
         if value is None:
             raise ValueError(
                 f"Value for mandatory key'{key}' is None. Please update your config file!"
             )
-        elif value == "":
+        if value == "":
             job_config[key] = "None"
         elif isinstance(value, str) and value.startswith("~/"):
             job_config[key] = os.path.expanduser(value)
 
-    # create new submit file
+    return job_config
+
+
+def create_submit_file(job_config, slurm_conf, submit_path):
+    """Create a SLURM submit file from the job configuration and SLURM config.
+
+    Args:
+        job_config (dict): The job configuration dictionary.
+        slurm_conf (DictToObj): The SLURM configuration object.
+        submit_path (str): The path where the submit file will be written.
+    """
     if os.path.exists(job_config["log_path"]):
         os.makedirs(job_config["log_path"], exist_ok=True)
     template_content = get_template()
@@ -449,12 +443,63 @@ def main():
     else:
         raise ValueError("Error: additional_pip_packages must be a list of strings.")
 
-    with open(submit_path, "w") as f:
+    with open(submit_path, "w", encoding="utf8") as f:
         f.write(template_content)
+
+
+def main():
+    """Main entry point for submitting a job to SLURM using the provided experiment JSON file."""
+    if len(sys.argv) != 2:
+        raise ValueError(
+            "Error: Exactly one argument is required which is the path to the JSON file."
+        )
+
+    in_args = parse_input_file(sys.argv[1])
+    slurm_conf = in_args.slurm_cluster
+    if slurm_conf is None:
+        raise ValueError(
+            "Error: The 'slurm_cluster' section in the JSON config file is required to submit a job to the queue!"
+        )
+
+    job_config = get_default_config(slurm_conf)
+
+    # set exp file path
+    exp_file_path = os.path.expanduser(sys.argv[1])
+    if not os.path.isabs(exp_file_path):
+        exp_file_path = os.path.abspath(exp_file_path)
+    job_config["exp_file_path"] = exp_file_path
+    exp_name = os.path.basename(exp_file_path).split(".")[0]
+
+    job_config["job_name"] = exp_name[:30].replace(" ", "_")
+    job_config["user"] = getpass.getuser()
+    job_config["results_path"] = in_args.store.results_path
+    job_config["log_path"] = job_config["log_path"]
+
+    # define path of submit script
+    base_path = os.path.join(
+        os.path.expanduser(job_config["log_path"]),
+        "submitted_jobs",
+    )
+    os.makedirs(base_path, exist_ok=True)
+    submit_path = os.path.join(
+        base_path,
+        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}__{exp_name.replace(' ', '_')}.submit",
+    )
+    job_config["submit_file_path"] = submit_path
+
+    # if this is a pure test job, set the is_test flag
+    if not job_config["run_train"] and not job_config["run_test"]:
+        job_config["is_test"] = True
+
+    # check if all mandatory configs are set
+    job_config = check_config(job_config)
+
+    # create new submit file
+    create_submit_file(job_config, slurm_conf, submit_path)
 
     # start slurm job
     result = subprocess.run(
-        f"sbatch {submit_path}", shell=True, capture_output=True, text=True
+        f"sbatch {submit_path}", shell=True, capture_output=True, text=True, check=True
     )
 
     match = re.search(r"(\d+)\s*$", result.stdout)
@@ -464,9 +509,9 @@ def main():
         #     f"{match.group(1)}__{os.path.basename(submit_path)}",
         # )
         # shutil.copy2(submit_path, new_submit_path)
-        print("Submitted batch job.")
-        print(f"Slurm Job ID {match.group(1)}")
-        print(f"Submit file: {submit_path}.")
+        print(
+            f"Submitted batch job.\nSlurm Job ID {match.group(1)}\nSubmit file: {submit_path}."
+        )
     else:
         print(result.stdout)
 

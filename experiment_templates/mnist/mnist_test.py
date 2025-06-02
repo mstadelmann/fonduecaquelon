@@ -1,17 +1,12 @@
 import sys
-
 import torch
+import matplotlib
 import torch.multiprocessing
 import torch.nn.functional as F
-
-
 from fdq.ui_functions import getIntInput, startProgBar
 from fdq.misc import showImg_cv
 
 
-import matplotlib
-
-# import matplotlib
 # this is to fix
 # RuntimeError: Too many open files. Communication with the workers is no longer possible.
 torch.multiprocessing.set_sharing_strategy("file_system")
