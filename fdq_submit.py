@@ -316,8 +316,8 @@ def parse_input_file(exp_file_path):
     except json.JSONDecodeError:
         raise ValueError(f"Error: The file '{exp_file_path}' is not a valid JSON file.")
 
-    globals = exp_file.get("globals")
-    parent = globals.get("parent", {})
+    globals_def = exp_file.get("globals")
+    parent = globals_def.get("parent", {})
     if parent != {}:
         if parent[0] == "/":
             parent_file_path = parent

@@ -423,18 +423,19 @@ def init_tensorboard(experiment):
 
 def add_graph(experiment):
     """Add the model graph to TensorBoard using a sample input from the training data loader."""
-    sample = next(iter(experiment.data[list(experiment.data)[0]].train_data_loader))
-    if isinstance(sample, tuple) or isinstance(sample, list):
-        dummy_imput = sample[0]
-    elif isinstance(sample, dict):
-        dummy_imput = next(iter(sample.values()))
+    try:
+        dummy_input = None
+        sample = next(iter(experiment.data[list(experiment.data)[0]].train_data_loader))
+        if isinstance(sample, tuple) or isinstance(sample, list):
+            dummy_input = sample[0]
+        elif isinstance(sample, dict):
+            dummy_input = next(iter(sample.values()))
 
-    for model_name, _ in experiment.exp_def.models:
-        try:
-            experiment.tb_writer.add_graph(experiment.models[model_name], dummy_imput)
+        for model_name, _ in experiment.exp_def.models:
+            experiment.tb_writer.add_graph(experiment.models[model_name], dummy_input)
             experiment.tb_graph_stored = True
-        except Exception:
-            wprint("Unable to add graph to Tensorboard.")
+    except Exception:
+        wprint("Unable to add graph to Tensorboard.")
 
 
 @torch.no_grad()
