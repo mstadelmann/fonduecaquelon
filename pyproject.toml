@@ -1,6 +1,6 @@
 [project]
 name = "fdq"
-version = "0.0.16"
+version = "0.0.17"
 license = { file = "LICENSE" }
 authors = [
   { name = "Marc Stadelmann", email = "stdma@pm.me" },
