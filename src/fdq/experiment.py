@@ -385,9 +385,7 @@ class fdqExperiment:
         for data_name, data_source in self.exp_def.data.items():
             processor = self.import_class(file_path=data_source.processor)
             args = self.exp_def.data.get(data_name).args
-            self.data[data_name] = DictToObj(
-                processor.createDatasets(self, args)
-            )
+            self.data[data_name] = DictToObj(processor.createDatasets(self, args))
         self.print_dataset_infos()
 
     def save_current_model(self):
@@ -810,7 +808,6 @@ class fdqExperiment:
 
                 dargs.base_path = dst_path
             else:
-
                 for file_cat in [
                     "train_files_path",
                     "test_files_path",

@@ -4,6 +4,18 @@ from torchvision.transforms import v2 as transforms
 
 
 def resize_max_dim_pad(img, max_dim, interpol_mode, mode, value):
+    """Resizes an image tensor so its largest dimension matches 'max_dim' and pads the rest to make it square.
+
+    Args:
+        img (torch.Tensor): Input image tensor of shape (C, H, W).
+        max_dim (int): The maximum dimension for resizing.
+        interpol_mode (str): Interpolation mode for resizing (e.g., 'bilinear').
+        mode (str): Padding mode ('constant', 'edge', 'replicate', or 'circular').
+        value (int or float): Fill value for 'constant' padding.
+
+    Returns:
+        torch.Tensor: The resized and padded image tensor.
+    """
     c, h, w = img.shape
 
     # Scale to max_dim
@@ -32,6 +44,16 @@ def resize_max_dim_pad(img, max_dim, interpol_mode, mode, value):
 
 
 def select_2d_from_3d(img, axis, index=None):
+    """Selects a 2D slice from a 3D tensor along the specified axis and index.
+
+    Args:
+        img (torch.Tensor): The input 3D tensor.
+        axis (int): The axis along which to select the slice.
+        index (int, optional): The index of the slice to select. Defaults to the middle slice.
+
+    Returns:
+        torch.Tensor: The selected 2D slice.
+    """
     if index is None:
         index = img.shape[axis] // 2  # Default to the middle slice
     if axis < 0 or axis >= img.dim():

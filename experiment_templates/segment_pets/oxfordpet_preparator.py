@@ -113,7 +113,6 @@ class OxfordPetDataset(torch.utils.data.Dataset):
 
 def createDatasets(experiment, args=None):
     """Creates and returns data loaders and dataset statistics for the Oxford Pet dataset based on the experiment configuration."""
-
     pin_mem = False if not experiment.is_cuda else args.get("pin_memory", False)
     drop_last = args.get("drop_last", True)
 

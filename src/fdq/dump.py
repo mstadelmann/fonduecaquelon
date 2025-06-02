@@ -8,7 +8,7 @@ from fdq.ui_functions import getIntInput, getYesNoInput
 
 
 def select_experiment(experiment):
-
+    """Interactively select and load an experiment for model dumping."""
     sel_mode = getIntInput(
         "Select experiment for model dumping:\n"
         "  1) last exp best model\n"
@@ -33,6 +33,7 @@ def select_experiment(experiment):
 
 
 def user_set_dtype(example):
+    """Interactively set the dtype of the example tensor based on user input."""
     print("Example data type:", example.dtype)
     print("Example shape:", example.shape)
     sel_mode = getIntInput(
@@ -50,10 +51,11 @@ def user_set_dtype(example):
 
 
 def get_example_tensor(experiment):
+    """Interactively select and return an example tensor from the experiment's data sources."""
     sources = list(experiment.data.keys())
     idx = (
         getIntInput(
-            f"Select data source for tracing sample shape: {[f'{i+1}) {src}' for i, src in enumerate(sources)]}",
+            f"Select data source for tracing sample shape: {[f'{i + 1}) {src}' for i, src in enumerate(sources)]}",
             drange=[1, len(sources)],
         )
         - 1
@@ -76,10 +78,11 @@ def get_example_tensor(experiment):
 
 
 def select_model(experiment):
+    """Interactively select a model from the experiment and return its name and instance."""
     model_names = list(experiment.models.keys())
     idx = (
         getIntInput(
-            f"Select model to dump: {[f'{i+1}) {model}' for i, model in enumerate(model_names)]}",
+            f"Select model to dump: {[f'{i + 1}) {model}' for i, model in enumerate(model_names)]}",
             drange=[1, len(model_names)],
         )
         - 1
@@ -91,6 +94,7 @@ def select_model(experiment):
 
 
 def run_test(experiment, example, model, optimized_model, config=None):
+    """Run a test comparing the original and optimized models, measuring speed and output difference."""
     iprint("\n-----------------------------------------------------------")
     iprint("Running test")
     iprint("-----------------------------------------------------------\n")
@@ -147,6 +151,7 @@ def run_test(experiment, example, model, optimized_model, config=None):
 
 
 def dump_model(experiment):
+    """Interactively dumps, traces, scripts, compiles, tests, and saves a model from the given experiment."""
     iprint("\n-----------------------------------------------------------")
     iprint("Dump model")
     iprint("-----------------------------------------------------------\n")
@@ -161,7 +166,6 @@ def dump_model(experiment):
     iprint(f"Compiling {model_name}...")
 
     while True:
-
         example = get_example_tensor(experiment)
         inputs = [
             Input(
@@ -179,7 +183,6 @@ def dump_model(experiment):
         }
 
         try:
-
             if getYesNoInput("\n\nJIT Trace model? (y/n)\n"):
                 # Tracing is following the execution of your module; it cannot pick up OPS like control flow.
                 jit_model = torch.jit.trace(model, example, strict=False)
@@ -216,9 +219,7 @@ def dump_model(experiment):
                 break
 
         try:
-
             if getYesNoInput("Compile model? (y/n)\n"):
-
                 if config["jit_traced"] or config["jit_scripted"]:
                     inter_rep = "torchscript"
                 else:
