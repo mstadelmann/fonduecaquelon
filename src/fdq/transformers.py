@@ -269,6 +269,23 @@ def get_transformer_by_names(
     elif transformer_name == "MULT":
         transformer = transforms.Lambda(lambda t: t * parameters.get("value"))
 
+    elif transformer_name == "RandomAffine":
+        degrees = parameters.get("degrees", 0)
+        translate = parameters.get("translate", (0, 0))
+        scale = parameters.get("scale")
+        shear = parameters.get("shear")
+        fill = (parameters.get("fill", 0),)
+        center = parameters.get("center")
+        transformer = transforms.RandomAffine(
+            degrees=degrees,
+            translate=translate,
+            scale=scale,
+            shear=shear,
+            center=center,
+            interpolation=transforms.InterpolationMode.BILINEAR,
+            fill=fill,
+        )
+
     elif transformer_name == "RandomHorizontalFlip":
         transformer = transforms.RandomHorizontalFlip()
 
@@ -365,6 +382,17 @@ def get_transformer(t_defs: Any) -> Callable:
     MULT:
     Multiplies the input tensor by the value specified in the parameter 'value'.
 
+    RandomAffine:
+    Applies a random affine transformation to the input tensor with specified parameters
+    https://docs.pytorch.org/vision/main/generated/torchvision.transforms.v2.RandomAffine.html
+    - degrees (float or int): Range of degrees to select from for rotation.
+    - translate (tuple): Tuple of maximum absolute fraction for horizontal and vertical translations.
+    - scale (tuple): Tuple of minimum and maximum scaling factors.
+    - shear (float): Shear angle in degrees.
+    - fill (float): Fill color for the area outside the transformed image.
+    - center (tuple): Center of rotation. If None, the center of the image is used.
+
+
     NORM:
     Normalize a tensor image with 'mean' and 'stdev'.
 
@@ -428,6 +456,7 @@ def get_transformer(t_defs: Any) -> Callable:
         "Get2DFrom3D": {"axis": [int]},
         "ADD": {"value": [float, int]},
         "MULT": {"value": [float, int]},
+        "RandomAffine": {"degrees": [float, int]},
         "DIV": {"value": [float, int]},
         "NORM": {"mean": [float], "stdev": [float]},
     }
