@@ -287,10 +287,14 @@ def get_transformer_by_names(
         )
 
     elif transformer_name == "RandomHorizontalFlip":
-        transformer = transforms.RandomHorizontalFlip(p=parameters.get("p", 0.5))
+        transformer = transforms.RandomHorizontalFlip(
+            p=0.5 if parameters is None else parameters.get("p", 0.5)
+        )
 
     elif transformer_name == "RandomVerticalFlip":
-        transformer = transforms.RandomVerticalFlip(p=parameters.get("p", 0.5))
+        transformer = transforms.RandomVerticalFlip(
+            p=0.5 if parameters is None else parameters.get("p", 0.5)
+        )
 
     elif transformer_name == "ToTensor":
         transformer = transforms.ToTensor()
