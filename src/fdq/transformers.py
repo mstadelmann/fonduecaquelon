@@ -287,7 +287,10 @@ def get_transformer_by_names(
         )
 
     elif transformer_name == "RandomHorizontalFlip":
-        transformer = transforms.RandomHorizontalFlip()
+        transformer = transforms.RandomHorizontalFlip(p=parameters.get("p", 0.5))
+
+    elif transformer_name == "RandomVerticalFlip":
+        transformer = transforms.RandomVerticalFlip(p=parameters.get("p", 0.5))
 
     elif transformer_name == "ToTensor":
         transformer = transforms.ToTensor()
@@ -398,6 +401,10 @@ def get_transformer(t_defs: Any) -> Callable:
 
 
     RandomHorizontalFlip
+    Horizontally flip the input with probability p (default=0.5).
+
+    RandomVerticalFlip
+    Vertically flip the input with probability p (default=0.5).
 
     ToTensor::
     https://pytorch.org/vision/main/generated/torchvision.transforms.ToTensor.html
