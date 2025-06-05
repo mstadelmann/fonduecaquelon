@@ -84,9 +84,13 @@ class fdqExperiment:
         self.bestTrainLoss: float = float("inf")
         self.valLoss_per_ep: list[float] = []
         self.trainLoss_per_ep: list[float] = []
-        self.new_best_train_loss: bool = False  # flag to indicate if a new best epoch was reached according to train loss
+        self.new_best_train_loss: bool = (
+            False  # flag to indicate if a new best epoch was reached according to train loss
+        )
         self.new_best_train_loss_ep_id: int | None = None
-        self.new_best_val_loss: bool = False  # flag to indicate if a new best epoch was reached according to val loss
+        self.new_best_val_loss: bool = (
+            False  # flag to indicate if a new best epoch was reached according to val loss
+        )
         self.new_best_val_loss_ep_id: int | None = None
         self.early_stop_detected: Any = False
         self.useTensorboard: bool = self.exp_def.store.use_tensorboard
@@ -455,7 +459,7 @@ class fdqExperiment:
         self.createLosses()
 
         if self.useAMP:
-            self.scaler = torch.amp.GradScaler(device=str(self.device), enabled=True)
+            self.scaler = torch.amp.GradScaler(device=self.device, enabled=True)
 
         if self.inargs.resume_path is not None:
             iprint(
