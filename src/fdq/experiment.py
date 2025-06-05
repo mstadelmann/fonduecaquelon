@@ -84,15 +84,12 @@ class fdqExperiment:
         self.bestTrainLoss: float = float("inf")
         self.valLoss_per_ep: list[float] = []
         self.trainLoss_per_ep: list[float] = []
-        self.new_best_train_loss: bool = (
-            False  # flag to indicate if a new best epoch was reached according to train loss
-        )
+        self.new_best_train_loss: bool = False
         self.new_best_train_loss_ep_id: int | None = None
-        self.new_best_val_loss: bool = (
-            False  # flag to indicate if a new best epoch was reached according to val loss
-        )
+        self.new_best_val_loss: bool = False
         self.new_best_val_loss_ep_id: int | None = None
         self.early_stop_detected: Any = False
+        self.processing_log_dict: dict[str, Any] = {}
         self.useTensorboard: bool = self.exp_def.store.use_tensorboard
         self.tb_writer: Any | None = None
         self.useWandb: bool = self.exp_def.store.use_wandb
@@ -184,8 +181,9 @@ class fdqExperiment:
         self.valLoss_per_ep.append(value)
         if not math.isnan(value):
             self.bestValLoss = min(self.bestValLoss, self._valLoss)
-            self.new_best_val_loss = self.bestValLoss == value
-            self.new_best_val_loss_ep_id = self.current_epoch
+            if self.bestValLoss == value:
+                self.new_best_val_loss = True
+                self.new_best_val_loss_ep_id = self.current_epoch
 
     @property
     def trainLoss(self) -> float:
@@ -197,8 +195,9 @@ class fdqExperiment:
         self.trainLoss_per_ep.append(value)
         if not math.isnan(value):
             self.bestTrainLoss = min(self.bestTrainLoss, self._trainLoss)
-            self.new_best_train_loss = self.bestTrainLoss == value
-            self.new_best_train_loss_ep_id = self.current_epoch
+            if self.bestTrainLoss == value:
+                self.new_best_train_loss = True
+                self.new_best_train_loss_ep_id = self.current_epoch
 
     def parse_and_clean_args(self) -> None:
         self.experiment_file_path = self.inargs.experimentfile
@@ -447,11 +446,28 @@ class fdqExperiment:
                 self.best_train_model_path[model_name] = best_train_model_path
                 torch.save(model, best_train_model_path)
 
+    def print_nb_weights(self) -> None:
+        """Print the number of parameters for each model in the experiment."""
+        for model_name, model in self.models.items():
+            iprint("-------------------------------------------")
+            iprint(f"Model: {model_name}")
+            nbp = sum(p.numel() for p in model.parameters())
+            iprint(f"nb parameters: {nbp / 1e6:.2f}M")
+            iprint(
+                f"Using Float32, This will require {nbp * 4 / 1e9:.3f} GB of memory."
+            )
+            iprint("-------------------------------------------")
+            self.processing_log_dict[model_name] = {
+                "nb_parameters": f"{nbp / 1e6:.2f}M",
+                "memory_usage_GB": f"{nbp * 4 / 1e9:.3f} GB",
+            }
+
     def prepareTraining(self) -> None:
         self.mode.train()
         self.setupData()
         self.trainer = self.import_class(file_path=self.exp_def.train.path)
         self.init_models()
+        self.print_nb_weights()
         self.createOptimizer()
         self.set_lr_schedule()
         self.createLosses()

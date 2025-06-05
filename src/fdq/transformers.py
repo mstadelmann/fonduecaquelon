@@ -338,7 +338,7 @@ def get_transformer(t_defs: Any) -> Callable:
     """Tensor Transformers for image processing.
 
     Stack3D
-    Morphes a 2D image to 3D by stacking the image along a new D dimension
+    Morphs a 2D image to 3D by stacking the image along a new D dimension
     [B,C,H,W] -> [B,C,D,H,W]
     where d is set by the parameter 'stack_n'
 
