@@ -186,6 +186,7 @@ if [ "$IS_TEST" == True ]; then
     echo ------------------------------------------------------------
     echo "RUNNING TEST"
     echo ------------------------------------------------------------
+    RUN_TEST=False # dont launch test in new job
     test_start=$(date +%s.%N)
     fdq $EXP_FILE_PATH -nt -ta
     fdq_pid=$!
@@ -491,7 +492,7 @@ def main() -> None:
     job_config["submit_file_path"] = submit_path
 
     # if this is a pure test job, set the is_test flag
-    if not job_config["run_train"] and not job_config["run_test"]:
+    if not job_config["run_train"] and job_config["run_test"]:
         job_config["is_test"] = True
 
     # check if all mandatory configs are set
