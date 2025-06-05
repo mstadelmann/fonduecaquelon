@@ -39,9 +39,8 @@ def fdq_train(experiment: fdqExperiment) -> None:
                 train_loss_tensor = (
                     experiment.losses["cp"](output, targets) / experiment.gradacc_iter
                 )
-                if experiment.useAMP:
+                if experiment.useAMP and experiment.scaler is not None:
                     experiment.scaler.scale(train_loss_tensor).backward()
-
                 else:
                     train_loss_tensor.backward()
 
@@ -60,7 +59,6 @@ def fdq_train(experiment: fdqExperiment) -> None:
 
         with torch.no_grad():
             for nb_vbatch, batch in enumerate(data.val_data_loader):
-                experiment.current_val_batch = nb_vbatch
                 pbar.update(nb_vbatch * len(batch["image"]))
 
                 inputs = batch["image"].to(experiment.device).type(torch.float32)

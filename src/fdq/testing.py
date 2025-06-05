@@ -1,12 +1,12 @@
 import json
 import os
 from datetime import datetime
-
+from typing import Any
 
 from fdq.ui_functions import iprint, wprint, getIntInput
 
 
-def get_nb_exp_epochs(path):
+def get_nb_exp_epochs(path: str) -> int:
     """Returns the number of epochs of the experiment stored at 'path'."""
     path = os.path.join(path, "history.json")
 
@@ -14,17 +14,17 @@ def get_nb_exp_epochs(path):
         with open(path, encoding="utf8") as f:
             data = json.load(f)
         return len(data["train"])
-    except Exception:
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
         return 0
 
 
-def find_experiment_result_dirs(experiment):
+def find_experiment_result_dirs(experiment: Any) -> tuple[str, list[str]]:
     """Finds and returns the experiment result directory and its subfolders for the given experiment."""
     if experiment.is_slurm and experiment.inargs.train_model:
         wprint(
             "WARNING: This is a slurm TRAINING session - looking only for results in scratch_results_path!"
         )
-        outbasepath = experiment.exp_def.get("slurm_cluster", {}).get(
+        outbasepath: str | None = experiment.exp_def.get("slurm_cluster", {}).get(
             "scratch_results_path"
         )
 
@@ -48,17 +48,19 @@ def find_experiment_result_dirs(experiment):
     if outbasepath is None:
         raise ValueError("Error: No store path specified in experiment file.")
 
-    experiment_res_path = os.path.join(
+    experiment_res_path: str = os.path.join(
         outbasepath, experiment.project, experiment.experimentName
     )
-    subfolders = [
+    subfolders: list[str] = [
         f.path.split("/")[-1] for f in os.scandir(experiment_res_path) if f.is_dir()
     ]
 
     return experiment_res_path, subfolders
 
 
-def manual_experiment_selection(subfolders_dict, res_root_path):
+def manual_experiment_selection(
+    subfolders_dict: dict[str, str], res_root_path: str
+) -> str:
     """UI to manually select experiment ."""
     subfolders_datetime = [
         datetime.strptime(s, "%Y%m%d_%H_%M_%S") for s in subfolders_dict.keys()
@@ -78,16 +80,16 @@ def manual_experiment_selection(subfolders_dict, res_root_path):
         print(
             f"{i:<3}: {d:<20} {subfolders_dict[d]:<25} {nb_epochs} epochs {'(!)' if nb_epochs == 0 else ''}"
         )
-    exp_idx = getIntInput("Enter index: ", [0, len(subfolders_datetime) - 1])
+    exp_idx: int = getIntInput("Enter index: ", [0, len(subfolders_datetime) - 1])
     return sorted_keys[exp_idx]
 
 
-def find_model_path(experiment):
+def find_model_path(experiment: Any) -> tuple[str, str]:
     """Returns the path to the model file of a previous experiment."""
     experiment_res_path, subfolders = find_experiment_result_dirs(experiment)
 
-    subfolders_date_str = []
-    subfolders_dict = {}
+    subfolders_date_str: list[str] = []
+    subfolders_dict: dict[str, str] = {}
     for s in subfolders:
         datestr = s.split("__")[0]
         subfolders_date_str.append(datestr)
@@ -112,7 +114,7 @@ def find_model_path(experiment):
     find_last = experiment.mode.test_mode.custom_last or experiment.mode.test_mode.last
     search_string = "last_" if find_last else "best_"
 
-    possible_files = []
+    possible_files: list[str] = []
     for fn in os.listdir(os.path.join(experiment_res_path, res[0])):
         if search_string in fn and fn.endswith(".fdqm"):
             possible_files.append(fn)
@@ -122,7 +124,7 @@ def find_model_path(experiment):
             f"No corresponding model file was found in '{experiment_res_path}'. Specify path manually!"
         )
 
-    elif len(possible_files) > 1:
+    if len(possible_files) > 1:
         wprint(
             f"Multiple corresponding models files were found in '{experiment_res_path}':"
         )
@@ -134,13 +136,13 @@ def find_model_path(experiment):
     return os.path.join(experiment_res_path, res[0]), possible_files[0]
 
 
-def save_test_results(test_results, experiment):
+def save_test_results(test_results: Any, experiment: Any) -> None:
     """Save the test results of an experiment to a JSON file."""
     if test_results is not None:
-        now = datetime.now()
-        dt_string = now.strftime("%Y%m%d_%H_%M")
+        now: datetime = datetime.now()
+        dt_string: str = now.strftime("%Y%m%d_%H_%M")
 
-        results_fp = os.path.join(
+        results_fp: str = os.path.join(
             experiment.test_dir, f"00_test_results_{dt_string}.json"
         )
 
@@ -156,11 +158,13 @@ def save_test_results(test_results, experiment):
             )
 
 
-def save_test_info(experiment, model_path=None, weights=None):
+def save_test_info(
+    experiment: Any, model_path: Any | None = None, weights: Any | None = None
+) -> None:
     """Save test configuration information to a JSON file."""
-    now = datetime.now()
-    dt_string = now.strftime("%Y%m%d_%H_%M")
-    results_fp = os.path.join(experiment.test_dir, f"test_config_{dt_string}.json")
+    now: datetime = datetime.now()
+    dt_string: str = now.strftime("%Y%m%d_%H_%M")
+    results_fp: str = os.path.join(experiment.test_dir, f"test_config_{dt_string}.json")
 
     with open(results_fp, "w", encoding="utf-8") as f:
         json.dump(
@@ -171,11 +175,12 @@ def save_test_info(experiment, model_path=None, weights=None):
         )
 
 
-def ui_ask_test_mode(experiment):
+def ui_ask_test_mode(experiment: Any) -> None:
     """UI to select test mode."""
-    exp_mode = getIntInput(
+    exp_mode: int = getIntInput(
         "\nExperiment Selection:\n1: Last, 2: From List, 3: Path to model\n", [1, 3]
     )
+    model_mode: int = 1  # Default value
     if exp_mode in [1, 2]:
         model_mode = getIntInput(
             "\nModel Selection:\n1: Last Model, 2: Best Model\n", [1, 2]
@@ -193,9 +198,9 @@ def ui_ask_test_mode(experiment):
             experiment.mode.custom_path()
 
 
-def _set_test_mode(experiment):
+def _set_test_mode(experiment: Any) -> None:
     experiment.mode.test()
-    best_or_last = experiment.exp_def.test.get("test_model", "best")
+    best_or_last: str = experiment.exp_def.test.get("test_model", "best")
     if experiment.mode.op_mode.unittest:
         experiment.mode.last()
 
@@ -210,7 +215,7 @@ def _set_test_mode(experiment):
         ui_ask_test_mode(experiment)
 
 
-def run_test(experiment):
+def run_test(experiment: Any) -> None:
     """Runs the test procedure for the given experiment."""
     iprint("-------------------------------------------")
     iprint("Starting Test...")

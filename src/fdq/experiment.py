@@ -2,14 +2,16 @@ import os
 import sys
 import json
 import math
-import torch
-import wandb
 import shutil
 import argparse
 import importlib
+from datetime import datetime, timedelta
+from typing import Any
+
+import torch
 import funkybob
-from datetime import datetime
 from torchview import draw_graph
+import wandb
 from fdq.ui_functions import iprint, eprint, wprint, show_train_progress, startProgBar
 from fdq.testing import find_model_path
 from fdq.transformers import get_transformers
@@ -39,76 +41,78 @@ class fdqExperiment:
         Args:
             inargs (argparse.Namespace): The input arguments containing experiment configurations.
         """
-        self.inargs = inargs
+        self.inargs: argparse.Namespace = inargs
         self.parse_and_clean_args()
-        # ------------- GLOBALS ------------------------------
-        self.project = self.exp_def.globals.project.replace(" ", "_")
-        self.experimentName = self.experiment_file_path.split("/")[-1].split(".json")[0]
-        self.funky_name = None
-        self.checkpoint_frequency = self.exp_def.store.checkpoint_frequency
-        self.mode = FCQmode()
-        self.creation_time = datetime.now()
-        self.finish_time = None
-        self.run_time = None
-        self.run_info = {}
-        # ------------- Train parameters ------------------------------
-        self.gradacc_iter = self.exp_def.train.args.get(
+        self.project: str = self.exp_def.globals.project.replace(" ", "_")
+        self.experimentName: str = self.experiment_file_path.split("/")[-1].split(
+            ".json"
+        )[0]
+        self.funky_name: str | None = None
+        self.checkpoint_frequency: int = self.exp_def.store.checkpoint_frequency
+        self.mode: FCQmode = FCQmode()
+        self.creation_time: datetime = datetime.now()
+        self.finish_time: datetime | None = None
+        self.run_time: timedelta | None = None
+        self.run_info: dict[str, Any] = {}
+        self.gradacc_iter: int = self.exp_def.train.args.get(
             "accumulate_grad_batches", default=1
         )
-        self.useAMP = bool(self.exp_def.train.args.use_AMP)
-        self.nb_epochs = self.exp_def.train.args.epochs
-        # ------------- Train variables ------------------------------
-        self.current_epoch = 0
-        self.start_epoch = 0
-        self.data = {}
-        self.models = {}
-        self.transformers = {}
-        self.trained_model_paths = {}
-        self.optimizers = {}
-        self.lr_schedulers = {}
-        self.losses = {}
-        self.last_model_path = {}
-        self.best_val_model_path = {}
-        self.best_train_model_path = {}
-        self.checkpoint_path = None
-        self._results_dir = None
-        self._results_output_dir = None
-        self.file_store_cnt = 0
-        self._test_dir = None
-        self._valLoss = float("inf")
-        self._trainLoss = float("inf")
-        self.bestValLoss = float("inf")
-        self.bestTrainLoss = float("inf")
+        self.useAMP: bool = bool(self.exp_def.train.args.use_AMP)
+        self.nb_epochs: int = self.exp_def.train.args.epochs
+        self.current_epoch: int = 0
+        self.start_epoch: int = 0
+        self.data: dict[str, Any] = {}
+        self.models: dict[str, torch.nn.Module] = {}
+        self.transformers: dict[str, Any] = {}
+        self.scaler: torch.cuda.amp.GradScaler | None = None
+        self.trainer: Any | None = None
+        self.trained_model_paths: dict[str, str] = {}
+        self.optimizers: dict[str, torch.optim.Optimizer | None] = {}
+        self.lr_schedulers: dict[str, Any | None] = {}
+        self.losses: dict[str, Any] = {}
+        self.last_model_path: dict[str, str | None] = {}
+        self.best_val_model_path: dict[str, str | None] = {}
+        self.best_train_model_path: dict[str, str | None] = {}
+        self.checkpoint_path: str | None = None
+        self._results_dir: str | None = None
+        self._results_output_dir: str | None = None
+        self.file_store_cnt: int = 0
+        self._test_dir: str | None = None
+        self._valLoss: float = float("inf")
+        self._trainLoss: float = float("inf")
+        self.bestValLoss: float = float("inf")
+        self.bestTrainLoss: float = float("inf")
         self.valLoss_per_ep: list[float] = []
         self.trainLoss_per_ep: list[float] = []
-        self.new_best_train_loss = False  # flag to indicate if a new best epoch was reached according to train loss
-        self.new_best_train_loss_ep_id = None
-        self.new_best_val_loss = False  # flag to indicate if a new best epoch was reached according to val loss
-        self.new_best_val_loss_ep_id = None
-        self.early_stop_detected = False
-        # ------------- MGMT attributes ------------------------------
-        self.useTensorboard = self.exp_def.store.use_tensorboard
-        self.tb_writer = None
-        self.useWandb = self.exp_def.store.use_wandb
-        self.wandb_initialized = False
-        # ------------- SLURM ------------------------------
-        slurm_job_id = os.getenv("SLURM_JOB_ID")
+        self.new_best_train_loss: bool = (
+            False  # flag to indicate if a new best epoch was reached according to train loss
+        )
+        self.new_best_train_loss_ep_id: int | None = None
+        self.new_best_val_loss: bool = (
+            False  # flag to indicate if a new best epoch was reached according to val loss
+        )
+        self.new_best_val_loss_ep_id: int | None = None
+        self.early_stop_detected: Any = False
+        self.useTensorboard: bool = self.exp_def.store.use_tensorboard
+        self.tb_writer: Any | None = None
+        self.useWandb: bool = self.exp_def.store.use_wandb
+        self.wandb_initialized: bool = False
+        slurm_job_id: str | None = os.getenv("SLURM_JOB_ID")
         if isinstance(slurm_job_id, str) and slurm_job_id.isdigit():
-            self.is_slurm = True
-            self.slurm_job_id = slurm_job_id
-            self.scratch_data_path = self.exp_def.get("slurm_cluster", {}).get(
-                "scratch_data_path"
-            )
+            self.is_slurm: bool = True
+            self.slurm_job_id: str = slurm_job_id
+            self.scratch_data_path: str | None = self.exp_def.get(
+                "slurm_cluster", {}
+            ).get("scratch_data_path")
         else:
             self.is_slurm = False
             self.slurm_job_id = None
             self.scratch_data_path = None
-        self.previous_slurm_job_id = None
-        # ------------- CUDA / CPU -------------------------
+        self.previous_slurm_job_id: str | None = None
         if torch.cuda.is_available() and bool(self.exp_def.train.args.use_GPU):
             torch.cuda.empty_cache()
-            self.device = torch.device("cuda")
-            self.is_cuda = True
+            self.device: torch.device = torch.device("cuda")
+            self.is_cuda: bool = True
             iprint(
                 f"CUDA available: {torch.cuda.is_available()}. NB devices: {torch.cuda.device_count()}"
             )
@@ -116,11 +120,10 @@ class fdqExperiment:
             wprint("NO CUDA available - CPU mode")
             self.device = torch.device("cpu")
             self.is_cuda = False
-        # ------------- Misc ------------------------------
         self.prepare_transformers()
 
     @property
-    def results_dir(self):
+    def results_dir(self) -> str:
         if self._results_dir is None:
             dt_string = self.creation_time.strftime("%Y%m%d_%H_%M_%S")
             if self.funky_name is None:
@@ -151,7 +154,7 @@ class fdqExperiment:
         return self._results_dir
 
     @property
-    def results_output_dir(self):
+    def results_output_dir(self) -> str:
         if self._results_output_dir is None:
             self._results_output_dir = os.path.join(
                 self.results_dir, "training_outputs"
@@ -161,7 +164,7 @@ class fdqExperiment:
         return self._results_output_dir
 
     @property
-    def test_dir(self):
+    def test_dir(self) -> str:
         if self._test_dir is None:
             folder_name = self.creation_time.strftime("%Y%m%d_%H_%M_%S")
             if self.is_slurm:
@@ -172,11 +175,11 @@ class fdqExperiment:
         return self._test_dir
 
     @property
-    def valLoss(self):
+    def valLoss(self) -> float:
         return self._valLoss
 
     @valLoss.setter
-    def valLoss(self, value):
+    def valLoss(self, value: float) -> None:
         self._valLoss = value
         self.valLoss_per_ep.append(value)
         if not math.isnan(value):
@@ -185,11 +188,11 @@ class fdqExperiment:
             self.new_best_val_loss_ep_id = self.current_epoch
 
     @property
-    def trainLoss(self):
+    def trainLoss(self) -> float:
         return self._trainLoss
 
     @trainLoss.setter
-    def trainLoss(self, value):
+    def trainLoss(self, value: float) -> None:
         self._trainLoss = value
         self.trainLoss_per_ep.append(value)
         if not math.isnan(value):
@@ -197,7 +200,7 @@ class fdqExperiment:
             self.new_best_train_loss = self.bestTrainLoss == value
             self.new_best_train_loss_ep_id = self.current_epoch
 
-    def parse_and_clean_args(self):
+    def parse_and_clean_args(self) -> None:
         self.experiment_file_path = self.inargs.experimentfile
 
         with open(self.experiment_file_path, encoding="utf8") as fp:
@@ -246,7 +249,7 @@ class fdqExperiment:
         replace_tilde_with_abs_path(self.exp_file)
         self.exp_def = DictToObj(self.exp_file)
 
-    def add_module_to_syspath(self, path):
+    def add_module_to_syspath(self, path: str) -> None:
         if not os.path.exists(path):
             raise FileNotFoundError(f"File {path} not found.")
 
@@ -254,7 +257,9 @@ class fdqExperiment:
         if parent_dir not in sys.path:
             sys.path.append(parent_dir)
 
-    def import_class(self, file_path=None, module_name=None):
+    def import_class(
+        self, file_path: str | None = None, module_name: str | None = None
+    ) -> Any:
         if module_name is None:
             if file_path is None or not file_path.endswith(".py"):
                 raise ValueError(
@@ -265,14 +270,17 @@ class fdqExperiment:
         return importlib.import_module(module_name)
 
     def instantiate_class(
-        self, class_path=None, file_path=None, class_name=None, *args, **kwargs
-    ):
+        self,
+        class_path: str | None = None,
+        file_path: str | None = None,
+        class_name: str | None = None,
+    ) -> Any:
         if class_path is None and file_path is None:
             raise ValueError(
                 f"Error, class_path or file_path must be defined. Got: {class_path}, {file_path}"
             )
 
-        elif class_path is not None:
+        if class_path is not None:
             if "." not in class_path:
                 raise ValueError(
                     f"Error, class_path must be a string with the module name and class name separated by a dot. Got: {class_path}"
@@ -285,18 +293,22 @@ class fdqExperiment:
                 raise ValueError(
                     f"Error, path must be a string with the module name and class name separated by a dot. Got: {file_path}"
                 )
-            elif class_name is None:
+            if class_name is None:
                 raise ValueError(
                     f"Error, class_name must be defined if file_path is used. Got: {class_name}"
                 )
             self.add_module_to_syspath(file_path)
             module_name = os.path.basename(file_path).split(".")[0]
             module = importlib.import_module(module_name)
+        else:
+            raise ValueError(
+                f"Error, class_path or file_path must be defined. Got: {class_path}, {file_path}"
+            )
 
         return getattr(module, class_name)
 
-    def init_models(self, instantiate=True):
-        if self.models != {}:
+    def init_models(self, instantiate: bool = True) -> None:
+        if self.models:
             return
         for model_name, model_def in self.exp_def.models:
             if model_def.path is not None:
@@ -345,7 +357,7 @@ class fdqExperiment:
                 for param in self.models[model_name].parameters():
                     param.requires_grad = False
 
-    def load_models(self):
+    def load_models(self) -> None:
         self.init_models(instantiate=False)
         for model_name, _ in self.exp_def.models:
             path = self.trained_model_paths[model_name]
@@ -355,7 +367,7 @@ class fdqExperiment:
             )
             self.models[model_name].eval()
 
-    def load_trained_models(self):
+    def load_trained_models(self) -> None:
         for model_name, _ in self.exp_def.models:
             if self.mode.test_mode.custom_path:
                 while True:
@@ -378,19 +390,17 @@ class fdqExperiment:
 
             self.load_models()
 
-    def setupData(self):
-        if self.data != {}:
+    def setupData(self) -> None:
+        if self.data:
             return
         self.copy_data_to_scratch()
         for data_name, data_source in self.exp_def.data.items():
             processor = self.import_class(file_path=data_source.processor)
             args = self.exp_def.data.get(data_name).args
-            self.data[data_name] = DictToObj(
-                processor.createDatasets(self, args)
-            )
+            self.data[data_name] = DictToObj(processor.create_datasets(self, args))
         self.print_dataset_infos()
 
-    def save_current_model(self):
+    def save_current_model(self) -> None:
         """Store model including weights.
 
         This is run at the end of every epoch.
@@ -439,7 +449,7 @@ class fdqExperiment:
                 self.best_train_model_path[model_name] = best_train_model_path
                 torch.save(model, best_train_model_path)
 
-    def prepareTraining(self):
+    def prepareTraining(self) -> None:
         self.mode.train()
         self.setupData()
         self.trainer = self.import_class(file_path=self.exp_def.train.path)
@@ -466,7 +476,7 @@ class fdqExperiment:
 
         store_processing_infos(self)
 
-    def createOptimizer(self):
+    def createOptimizer(self) -> None:
         for model_name, margs in self.exp_def.models:
             if margs.optimizer is None:
                 iprint(f"No optimizer defined for model {model_name}")
@@ -485,7 +495,7 @@ class fdqExperiment:
 
             self.optimizers[model_name] = optimizer
 
-    def set_lr_schedule(self):
+    def set_lr_schedule(self) -> None:
         # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
         # https://towardsdatascience.com/a-visual-guide-to-learning-rate-schedulers-in-pytorch-24bbb262c863
 
@@ -510,7 +520,7 @@ class fdqExperiment:
                 self.optimizers[model_name], **margs.lr_scheduler.args.to_dict()
             )
 
-    def createLosses(self):
+    def createLosses(self) -> None:
         for loss_name, largs in self.exp_def.losses:
             if largs.path is not None:
                 cls = self.instantiate_class(
@@ -518,12 +528,16 @@ class fdqExperiment:
                 )
             elif largs.class_name is not None:
                 cls = self.instantiate_class(class_path=largs.class_name)
+            else:
+                raise ValueError(
+                    f"Error, loss {loss_name} must have a path or class name defined."
+                )
             if largs.args is not None:
                 self.losses[loss_name] = cls(**largs.args.to_dict())
             else:
                 self.losses[loss_name] = cls()
 
-    def load_checkpoint(self, path):
+    def load_checkpoint(self, path: str) -> None:
         """Load checkpoint to resume training."""
         if not os.path.exists(path):
             raise FileNotFoundError(f"Error, checkpoint file {path} not found.")
@@ -562,7 +576,7 @@ class fdqExperiment:
                     checkpoint["optimizer"][model_name]
                 )
 
-    def save_checkpoint(self):
+    def save_checkpoint(self) -> None:
         if self.checkpoint_frequency is None or self.checkpoint_frequency == 0:
             return
 
@@ -576,7 +590,7 @@ class fdqExperiment:
 
         iprint(f"Saving checkpoint to {self.checkpoint_path}")
 
-        if self.optimizers == {}:
+        if not self.optimizers:
             optimizer_state = None
         else:
             optimizer_state = {}
@@ -605,7 +619,9 @@ class fdqExperiment:
 
         torch.save(checkpoint, self.checkpoint_path)
 
-    def get_next_export_fn(self, name=None, file_ending="jpg"):
+    def get_next_export_fn(
+        self, name: str | None = None, file_ending: str = "jpg"
+    ) -> str:
         if self.mode.op_mode.test:
             start_str = "test_image"
             dest_dir = self.test_dir
@@ -622,7 +638,7 @@ class fdqExperiment:
 
         return path
 
-    def print_dataset_infos(self):
+    def print_dataset_infos(self) -> None:
         iprint("-------------------------------------------")
         for data_name, data_source in self.exp_def.data.items():
             iprint(f"Dataset: {data_name}")
@@ -634,7 +650,7 @@ class fdqExperiment:
             iprint(f"Nb samples test: {self.data[data_name].n_test_samples}")
         iprint("-------------------------------------------")
 
-    def clean_up(self):
+    def clean_up(self) -> None:
         iprint("-------------------------------------------")
         iprint("Training done!\nCleaning up..")
         iprint("-------------------------------------------")
@@ -646,7 +662,7 @@ class fdqExperiment:
 
         store_processing_infos(self)
 
-    def check_early_stop(self):
+    def check_early_stop(self) -> bool:
         """Check if training should be stopped.
 
         1) Stop training if the validation los over last last N epochs did not further decrease.
@@ -662,7 +678,7 @@ class fdqExperiment:
         # early stop NaN ?
         if e_stop_nan is not None:
             if all(math.isnan(x) for x in self.trainLoss_per_ep[-e_stop_nan:]):
-                self.early_stop_nan_detected = "NaN detected"
+                self.early_stop_detected = "NaN detected"
                 wprint(
                     "\n###############################\n"
                     f"!! Early Stop NaN EP {self.current_epoch} !!\n"
@@ -676,7 +692,7 @@ class fdqExperiment:
         if e_stop_val is not None and len(self.valLoss_per_ep) >= e_stop_val:
             # was there a new best val loss within the last N epochs?
             if min(self.valLoss_per_ep[-e_stop_val:]) != self.bestValLoss:
-                self.early_stop_nan_detected = "ValLoss_stagnated"
+                self.early_stop_detected = "ValLoss_stagnated"
                 wprint(
                     "\n###############################\n"
                     f"!! Early Stop Val Loss EP {self.current_epoch} !!\n"
@@ -692,30 +708,31 @@ class fdqExperiment:
                     f"!! Early Stop Train Loss EP {self.current_epoch} !!\n"
                     "###############################\n"
                 )
-                self.early_stop_nan_detected = "TrainLoss_stagnated"
+                self.early_stop_detected = "TrainLoss_stagnated"
                 return True
 
         return False
 
-    def update_gradients(self, b_idx, loader_name, model_name):
+    def update_gradients(self, b_idx: int, loader_name: str, model_name: str) -> None:
         length_loader = self.data[loader_name].n_train_batches
 
         if ((b_idx + 1) % self.gradacc_iter == 0) or (b_idx + 1 == length_loader):
-            if self.useAMP:
-                self.scaler.step(self.optimizers[model_name])
-                self.scaler.update()
-            else:
-                self.optimizers[model_name].step()
-
-            self.optimizers[model_name].zero_grad()
+            optimizer = self.optimizers[model_name]
+            if optimizer is not None:
+                if self.useAMP:
+                    self.scaler.step(optimizer)
+                    self.scaler.update()
+                else:
+                    optimizer.step()
+                optimizer.zero_grad()
 
     def finalize_epoch(
         self,
-        log_scalars=None,
-        log_images_wandb=None,
-        log_images_tensorboard=None,
-        log_text_tensorboard=None,
-    ):
+        log_scalars: dict[str, float] | None = None,
+        log_images_wandb: Any | None = None,
+        log_images_tensorboard: Any | None = None,
+        log_text_tensorboard: Any | None = None,
+    ) -> None:
         show_train_progress(self)
         save_tensorboard(
             experiment=self,
@@ -750,24 +767,24 @@ class fdqExperiment:
             run_t_string = f"days: {td.days}, hours: {td.seconds // 3600}, minutes: {td.seconds % 3600 / 60.0:.0f}"
             iprint(f"Current run time: {run_t_string}")
             store_processing_infos(self)
-        except Exception:
+        except (AttributeError, ValueError):
             pass
 
         save_train_history(self)
         self.save_checkpoint()
         self.save_current_model()
 
-    def cp_to_res_dir(self, file_path):
+    def cp_to_res_dir(self, file_path: str) -> None:
         fn = file_path.split("/")[-1]
         iprint(f"Saving {fn} to {self.results_dir}...")
         shutil.copyfile(file_path, f"{self.results_dir}/{fn}")
 
-    def copy_files_to_test_dir(self, file_path):
+    def copy_files_to_test_dir(self, file_path: str) -> None:
         fn = file_path.split("/")[-1]
         iprint(f"Saving {fn} to {self.test_dir}...")
         shutil.copyfile(file_path, f"{self.test_dir}/{fn}")
 
-    def runEvaluator(self):
+    def runEvaluator(self) -> Any:
         evaluator_path = self.exp_def.test.processor
 
         if not os.path.exists(evaluator_path):
@@ -782,7 +799,7 @@ class fdqExperiment:
 
         return currentEvaluator.fdq_test(self)
 
-    def copy_data_to_scratch(self):
+    def copy_data_to_scratch(self) -> None:
         """Copy all datasets to scratch dir, and update the paths."""
         if self.scratch_data_path is None:
             return
@@ -810,7 +827,6 @@ class fdqExperiment:
 
                 dargs.base_path = dst_path
             else:
-
                 for file_cat in [
                     "train_files_path",
                     "test_files_path",
@@ -839,11 +855,11 @@ class fdqExperiment:
         iprint("Copy datasets to temporary scratch location... Done!")
         iprint("----------------------------------------------------")
 
-    def prepare_transformers(self):
+    def prepare_transformers(self) -> None:
         """Prepare transformers for the experiment."""
         if self.exp_def.transforms is None:
             return
-        elif not isinstance(self.exp_file["transforms"], dict):
+        if not isinstance(self.exp_file["transforms"], dict):
             raise ValueError(
                 "Error, transforms must be a dictionary with transform names as keys."
             )
@@ -853,10 +869,10 @@ class fdqExperiment:
                 t_defs=transformer_def
             )
 
-    def dump_model(self):
+    def dump_model(self) -> None:
         dump_model(self)
 
-    def print_model(self):
+    def print_model(self) -> None:
         self.setupData()
         self.init_models()
         iprint("\n-----------------------------------------------------------")
@@ -870,26 +886,34 @@ class fdqExperiment:
             iprint(model)
             iprint("-----------------------------------------------------------\n")
 
-        try:
-            iprint(f"Saving model graph to: {self.results_dir}/{model_name}_graph.png")
+            try:
+                iprint(
+                    f"Saving model graph to: {self.results_dir}/{model_name}_graph.png"
+                )
 
-            sample = next(iter(self.data[next(iter(self.data))].train_data_loader))
-            if isinstance(sample, tuple):
-                sample = sample[0]
-            if isinstance(sample, list):
-                sample = sample[0]
-            if isinstance(sample, dict):
-                sample = next(iter(sample.values()))
+                sample = next(iter(self.data[next(iter(self.data))].train_data_loader))
+                if isinstance(sample, tuple):
+                    sample = sample[0]
+                if isinstance(sample, list):
+                    sample = sample[0]
+                if isinstance(sample, dict):
+                    sample = next(iter(sample.values()))
 
-            draw_graph(
-                model,
-                input_size=sample.shape,
-                device=self.device,
-                save_graph=True,
-                filename=model_name + "_graph",
-                directory=self.results_dir,
-                expand_nested=False,
-            )
-        except Exception as e:
-            wprint("Failed to draw graph!")
-            print(e)
+                draw_graph(
+                    model,
+                    input_size=sample.shape,
+                    device=self.device,
+                    save_graph=True,
+                    filename=model_name + "_graph",
+                    directory=self.results_dir,
+                    expand_nested=False,
+                )
+            except (
+                StopIteration,
+                AttributeError,
+                KeyError,
+                TypeError,
+                RuntimeError,
+            ) as e:
+                wprint("Failed to draw graph!")
+                print(e)

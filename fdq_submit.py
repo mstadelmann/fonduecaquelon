@@ -1,3 +1,5 @@
+"""SLURM job submission utility for fonduecaquelon experiments."""
+
 import sys
 import os
 import re
@@ -6,9 +8,10 @@ import copy
 import getpass
 import subprocess
 from datetime import datetime
+from typing import Any
 
 
-def get_template():
+def get_template() -> str:
     """Return the SLURM job submission script template as a string."""
     return """#!/bin/bash
 #SBATCH --time=#job_time#
@@ -183,6 +186,7 @@ if [ "$IS_TEST" == True ]; then
     echo ------------------------------------------------------------
     echo "RUNNING TEST"
     echo ------------------------------------------------------------
+    RUN_TEST=False # dont launch test in new job
     test_start=$(date +%s.%N)
     fdq $EXP_FILE_PATH -nt -ta
     fdq_pid=$!
@@ -222,7 +226,7 @@ fi
 """
 
 
-def recursive_dict_update(d_parent, d_child):
+def recursive_dict_update(d_parent: dict, d_child: dict) -> dict:
     """Recursively update the parent dictionary with values from the child dictionary.
 
     Args:
@@ -248,23 +252,23 @@ def recursive_dict_update(d_parent, d_child):
 class DictToObj:
     """A class that converts a dictionary into an object, allowing attribute-style access to keys, including nested dictionaries."""
 
-    def __init__(self, dictionary):
+    def __init__(self, dictionary: dict) -> None:
         """Initialize the object by setting attributes from the given dictionary, converting nested dictionaries to DictToObj."""
         for key, value in dictionary.items():
             if isinstance(value, dict):
                 value = DictToObj(value)
             setattr(self, key, value)
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         """Return None if the requested attribute is not found."""
         return None
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return the string representation for debugging."""
         keys = ", ".join(self.__dict__.keys())
         return f"<{self.__class__.__name__}: {keys}>"
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Return the string representation of the object."""
         return self.__repr__()
 
@@ -281,7 +285,7 @@ class DictToObj:
     def values(self):
         return self.__dict__.values()
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         result = {}
         for key, value in self.__dict__.items():
             if isinstance(value, DictToObj):
@@ -290,14 +294,14 @@ class DictToObj:
                 result[key] = value
         return result
 
-    def get(self, key, default=None):
+    def get(self, key: str, default: Any = None) -> Any:
         res = getattr(self, key)
         if res is None:
             return default
         return res
 
 
-def parse_input_file(exp_file_path):
+def parse_input_file(exp_file_path: str) -> DictToObj:
     """Parse the experiment JSON file, handle parent inheritance, and return a DictToObj representation.
 
     Args:
@@ -311,13 +315,15 @@ def parse_input_file(exp_file_path):
         sys.exit(1)
 
     try:
-        with open(exp_file_path) as file:
+        with open(exp_file_path, encoding="utf8") as file:
             exp_file = json.load(file)
-    except json.JSONDecodeError:
-        raise ValueError(f"Error: The file '{exp_file_path}' is not a valid JSON file.")
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Error: The file '{exp_file_path}' is not a valid JSON file."
+        ) from exc
 
-    globals = exp_file.get("globals")
-    parent = globals.get("parent", {})
+    globals_def = exp_file.get("globals")
+    parent = globals_def.get("parent", {})
     if parent != {}:
         if parent[0] == "/":
             parent_file_path = parent
@@ -342,21 +348,16 @@ def parse_input_file(exp_file_path):
     return DictToObj(exp_file)
 
 
-def main():
-    """Main entry point for submitting a job to SLURM using the provided experiment JSON file."""
-    if len(sys.argv) != 2:
-        raise ValueError(
-            "Error: Exactly one argument is required which is the path to the JSON file."
-        )
+def get_default_config(slurm_conf: Any) -> dict[str, Any]:
+    """Return a job configuration dictionary with defaults, updated from the given SLURM config.
 
-    in_args = parse_input_file(sys.argv[1])
-    slurm_conf = in_args.slurm_cluster
-    if slurm_conf is None:
-        raise ValueError(
-            "Error: The 'slurm_cluster' section in the JSON config file is required to submit a job to the queue!"
-        )
+    Args:
+        slurm_conf (dict): SLURM configuration dictionary.
 
-    job_config = {
+    Returns:
+        dict: Job configuration dictionary with updated values.
+    """
+    job_config: dict[str, Any] = {
         "job_name": None,
         "user": None,
         "job_time": None,
@@ -389,50 +390,47 @@ def main():
         if val is not None:
             job_config[key] = val
 
-    # set exp file path
-    exp_file_path = os.path.expanduser(sys.argv[1])
-    if not os.path.isabs(exp_file_path):
-        exp_file_path = os.path.abspath(exp_file_path)
-    job_config["exp_file_path"] = exp_file_path
-    exp_name = os.path.basename(exp_file_path).split(".")[0]
+    return job_config
 
-    job_config["job_name"] = exp_name[:30].replace(" ", "_")
-    job_config["user"] = getpass.getuser()
-    job_config["results_path"] = in_args.store.results_path
-    job_config["log_path"] = job_config["log_path"]
 
-    # define path of submit script
-    dt_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_path = os.path.join(
-        os.path.expanduser(job_config["log_path"]),
-        "submitted_jobs",
-    )
-    os.makedirs(base_path, exist_ok=True)
-    submit_path = os.path.join(
-        base_path,
-        f"{dt_str}__{exp_name.replace(' ', '_')}.submit",
-    )
-    job_config["submit_file_path"] = submit_path
+def check_config(job_config: dict[str, Any]) -> dict[str, Any]:
+    """Check if all mandatory job configuration values are set and expand user paths.
 
-    # if this is a pure test job, set the is_test flag
-    if not job_config["run_train"] and not job_config["run_test"]:
-        job_config["is_test"] = True
+    Args:
+        job_config (dict): The job configuration dictionary to validate and update.
 
-    # check if all mandatory configs are set
+    Returns:
+        dict: The validated and updated job configuration dictionary.
+
+    Raises:
+        ValueError: If any mandatory configuration value is None.
+    """
     for key, value in job_config.items():
         if value is None:
             raise ValueError(
                 f"Value for mandatory key'{key}' is None. Please update your config file!"
             )
-        elif value == "":
+        if value == "":
             job_config[key] = "None"
         elif isinstance(value, str) and value.startswith("~/"):
             job_config[key] = os.path.expanduser(value)
 
-    # create new submit file
+    return job_config
+
+
+def create_submit_file(
+    job_config: dict[str, Any], slurm_conf: Any, submit_path: str
+) -> None:
+    """Create a SLURM submit file from the job configuration and SLURM config.
+
+    Args:
+        job_config (dict): The job configuration dictionary.
+        slurm_conf (DictToObj): The SLURM configuration object.
+        submit_path (str): The path where the submit file will be written.
+    """
     if os.path.exists(job_config["log_path"]):
         os.makedirs(job_config["log_path"], exist_ok=True)
-    template_content = get_template()
+    template_content: str = get_template()
     for key, value in job_config.items():
         template_content = template_content.replace(f"#{key}#", str(value))
     template_content = template_content.replace("//", "/")
@@ -449,24 +447,70 @@ def main():
     else:
         raise ValueError("Error: additional_pip_packages must be a list of strings.")
 
-    with open(submit_path, "w") as f:
+    with open(submit_path, "w", encoding="utf8") as f:
         f.write(template_content)
+
+
+def main() -> None:
+    """Main entry point for submitting a job to SLURM using the provided experiment JSON file."""
+    if len(sys.argv) != 2:
+        raise ValueError(
+            "Error: Exactly one argument is required which is the path to the JSON file."
+        )
+
+    in_args: DictToObj = parse_input_file(sys.argv[1])
+    slurm_conf: Any = in_args.slurm_cluster
+    if slurm_conf is None:
+        raise ValueError(
+            "Error: The 'slurm_cluster' section in the JSON config file is required to submit a job to the queue!"
+        )
+
+    job_config: dict[str, Any] = get_default_config(slurm_conf)
+
+    # set exp file path
+    exp_file_path: str = os.path.expanduser(sys.argv[1])
+    if not os.path.isabs(exp_file_path):
+        exp_file_path = os.path.abspath(exp_file_path)
+    job_config["exp_file_path"] = exp_file_path
+    exp_name: str = os.path.basename(exp_file_path).split(".")[0]
+
+    job_config["job_name"] = exp_name[:30].replace(" ", "_")
+    job_config["user"] = getpass.getuser()
+    job_config["results_path"] = in_args.store.results_path
+    job_config["log_path"] = job_config["log_path"]
+
+    # define path of submit script
+    base_path: str = os.path.join(
+        os.path.expanduser(job_config["log_path"]),
+        "submitted_jobs",
+    )
+    os.makedirs(base_path, exist_ok=True)
+    submit_path: str = os.path.join(
+        base_path,
+        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}__{exp_name.replace(' ', '_')}.submit",
+    )
+    job_config["submit_file_path"] = submit_path
+
+    # if this is a pure test job, set the is_test flag
+    if not job_config["run_train"] and job_config["run_test"]:
+        job_config["is_test"] = True
+
+    # check if all mandatory configs are set
+    job_config = check_config(job_config)
+
+    # create new submit file
+    create_submit_file(job_config, slurm_conf, submit_path)
 
     # start slurm job
     result = subprocess.run(
-        f"sbatch {submit_path}", shell=True, capture_output=True, text=True
+        f"sbatch {submit_path}", shell=True, capture_output=True, text=True, check=True
     )
 
     match = re.search(r"(\d+)\s*$", result.stdout)
     if match:
-        # new_submit_path = os.path.join(
-        #     os.path.expanduser(job_config["log_path"]),
-        #     f"{match.group(1)}__{os.path.basename(submit_path)}",
-        # )
-        # shutil.copy2(submit_path, new_submit_path)
-        print("Submitted batch job.")
-        print(f"Slurm Job ID {match.group(1)}")
-        print(f"Submit file: {submit_path}.")
+        print(
+            f"Submitted batch job.\nSlurm Job ID {match.group(1)}\nSubmit file: {submit_path}."
+        )
     else:
         print(result.stdout)
 

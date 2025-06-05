@@ -1,15 +1,15 @@
 import os
-import torch
 import shutil
-import numpy as np
-from PIL import Image
-from fdq.misc import get_subset
+from urllib.request import urlretrieve
+
+import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms
-import torch.nn.functional as F
-
+import numpy as np
+from PIL import Image
 from tqdm import tqdm
-from urllib.request import urlretrieve
+
+from fdq.misc import get_subset
 
 
 # based on https://github.com/qubvel-org/segmentation_models.pytorch
@@ -71,19 +71,23 @@ class OxfordPetDataset(torch.utils.data.Dataset):
             mask = mask.unsqueeze(0)
         else:
             # one hot encoding
-            mask = F.one_hot((mask - 1).long(), num_classes=3).permute(2, 0, 1).float()
+            mask = (
+                torch.nn.functional.one_hot((mask - 1).long(), num_classes=3)
+                .permute(2, 0, 1)
+                .float()
+            )
 
         if self.transform_img is not None:
             image = self.transform_img(image)
         if self.transform_mask is not None:
             mask = self.transform_mask(mask)
 
-        return dict(image=image, mask=mask)
+        return {"image": image, "mask": mask}
 
     def _read_split(self):
         split_filename = "test.txt" if self.mode == "test" else "trainval.txt"
         split_filepath = os.path.join(self.root, "annotations", split_filename)
-        with open(split_filepath) as f:
+        with open(split_filepath, encoding="utf8") as f:
             split_data = f.read().strip("\n").split("\n")
         filenames = [x.split(" ")[0] for x in split_data]
         if self.mode == "train":  # 90% for train
@@ -111,9 +115,8 @@ class OxfordPetDataset(torch.utils.data.Dataset):
         extract_archive(filepath)
 
 
-def createDatasets(experiment, args=None):
+def create_datasets(experiment, args=None):
     """Creates and returns data loaders and dataset statistics for the Oxford Pet dataset based on the experiment configuration."""
-
     pin_mem = False if not experiment.is_cuda else args.get("pin_memory", False)
     drop_last = args.get("drop_last", True)
 

@@ -1,3 +1,5 @@
+from typing import Any
+from collections.abc import Sequence
 import numpy as np
 import progressbar
 import termplotlib as tpl  # this requires GNUplot!
@@ -5,12 +7,12 @@ from colorama import init
 from termcolor import colored
 
 
-colorama_initialized = None
+colorama_initialized: bool | None = None
 
 
-def getIntInput(message, drange=[0, 5000]):
+def getIntInput(message: str, drange: Sequence[int]) -> int:
     """UI helper function to get an integer input from the user within a specified range."""
-    tmode = None
+    tmode: str | int | None = None
     while not isinstance(tmode, int):
         tmode = input(message)
         try:
@@ -19,18 +21,18 @@ def getIntInput(message, drange=[0, 5000]):
             if not drange[0] <= tmode <= drange[1]:
                 print(f"Value must be between {drange[0]} and {drange[1]}.")
                 tmode = None
-        except Exception:
+        except ValueError:
             print("Enter integer number!")
 
     return tmode
 
 
-def getYesNoInput(message):
+def getYesNoInput(message: str) -> bool:
     """UI helper function to get yes/no input from user.
 
     Returns True if 'y' is entered, False otherwise.
     """
-    tmode = None
+    tmode: str | int | None = None
     while not isinstance(tmode, str):
         tmode = input(message)
         if tmode.lower() not in ["y", "n"]:
@@ -40,9 +42,9 @@ def getYesNoInput(message):
     return tmode.lower() == "y"
 
 
-def getFloatInput(message, drange=[-10, 10]):
+def getFloatInput(message: str, drange: Sequence[float]) -> float:
     """UI helper function to get a float input from the user within a specified range."""
-    tmode = None
+    tmode: str | float | None = None
     while not isinstance(tmode, float):
         tmode = input(message)
         try:
@@ -51,7 +53,7 @@ def getFloatInput(message, drange=[-10, 10]):
             if not drange[0] <= tmode <= drange[1]:
                 print(f"Value must be between {drange[0]} and {drange[1]}.")
                 tmode = None
-        except Exception:
+        except ValueError:
             print("Enter real number!")
 
     return tmode
@@ -60,29 +62,31 @@ def getFloatInput(message, drange=[-10, 10]):
 class CustomProgressBar(progressbar.ProgressBar):
     """A customizable progress bar that can be activated or deactivated."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Initializes the CustomProgressBar, optionally setting its active state."""
         if "is_active" in kwargs:
-            self.is_active = kwargs["is_active"]
+            self.is_active: bool = kwargs["is_active"]
             del kwargs["is_active"]
         else:
             self.is_active = True
         super().__init__(*args, **kwargs)
 
-    def start(self):
+    def start(self) -> None:
         if self.is_active:
             super().start()
 
-    def update(self, value=None):
+    def update(self, value: int | None = None) -> None:
         if self.is_active:
             super().update(value)
 
-    def finish(self):
+    def finish(self) -> None:
         if self.is_active:
             super().finish()
 
 
-def startProgBar(nbstepts, message=None, is_active=True):
+def startProgBar(
+    nbstepts: int, message: str | None = None, is_active: bool = True
+) -> CustomProgressBar:
     """Starts and returns a progress bar with the specified number of steps and optional message."""
     if message is not None:
         print(message)
@@ -95,7 +99,7 @@ def startProgBar(nbstepts, message=None, is_active=True):
     return pbar
 
 
-def show_train_progress(experiment):
+def show_train_progress(experiment: Any) -> None:
     """Displays training and validation loss progress for the given experiment."""
     print(
         f"\nProject: {experiment.project} | Experiment name: {experiment.experimentName}"
@@ -123,22 +127,24 @@ def show_train_progress(experiment):
     )
 
 
-def iprint(msg):
+def iprint(msg: Any) -> None:
     """Info print: plots information string in green."""
     cprint(msg, text_color="green")
 
 
-def wprint(msg):
+def wprint(msg: Any) -> None:
     """Warning print: plots warning string in yellow."""
     cprint(msg, text_color="yellow")
 
 
-def eprint(msg):
+def eprint(msg: Any) -> None:
     """Error print: plots error string in red."""
     cprint(msg, text_color="red")
 
 
-def cprint(msg, text_color=None, bg_color=None):
+def cprint(
+    msg: Any, text_color: str | None = None, bg_color: str | None = None
+) -> None:
     """Prints a message with optional text and background color in the terminal."""
     global colorama_initialized
     if "colorama_initialized" not in globals():

@@ -29,40 +29,37 @@ def fdq_train(experiment: fdqExperiment) -> None:
         model.train()
         pbar = startProgBar(data.n_train_samples, "training...")
 
-        for nb_tbatch, batch in enumerate(data.train_data_loader):
-            pbar.update(nb_tbatch * experiment.exp_def.data.MNIST.args.train_batch_size)
+        for nb_batch, batch in enumerate(data.train_data_loader):
+            pbar.update(nb_batch * experiment.exp_def.data.MNIST.args.train_batch_size)
 
             inputs, targets = batch
-
             inputs = inputs.to(experiment.device).type(torch.float32)
             targets = targets.to(experiment.device)
 
             with torch.autocast(device_type=device_type, enabled=experiment.useAMP):
                 output = model(inputs)
-                train_loss_tensor = (
+                loss_tensor = (
                     experiment.losses["cp"](output, targets) / experiment.gradacc_iter
                 )
-                if experiment.useAMP:
-                    experiment.scaler.scale(train_loss_tensor).backward()
+                if experiment.useAMP and experiment.scaler is not None:
+                    experiment.scaler.scale(loss_tensor).backward()
                 else:
-                    train_loss_tensor.backward()
+                    loss_tensor.backward()
 
             experiment.update_gradients(
-                b_idx=nb_tbatch, loader_name="MNIST", model_name="simpleNet"
+                b_idx=nb_batch, loader_name="MNIST", model_name="simpleNet"
             )
 
-            train_loss_sum += train_loss_tensor.detach().item()
+            train_loss_sum += loss_tensor.detach().item()
 
         experiment.trainLoss = train_loss_sum / len(data.train_data_loader.dataset)
         pbar.finish()
 
         model.eval()
-
         pbar = startProgBar(data.n_val_samples, "validation...")
 
-        for nb_vbatch, batch in enumerate(data.val_data_loader):
-            experiment.current_val_batch = nb_vbatch
-            pbar.update(nb_vbatch * experiment.exp_def.data.MNIST.args.val_batch_size)
+        for nb_batch, batch in enumerate(data.val_data_loader):
+            pbar.update(nb_batch * experiment.exp_def.data.MNIST.args.val_batch_size)
 
             inputs, targets = batch
 
@@ -70,9 +67,9 @@ def fdq_train(experiment: fdqExperiment) -> None:
                 inputs = inputs.to(experiment.device)
                 output = model(inputs)
                 targets = targets.to(experiment.device)
-                val_loss_tensor = experiment.losses["cp"](output, targets)
+                loss_tensor = experiment.losses["cp"](output, targets)
 
-            val_loss_sum += val_loss_tensor.detach().item()
+            val_loss_sum += loss_tensor.detach().item()
         experiment.valLoss = val_loss_sum / len(data.val_data_loader.dataset)
 
         pbar.finish()

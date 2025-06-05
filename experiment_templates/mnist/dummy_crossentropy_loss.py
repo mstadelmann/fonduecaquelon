@@ -1,3 +1,5 @@
+"""Dummy CrossEntropyLoss implementation for MNIST experiments in the fdq framework."""
+
 import torch
 
 
