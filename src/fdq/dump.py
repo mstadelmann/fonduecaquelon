@@ -12,23 +12,29 @@ def select_experiment(experiment: Any) -> None:
     """Interactively select and load an experiment for model dumping."""
     sel_mode: int = getIntInput(
         "Select experiment for model dumping:\n"
-        "  1) last exp best model\n"
-        "  2) last exp last model\n"
-        "  3) custom exp best model\n"
-        "  4) custom exp last model\n"
-        "  5) define custom path\n",
-        drange=[1, 5],
+        "  1) last exp best val model\n"
+        "  2) last exp best train model\n"
+        "  3) last exp last model\n"
+        "  4) custom exp best val model\n"
+        "  5) custom exp best train model\n"
+        "  6) custom exp last model\n"
+        "  7) define custom path\n",
+        drange=[1, 7],
     )
 
     if sel_mode == 1:
-        experiment.mode.best()
+        experiment.mode.best_val()
     elif sel_mode == 2:
-        experiment.mode.last()
+        experiment.mode.best_train()
     elif sel_mode == 3:
-        experiment.mode.custom_best()
+        experiment.mode.last()
     elif sel_mode == 4:
-        experiment.mode.custom_last()
+        experiment.mode.custom_best_val()
     elif sel_mode == 5:
+        experiment.mode.custom_best_train()
+    elif sel_mode == 6:
+        experiment.mode.custom_last()
+    elif sel_mode == 7:
         experiment.mode.custom_path()
 
     experiment.load_trained_models()

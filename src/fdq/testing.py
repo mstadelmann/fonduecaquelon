@@ -98,7 +98,11 @@ def find_model_path(experiment: Any) -> tuple[str, str]:
         else:
             subfolders_dict[datestr] = ""
 
-    if experiment.mode.test_mode.custom_last or experiment.mode.test_mode.custom_best:
+    if (
+        experiment.mode.test_mode.custom_last
+        or experiment.mode.test_mode.custom_best_val
+        or experiment.mode.test_mode.custom_best_train
+    ):
         selected_exp_date_str = manual_experiment_selection(
             subfolders_dict, experiment_res_path
         )
@@ -111,8 +115,15 @@ def find_model_path(experiment: Any) -> tuple[str, str]:
             f"No corresponding result folder was found in '{experiment_res_path}'. Specify path manually!"
         )
 
-    find_last = experiment.mode.test_mode.custom_last or experiment.mode.test_mode.last
-    search_string = "last_" if find_last else "best_"
+    if experiment.mode.test_mode.custom_last or experiment.mode.test_mode.last:
+        search_string = "last_"
+    elif (
+        experiment.mode.test_mode.custom_best_train
+        or experiment.mode.test_mode.best_train
+    ):
+        search_string = "best_train_"
+    else:
+        search_string = "best_val_"
 
     possible_files: list[str] = []
     for fn in os.listdir(os.path.join(experiment_res_path, res[0])):
@@ -183,16 +194,23 @@ def ui_ask_test_mode(experiment: Any) -> None:
     model_mode: int = 1  # Default value
     if exp_mode in [1, 2]:
         model_mode = getIntInput(
-            "\nModel Selection:\n1: Last Model, 2: Best Model\n", [1, 2]
+            "\nModel Selection:\n1: Last Model, 2: Best Model (val loss), 3: Best Model (train loss)\n",
+            [1, 3],
         )
-        if exp_mode == 1 and model_mode == 1:
-            experiment.mode.last()
-        elif exp_mode == 1 and model_mode == 2:
-            experiment.mode.best()
-        elif exp_mode == 2 and model_mode == 1:
-            experiment.mode.custom_last()
-        elif exp_mode == 2 and model_mode == 2:
-            experiment.mode.custom_best()
+        if exp_mode == 1:
+            if model_mode == 1:
+                experiment.mode.last()
+            elif model_mode == 2:
+                experiment.mode.best_val()
+            else:
+                experiment.mode.best_train()
+        elif exp_mode == 2:
+            if model_mode == 1:
+                experiment.mode.custom_last()
+            elif model_mode == 2:
+                experiment.mode.custom_best_val()
+            else:
+                experiment.mode.custom_best_train()
     else:
         if model_mode == 1:
             experiment.mode.custom_path()
@@ -200,16 +218,20 @@ def ui_ask_test_mode(experiment: Any) -> None:
 
 def _set_test_mode(experiment: Any) -> None:
     experiment.mode.test()
-    best_or_last: str = experiment.exp_def.test.get("test_model", "best")
+
     if experiment.mode.op_mode.unittest:
         experiment.mode.last()
 
     elif experiment.inargs.test_model_auto:
-        if best_or_last == "best":
-            experiment.mode.best()
+        if experiment.exp_def.test.test_model == "best_val":
+            iprint("Auto test: Loading best validation model.")
+            experiment.mode.best_val()
+        elif experiment.exp_def.test.test_model == "best_train":
+            iprint("Auto test: Loading best train model.")
+            experiment.mode.best_train()
         else:
+            iprint("Auto test: Loading last trained model.")
             experiment.mode.last()
-        iprint(f"Auto test: Loading {best_or_last} model.")
 
     else:
         ui_ask_test_mode(experiment)

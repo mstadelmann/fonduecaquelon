@@ -28,15 +28,17 @@ class FCQmode:
         self.allowed_op_modes: list[str] = [
             "init",  # initial state
             "train",  # training mode
-            "test",  # testing
+            "test",  # testing -> this is further separated into test mods (see below)
             "unittest",  # running unit tests
         ]
-        self._test_mode: str = "best"
+        self._test_mode: str = "best_val"
         self.allowed_test_modes: list[str] = [
-            "best",  # test best model from last experiment - DEFAULT!
+            "best_val",  # test best model from last experiment according to validation loss - DEFAULT!
+            "best_train",  # test best model from last experiment according to train loss - DEFAULT!
             "last",  # test last trained model from last experiment
             "custom_last",  # test last model from selected experiment
-            "custom_best",  # test best model from selected experiment
+            "custom_best_val",  # test best model from selected experiment
+            "custom_best_train",  # test best model from selected experiment
             "custom_path",  # test with manually defined model path
         ]
         self._locked: bool = False  # Flag to lock the mode when set to unittest
@@ -439,7 +441,9 @@ def add_graph(experiment: Any) -> None:
             dummy_input = next(iter(sample.values()))
 
         for model_name, _ in experiment.exp_def.models:
-            experiment.tb_writer.add_graph(experiment.models[model_name], dummy_input.to(experiment.device))
+            experiment.tb_writer.add_graph(
+                experiment.models[model_name], dummy_input.to(experiment.device)
+            )
             experiment.tb_graph_stored = True
     except (StopIteration, AttributeError, KeyError, TypeError):
         wprint("Unable to add graph to Tensorboard.")
@@ -539,7 +543,10 @@ def init_wandb(experiment: Any) -> bool:
             slurm_str = f"__{experiment.slurm_job_id}"
 
     dt_string = experiment.creation_time.strftime("%Y%m%d_%H%M%S")
-    wandb_name = f"{dt_string}__{experiment.experimentName[:20]}__{experiment.funky_name}{slurm_str}"
+    if experiment.mode.op_mode.train:
+        wandb_name = f"{dt_string}__{experiment.experimentName[:20]}__{experiment.funky_name}{slurm_str}"
+    else:
+        wandb_name = f"test__{dt_string}__{experiment.experimentName[:30]}{slurm_str}"
 
     try:
         wandb.login(key=experiment.exp_def.store.wandb_key)
@@ -616,9 +623,13 @@ def save_wandb(
         scalars = {}
     elif not isinstance(scalars, dict):
         raise ValueError("Scalars must be a dictionary.")
-    scalars["train_loss"] = experiment.trainLoss
-    scalars["val_loss"] = experiment.valLoss
-    scalars["epoch"] = experiment.current_epoch
 
-    wandb.log(scalars)
+    if experiment.mode.op_mode.train:
+        scalars["train_loss"] = experiment.trainLoss
+        scalars["val_loss"] = experiment.valLoss
+        scalars["epoch"] = experiment.current_epoch
+
+    if len(scalars) > 0:
+        wandb.log(scalars)
+
     _log_wandb_images(images)

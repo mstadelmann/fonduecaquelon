@@ -421,30 +421,28 @@ class fdqExperiment:
                 torch.save(model, self.last_model_path[model_name])
 
             # new best val loss (default!)
-            best_model_path = os.path.join(
-                self.results_dir,
-                f"best_val_{model_name}_e{self.current_epoch}.fdqm",
-            )
             if (
-                self.current_epoch == self.start_epoch
-                or self.exp_def.store.get("save_best_val_model", False)
+                self.exp_def.store.get("save_best_val_model", False)
                 and self.new_best_val_loss
             ):
+                best_model_path = os.path.join(
+                    self.results_dir,
+                    f"best_val_{model_name}_e{self.current_epoch}.fdqm",
+                )
                 remove_file(self.best_val_model_path.get(model_name))
                 self.best_val_model_path[model_name] = best_model_path
                 torch.save(model, best_model_path)
 
             # save best model according to train loss
-            # this might be useful if we use dummy validation losses like in diffusion
-            best_train_model_path = os.path.join(
-                self.results_dir,
-                f"best_train_{model_name}_e{self.current_epoch}.fdqm",
-            )
             if (
                 self.current_epoch == self.start_epoch
                 or self.exp_def.store.get("save_best_train_model", False)
                 and self.new_best_train_loss
             ):
+                best_train_model_path = os.path.join(
+                    self.results_dir,
+                    f"best_train_{model_name}_e{self.current_epoch}.fdqm",
+                )
                 remove_file(self.best_train_model_path.get(model_name))
                 self.best_train_model_path[model_name] = best_train_model_path
                 torch.save(model, best_train_model_path)
