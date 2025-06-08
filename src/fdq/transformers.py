@@ -457,7 +457,7 @@ def get_transformer(t_defs: Any) -> Callable:
             "out_max": [float, int],
         },
         "ReRange_minmax": {"out_min": [float, int], "out_max": [float, int]},
-        "Gaussian_Blur": {"blur_kernel_size": int, "blur_sigma": float},
+        "Gaussian_Blur": {"blur_kernel_size": [float, int], "blur_sigma": [float, int]},
         "Padding": {
             "padding_size": [list, int],
             "padding_mode": [str],
