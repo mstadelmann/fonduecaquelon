@@ -80,8 +80,13 @@ def main() -> None:
 
     iprint("done")
 
-    if experiment.early_stop_detected is not False:
-        # non zero exit code to prevent job resubmission
+    # non zero exit code to prevent launch of test job
+    # if NaN or very early stop detected
+    if experiment.early_stop_detected == "NaN detected":
+        sys.exit(1)
+    elif experiment.early_stop_detected is not False and experiment.current_epoch < int(
+        0.1 * experiment.nb_epochs
+    ):
         sys.exit(1)
 
 
