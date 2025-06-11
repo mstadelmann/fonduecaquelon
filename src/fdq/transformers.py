@@ -338,7 +338,7 @@ def get_transformer(t_defs: Any) -> Callable:
     """Tensor Transformers for image processing.
 
     Stack3D
-    Morphes a 2D image to 3D by stacking the image along a new D dimension
+    Morphs a 2D image to 3D by stacking the image along a new D dimension
     [B,C,H,W] -> [B,C,D,H,W]
     where d is set by the parameter 'stack_n'
 
@@ -457,7 +457,7 @@ def get_transformer(t_defs: Any) -> Callable:
             "out_max": [float, int],
         },
         "ReRange_minmax": {"out_min": [float, int], "out_max": [float, int]},
-        "Gaussian_Blur": {"blur_kernel_size": int, "blur_sigma": float},
+        "Gaussian_Blur": {"blur_kernel_size": [float, int], "blur_sigma": [float, int]},
         "Padding": {
             "padding_size": [list, int],
             "padding_mode": [str],

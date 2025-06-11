@@ -207,17 +207,6 @@ def get_subset(dataset: Any, subset_ratio: float) -> Any:
     return new_set
 
 
-def print_nb_weights(experiment: Any) -> None:
-    """Print the number of parameters for each model in the experiment."""
-    for model_name, model in experiment.models.items():
-        iprint("----------------------------------")
-        iprint(f"Model: {model_name}")
-        nbp = sum(p.numel() for p in model.parameters())
-        iprint(f"nb parameters: {nbp / 1e6:.2f}M")
-        iprint(f"Using Float32, This will require {nbp * 4 / 1e9:.3f} GB of memory.")
-        iprint("----------------------------------")
-
-
 def remove_file(path: str | None) -> None:
     """Remove the file at the given path if it exists."""
     if path is not None:
@@ -277,6 +266,7 @@ def collect_processing_infos(experiment: Any | None = None) -> dict:
         "last_update": datetime.now().strftime("%Y%m%d_%H_%M_%S"),
         "best_train_loss_epoch": experiment.new_best_train_loss_ep_id,
         "best_val_loss_epoch": experiment.new_best_val_loss_ep_id,
+        "processing_log_dict": experiment.processing_log_dict,
     }
 
     if experiment.early_stop_detected:

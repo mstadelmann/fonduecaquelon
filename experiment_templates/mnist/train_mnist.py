@@ -4,7 +4,6 @@ import torch
 import torchvision
 from fdq.experiment import fdqExperiment
 from fdq.ui_functions import startProgBar, iprint
-from fdq.misc import print_nb_weights
 
 
 def fdq_train(experiment: fdqExperiment) -> None:
@@ -14,7 +13,6 @@ def fdq_train(experiment: fdqExperiment) -> None:
         experiment (fdqExperiment): The experiment object containing data loaders, models, and training configurations.
     """
     iprint("Default training")
-    print_nb_weights(experiment)
 
     data = experiment.data["MNIST"]
     model = experiment.models["simpleNet"]
