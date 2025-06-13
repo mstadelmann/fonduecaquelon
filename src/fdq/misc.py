@@ -536,7 +536,19 @@ def init_wandb(experiment: Any) -> bool:
     if experiment.mode.op_mode.train:
         wandb_name = f"{dt_string}__{experiment.experimentName[:20]}__{experiment.funky_name}{slurm_str}"
     else:
-        wandb_name = f"test__{dt_string}__{experiment.experimentName[:30]}{slurm_str}"
+        try:
+            res_dir_name = os.path.basename(experiment.results_dir).split("_")
+            wandb_name = (
+                f"{res_dir_name[0]}_{res_dir_name[1]}"
+                f"{res_dir_name[2]}{res_dir_name[3]}"
+                f"__{experiment.experimentName[:20]}"
+                f"__{res_dir_name[5]}_{res_dir_name[6]}"
+                f"__test{slurm_str}"
+            )
+        except (IndexError, AttributeError):
+            wandb_name = (
+                f"test__{dt_string}__{experiment.experimentName[:30]}{slurm_str}"
+            )
 
     try:
         wandb.login(key=experiment.exp_def.store.wandb_key)
