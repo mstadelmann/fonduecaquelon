@@ -24,8 +24,8 @@ def get_template() -> str:
 #SBATCH --partition=#partition#
 #SBATCH --account=#account#
 #SBATCH --mail-user=#user#@zhaw.ch
-#SBATCH --output=#log_path#/%j_%N__#job_name#.out
-#SBATCH --error=#log_path#/%j_%N__#job_name#.err
+#SBATCH --output=#log_path#/%j_%N__#job_name##job_tag#.out
+#SBATCH --error=#log_path#/%j_%N__#job_name##job_tag#.err
 #SBATCH --signal=B:SIGUSR1@#stop_grace_time#
 
 script_start=$(date +%s.%N)
@@ -371,6 +371,7 @@ def get_default_config(slurm_conf: Any) -> dict[str, Any]:
         "run_train": True,
         "run_test": False,
         "is_test": False,
+        "job_tag": "",
         "auto_resubmit": True,
         "resume_chpt_path": "",
         "log_path": None,
@@ -494,6 +495,7 @@ def main() -> None:
     # if this is a pure test job, set the is_test flag
     if not job_config["run_train"] and job_config["run_test"]:
         job_config["is_test"] = True
+        job_config["job_tag"] = "_test"
 
     # check if all mandatory configs are set
     job_config = check_config(job_config)
