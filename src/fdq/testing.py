@@ -246,7 +246,9 @@ def run_test(experiment: Any) -> None:
     experiment.file_store_cnt = 0
 
     _set_test_mode(experiment)
-    experiment.load_trained_models()
+
+    if experiment.exp_def.models is not None:
+        experiment.load_trained_models()
 
     experiment.copy_files_to_test_dir(experiment.experiment_file_path)
     if experiment.parent_file_path is not None:
