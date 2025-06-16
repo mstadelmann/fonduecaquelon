@@ -309,6 +309,11 @@ class fdqExperiment:
     def init_models(self, instantiate: bool = True) -> None:
         if self.models:
             return
+        if self.exp_def.models is None:
+            iprint(
+                "Warning: No models defined in experiment file -> Model has to be manually defined in the training/testing loop."
+            )
+            return
         for model_name, model_def in self.exp_def.models:
             if model_def.path is not None:
                 if os.path.exists(model_def.path):
