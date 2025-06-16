@@ -496,6 +496,8 @@ def main() -> None:
     if not job_config["run_train"] and job_config["run_test"]:
         job_config["is_test"] = True
         job_config["job_tag"] = "_test"
+    else:
+        job_config["job_tag"] = "_train"
 
     # check if all mandatory configs are set
     job_config = check_config(job_config)
