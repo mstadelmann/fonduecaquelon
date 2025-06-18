@@ -507,8 +507,12 @@ def main() -> None:
 
     # start slurm job
     result = subprocess.run(
-        f"sbatch {submit_path}", shell=True, capture_output=True, text=True, check=True
+        f"sbatch {submit_path}", shell=True, capture_output=True, text=True
     )
+    if result.returncode != 0:
+        print(f"Error submitting job. Exit code: {result.returncode}")
+        print(f"stderr: {result.stderr}")
+        sys.exit(result.returncode)
 
     match = re.search(r"(\d+)\s*$", result.stdout)
     if match:
@@ -522,4 +526,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    print("----------")
+    print("FDQ submit")
     main()
