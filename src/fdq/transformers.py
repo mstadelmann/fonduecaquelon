@@ -325,6 +325,9 @@ def get_transformer_by_names(
     elif transformer_name == "EXP":
         transformer = transforms.Lambda(torch.exp)
 
+    elif transformer_name == "FLOOR":
+        transformer = transforms.Lambda(torch.floor)
+
     elif transformer_name == "NOP":
         transformer = transforms.Lambda(lambda t: t)
 
@@ -440,6 +443,9 @@ def get_transformer(t_defs: Any) -> Callable:
 
     EXP:
     Applies the exponential function to the input tensor.
+
+    FLOOR:
+    Applies the floor function to the input tensor.
 
     NOP:
     Does nothing, just returns the input tensor.

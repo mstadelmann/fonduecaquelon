@@ -1,5 +1,6 @@
 import os
 import sys
+import git
 import json
 import math
 import shutil
@@ -118,6 +119,7 @@ class fdqExperiment:
             self.device = torch.device("cpu")
             self.is_cuda = False
         self.prepare_transformers()
+        self.store_experiment_git_hash()
 
     @property
     def results_dir(self) -> str:
@@ -247,6 +249,23 @@ class fdqExperiment:
             self.parent_file_path = None
         replace_tilde_with_abs_path(self.exp_file)
         self.exp_def = DictToObj(self.exp_file)
+
+    def store_experiment_git_hash(self):
+        """Check if the experiment directory is a git repository and store the current git hash."""
+
+        exp_path = os.path.abspath(self.experiment_file_path)
+        try:
+            exp_git = git.Repo(exp_path, search_parent_directories=True)
+            if exp_git.is_dirty():
+                dirty_files = [f.b_path for f in exp_git.index.diff(None)]
+            else:
+                dirty_files = None
+            self.processing_log_dict["experiment_git"] = {
+                "hash": exp_git.head.object.hexsha,
+                "dirty_files": dirty_files,
+            }
+        except Exception:
+            self.processing_log_dict["experiment_git"] = "UNABLE TO LOCALIZE GIT REPO!"
 
     def add_module_to_syspath(self, path: str) -> None:
         if not os.path.exists(path):
@@ -739,6 +758,7 @@ class fdqExperiment:
             optimizer = self.optimizers[model_name]
             if optimizer is not None:
                 if self.useAMP:
+                    # self.scaler.unscale_(optimizer) # TODO
                     self.scaler.step(optimizer)
                     self.scaler.update()
                 else:
