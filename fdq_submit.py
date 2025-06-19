@@ -208,7 +208,7 @@ if [ "$RUN_TEST" == True ]; then
         echo ------------------------------------------------------------
         echo "Launching test job.."
         echo ------------------------------------------------------------
-        sed  -e "s|IS_TEST=False|IS_TEST=True|g" -e "s|RUN_TRAIN=True|RUN_TRAIN=False|g" -e "s|RUN_TEST=True|RUN_TEST=False|g" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
+        sed  -e "s|IS_TEST=False|IS_TEST=True|g" -e "s|RUN_TRAIN=True|RUN_TRAIN=False|g" -e "s|RUN_TEST=True|RUN_TEST=False|g" -e "s|_train.|_test.|g" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
         rm $SCRATCH_SUBMIT_FILE_PATH
         mv $SCRATCH_SUBMIT_FILE_PATH.resub $SCRATCH_SUBMIT_FILE_PATH
         sleep 1
