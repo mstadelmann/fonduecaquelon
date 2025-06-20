@@ -132,6 +132,10 @@ class fdqExperiment:
 
     @property
     def results_dir(self) -> str:
+
+        if not self.is_main_process():
+            return None
+
         if self._results_dir is None:
             dt_string = self.creation_time.strftime("%Y%m%d_%H_%M_%S")
             if self.funky_name is None:
@@ -163,6 +167,9 @@ class fdqExperiment:
 
     @property
     def results_output_dir(self) -> str:
+        if not self.is_main_process():
+            return None
+
         if self._results_output_dir is None:
             self._results_output_dir = os.path.join(
                 self.results_dir, "training_outputs"
@@ -173,6 +180,9 @@ class fdqExperiment:
 
     @property
     def test_dir(self) -> str:
+        if not self.is_main_process():
+            return None
+
         if self._test_dir is None:
             folder_name = self.creation_time.strftime("%Y%m%d_%H_%M_%S")
             if self.is_slurm:
@@ -212,6 +222,8 @@ class fdqExperiment:
 
     def is_main_process(self) -> bool:
         """Check if the current process is the main process in a distributed setup."""
+        if not self.is_distributed():
+            return True
         return self.rank == 0
 
     def is_distributed(self) -> bool:
@@ -440,6 +452,8 @@ class fdqExperiment:
         This function is only used in model dumping or testing mode, therefore world_size != 1,
         and map_location is not required.
         """
+        if not self.is_main_process():
+            return
         for model_name, _ in self.exp_def.models:
             if self.mode.test_mode.custom_path:
                 while True:
@@ -478,6 +492,7 @@ class fdqExperiment:
         if not self.is_main_process():
             # only the main process saves the checkpoint
             return
+
         for model_name, model_def in self.exp_def.models:
             if model_def.freeze:
                 # skip frozen models
@@ -734,6 +749,9 @@ class fdqExperiment:
     def get_next_export_fn(
         self, name: str | None = None, file_ending: str = "jpg"
     ) -> str:
+        if not self.is_main_process():
+            return None
+
         if self.mode.op_mode.test:
             start_str = "test_image"
             dest_dir = self.test_dir
@@ -858,7 +876,6 @@ class fdqExperiment:
                     iprint(f"Updating LR of {model_name} from {current_LR} to {new_LR}")
 
         if not self.is_main_process():
-            # only the main process shows the training progress
             return
 
         show_train_progress(self)
@@ -893,6 +910,8 @@ class fdqExperiment:
         self.save_current_model()
 
     def cp_to_res_dir(self, file_path: str) -> None:
+        if not self.is_main_process():
+            return
         fn = file_path.split("/")[-1]
         iprint(f"Saving {fn} to {self.results_dir}...")
         shutil.copyfile(file_path, f"{self.results_dir}/{fn}")
@@ -991,6 +1010,8 @@ class fdqExperiment:
         dump_model(self)
 
     def print_model(self) -> None:
+        if not self.is_main_process():
+            return
         self.setupData()
         self.init_models()
         iprint("\n-----------------------------------------------------------")

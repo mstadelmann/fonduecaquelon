@@ -218,6 +218,9 @@ def remove_file(path: str | None) -> None:
 
 def store_processing_infos(experiment: Any) -> None:
     """Store experiment information to results directory."""
+    if not experiment.is_main_process():
+        return
+
     experiment.run_info = collect_processing_infos(experiment=experiment)
     info_path = os.path.join(experiment.results_dir, "info.json")
 
@@ -331,6 +334,9 @@ def avoid_nondeterministic(experiment: Any, seed_overwrite: int = 0) -> None:
 
 def save_train_history(experiment: Any) -> None:
     """Save training history to json and pdf."""
+    if not experiment.is_main_process():
+        return
+
     try:
         out_json = os.path.join(experiment.results_dir, "history.json")
         out_pdf = os.path.join(experiment.results_dir, "history.pdf")
