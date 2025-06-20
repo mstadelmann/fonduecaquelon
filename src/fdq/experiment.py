@@ -271,8 +271,10 @@ class fdqExperiment:
         if "SLURM_PROCID" not in os.environ or os.environ["SLURM_JOB_NAME"] == "bash":
             return
 
-        # os.environ["MASTER_ADDR"] = "localhost"
-        # os.environ["MASTER_PORT"] = "12355"
+        print(f"Initializing distributed mode with world size {self.world_size}.")
+
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "12355"
         self.rank = int(os.environ["SLURM_PROCID"])
         gpu = self.rank % torch.cuda.device_count()
         dist_backend = "nccl"

@@ -1,0 +1,10 @@
+{
+    "globals": {
+        "project": "Segment OXPET segmentation",
+        "author": "Marc",
+        "parent": "segment_pets.json"
+    },
+    "slurm_cluster": {
+        "ntasks": 2
+    }
+}

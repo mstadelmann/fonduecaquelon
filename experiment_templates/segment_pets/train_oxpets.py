@@ -26,7 +26,7 @@ def fdq_train(experiment: fdqExperiment) -> None:
         model.train()
         pbar = startProgBar(data.n_train_samples, "training...")
 
-        if experiment.is_distributed:
+        if experiment.is_distributed():
             # necessary to make shuffling work properly
             data.train_sampler.set_epoch(epoch)
             data.val_sampler.set_epoch(epoch)
