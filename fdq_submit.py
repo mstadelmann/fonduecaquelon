@@ -212,7 +212,7 @@ if [ "$RUN_TEST" == True ]; then
             -e "s|RUN_TRAIN=True|RUN_TRAIN=False|g" \
             -e "s|RUN_TEST=True|RUN_TEST=False|g" \
             -e "s|_train.|_test.|g" \
-            -e "s|^#SBATCH --ntasks=.*|#SBATCH --ntasks=1|" \
+            -e "s|^#SBATCH --gpus-per-task=.*|#SBATCH --gpus-per-task=1|" \
             "$SCRATCH_SUBMIT_FILE_PATH" > "$SCRATCH_SUBMIT_FILE_PATH.resub"
         rm $SCRATCH_SUBMIT_FILE_PATH
         mv $SCRATCH_SUBMIT_FILE_PATH.resub $SCRATCH_SUBMIT_FILE_PATH

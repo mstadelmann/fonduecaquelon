@@ -106,7 +106,7 @@ class fdqExperiment:
                 "slurm_cluster", {}
             ).get("scratch_data_path")
             self.world_size: int = self.exp_def.get("slurm_cluster", {}).get(
-                "ntasks", 1
+                "world_size", 1
             )
             if self.world_size > 1:
                 self.init_distributed_mode()
