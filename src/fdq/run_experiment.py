@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 import torch
-
+import torch.multiprocessing as mp
 from fdq.experiment import fdqExperiment
 from fdq.testing import run_test
 from fdq.ui_functions import iprint
@@ -91,4 +91,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    mp.spawn(main, nprocs=torch.cuda.device_count())
