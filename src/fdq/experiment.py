@@ -365,6 +365,11 @@ class fdqExperiment:
 
         return getattr(module, class_name)
 
+    def load_model_from_path(self, path):
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Error, trained model path {path} does not exist.")
+        return torch.load(path, weights_only=False).to(self.device).eval()
+
     def init_models(self, instantiate: bool = True) -> None:
         if self.models:
             return
@@ -394,17 +399,18 @@ class fdqExperiment:
                     f"Error, model {model_name} must have a path or module defined."
                 )
 
-            # load trained model from path
-            if model_def.trained_model_path is not None:
-                if not os.path.exists(model_def.trained_model_path):
-                    raise FileNotFoundError(
-                        f"Error, trained model path {model_def.trained_model_path} does not exist."
-                    )
-                self.models[model_name] = torch.load(
-                    model_def.trained_model_path, weights_only=False
-                ).to(self.device)
+            # load trained model from automatically detected path
+            # -> only used for testing or dumping - highest priority
+            if self.trained_model_paths[model_name] is not None:
+                self.models[model_name] = self.load_model_from_path(
+                    self.trained_model_paths[model_name]
+                )
 
-                self.models[model_name].eval()
+            # load trained model from path defined in exp file
+            elif model_def.trained_model_path is not None:
+                self.models[model_name] = self.load_model_from_path(
+                    model_def.trained_model_path
+                )
 
             # or instantiate new model with random weights
             elif instantiate:
