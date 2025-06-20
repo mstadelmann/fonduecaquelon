@@ -14,3 +14,4 @@ submit.sh
 # Distribution / packaging
 dist/
 build.txt
+build_and_push.sh

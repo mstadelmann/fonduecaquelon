@@ -412,9 +412,8 @@ class fdqExperiment:
                     self.device
                 )
 
-            # distributed training?
-            # assign GPUs in a round-robin fashion if world_size > nb_gpus
-            if self.world_size > 1:
+            if self.is_distributed():
+                # assign GPUs in a round-robin fashion
                 self.models[model_name] = DDP(
                     self.models[model_name],
                     device_ids=[self.rank % torch.cuda.device_count()],
@@ -435,7 +434,6 @@ class fdqExperiment:
         This function is only used in model dumping or testing mode, therefore world_size != 1,
         and map_location is not required.
         """
-        self.init_models(instantiate=False)
         for model_name, _ in self.exp_def.models:
             if self.mode.test_mode.custom_path:
                 while True:
@@ -451,12 +449,10 @@ class fdqExperiment:
             else:
                 self._results_dir, net_name = find_model_path(self)
                 model_path = os.path.join(self._results_dir, net_name)
-
             self.trained_model_paths[model_name] = model_path
-            self.models_no_ddp[model_name] = torch.load(
-                model_path, weights_only=False
-            ).to(self.device)
-            self.models[model_name].eval()
+
+        self.init_models(instantiate=False)
+        [self.models[model_name].eval() for model_name, _ in self.exp_def.models]
 
     def setupData(self) -> None:
         if self.data:
