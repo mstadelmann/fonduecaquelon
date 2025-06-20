@@ -401,7 +401,7 @@ class fdqExperiment:
 
             # load trained model from automatically detected path
             # -> only used for testing or dumping - highest priority
-            if self.trained_model_paths[model_name] is not None:
+            if self.trained_model_paths.get(model_name) is not None:
                 self.models[model_name] = self.load_model_from_path(
                     self.trained_model_paths[model_name]
                 )
