@@ -12,6 +12,7 @@ from typing import Any
 import torch
 import funkybob
 from torchview import draw_graph
+from torch.nn.parallel import DistributedDataParallel as DDP
 import wandb
 from fdq.ui_functions import iprint, eprint, wprint, show_train_progress, startProgBar
 from fdq.testing import find_model_path
@@ -64,6 +65,7 @@ class fdqExperiment:
         self.start_epoch: int = 0
         self.data: dict[str, Any] = {}
         self.models: dict[str, torch.nn.Module] = {}
+        self.models_no_ddp: dict[str, torch.nn.Module] = {}
         self.transformers: dict[str, Any] = {}
         self.scaler: torch.cuda.amp.GradScaler | None = None
         self.trainer: Any | None = None
@@ -95,6 +97,7 @@ class fdqExperiment:
         self.tb_writer: Any | None = None
         self.useWandb: bool = self.exp_def.store.use_wandb
         self.wandb_initialized: bool = False
+        self.rank: int = 0
         slurm_job_id: str | None = os.getenv("SLURM_JOB_ID")
         if isinstance(slurm_job_id, str) and slurm_job_id.isdigit():
             self.is_slurm: bool = True
@@ -102,10 +105,16 @@ class fdqExperiment:
             self.scratch_data_path: str | None = self.exp_def.get(
                 "slurm_cluster", {}
             ).get("scratch_data_path")
+            self.world_size: int = self.exp_def.get("slurm_cluster", {}).get(
+                "ntasks", 1
+            )
+            if self.world_size > 1:
+                self.init_distributed_mode()
         else:
             self.is_slurm = False
             self.slurm_job_id = None
             self.scratch_data_path = None
+            self.world_size: int = 1
         self.previous_slurm_job_id: str | None = None
         if torch.cuda.is_available() and bool(self.exp_def.train.args.use_GPU):
             torch.cuda.empty_cache()
@@ -201,6 +210,14 @@ class fdqExperiment:
                 self.new_best_train_loss = True
                 self.new_best_train_loss_ep_id = self.current_epoch
 
+    def is_main_process(self) -> bool:
+        """Check if the current process is the main process in a distributed setup."""
+        return self.rank == 0
+
+    def is_distributed(self) -> bool:
+        """Check if the current setup is distributed."""
+        return self.world_size > 1
+
     def parse_and_clean_args(self) -> None:
         self.experiment_file_path = self.inargs.experimentfile
 
@@ -249,6 +266,27 @@ class fdqExperiment:
             self.parent_file_path = None
         replace_tilde_with_abs_path(self.exp_file)
         self.exp_def = DictToObj(self.exp_file)
+
+    def init_distributed_mode(self):
+        if "SLURM_PROCID" not in os.environ or os.environ["SLURM_JOB_NAME"] == "bash":
+            return
+
+        # os.environ["MASTER_ADDR"] = "localhost"
+        # os.environ["MASTER_PORT"] = "12355"
+        self.rank = int(os.environ["SLURM_PROCID"])
+        gpu = self.rank % torch.cuda.device_count()
+        dist_backend = "nccl"
+        dist_url = "env://"
+        torch.cuda.set_device(gpu)
+
+        torch.distributed.init_process_group(
+            backend=dist_backend,
+            init_method=dist_url,
+            world_size=self.world_size,
+            rank=self.rank,
+            timeout=timedelta(minutes=15),
+        )
+        torch.distributed.barrier()
 
     def store_experiment_git_hash(self):
         """Check if the experiment directory is a git repository and store the current git hash."""
@@ -328,6 +366,7 @@ class fdqExperiment:
     def init_models(self, instantiate: bool = True) -> None:
         if self.models:
             return
+
         for model_name, model_def in self.exp_def.models:
             if model_def.path is not None:
                 if os.path.exists(model_def.path):
@@ -346,6 +385,7 @@ class fdqExperiment:
                     )
 
             elif model_def.class_name is not None:
+                # model is an installed pip package
                 cls = self.instantiate_class(class_path=model_def.class_name)
             else:
                 raise ValueError(
@@ -361,6 +401,7 @@ class fdqExperiment:
                 self.models[model_name] = torch.load(
                     model_def.trained_model_path, weights_only=False
                 ).to(self.device)
+
                 self.models[model_name].eval()
 
             # or instantiate new model with random weights
@@ -369,23 +410,30 @@ class fdqExperiment:
                     self.device
                 )
 
-            # frozen model? disable grad tracking
+            # distributed training?
+            # assign GPUs in a round-robin fashion if world_size > nb_gpus
+            if self.world_size > 1:
+                self.models[model_name] = DDP(
+                    self.models[model_name],
+                    device_ids=[self.rank % torch.cuda.device_count()],
+                    find_unused_parameters=True,
+                )
+                self.models_no_ddp[model_name] = self.models[model_name].module
+            else:
+                self.models_no_ddp[model_name] = self.models[model_name]
+
+            # frozen model? disable gradient tracking
             if model_def.freeze:
                 iprint(f"Freezing model {model_name} parameters.")
                 for param in self.models[model_name].parameters():
                     param.requires_grad = False
 
-    def load_models(self) -> None:
-        self.init_models(instantiate=False)
-        for model_name, _ in self.exp_def.models:
-            path = self.trained_model_paths[model_name]
-            iprint(f"Loading model {model_name} from {path}")
-            self.models[model_name] = torch.load(path, weights_only=False).to(
-                self.device
-            )
-            self.models[model_name].eval()
-
     def load_trained_models(self) -> None:
+        """Load trained models, defined by user path or previous trainings.
+        This function is only used in model dumping or testing mode, therefore world_size != 1,
+        and map_location is not required.
+        """
+        self.init_models(instantiate=False)
         for model_name, _ in self.exp_def.models:
             if self.mode.test_mode.custom_path:
                 while True:
@@ -395,18 +443,18 @@ class fdqExperiment:
                     if model_path == "q":
                         sys.exit()
                     elif os.path.exists(model_path):
-                        self.trained_model_paths[model_name] = model_path
                         break
                     else:
                         eprint(f"Error: File {model_path} not found.")
-
             else:
                 self._results_dir, net_name = find_model_path(self)
-                self.trained_model_paths[model_name] = os.path.join(
-                    self._results_dir, net_name
-                )
+                model_path = os.path.join(self._results_dir, net_name)
 
-            self.load_models()
+            self.trained_model_paths[model_name] = model_path
+            self.models_no_ddp[model_name] = torch.load(
+                model_path, weights_only=False
+            ).to(self.device)
+            self.models[model_name].eval()
 
     def setupData(self) -> None:
         if self.data:
@@ -423,12 +471,15 @@ class fdqExperiment:
 
         This is run at the end of every epoch.
         """
+        if not self.is_main_process():
+            # only the main process saves the checkpoint
+            return
         for model_name, model_def in self.exp_def.models:
             if model_def.freeze:
                 # skip frozen models
                 continue
 
-            model = self.models[model_name]
+            model = self.models_no_ddp[model_name]
 
             if self.exp_def.store.get("save_last_model", False):
                 remove_file(self.last_model_path.get(model_name))
@@ -524,8 +575,13 @@ class fdqExperiment:
 
             cls = self.instantiate_class(margs.optimizer.class_name)
 
+            # optimizer = cls(
+            #     self.models_no_ddp[model_name].parameters(),
+            #     **margs.optimizer.args.to_dict(),
+            # )
             optimizer = cls(
-                self.models[model_name].parameters(), **margs.optimizer.args.to_dict()
+                self.models[model_name].parameters(),
+                **margs.optimizer.args.to_dict(),
             )
 
             if optimizer is not None:
@@ -581,7 +637,14 @@ class fdqExperiment:
             raise FileNotFoundError(f"Error, checkpoint file {path} not found.")
 
         try:
-            checkpoint = torch.load(path)
+            # checkpoint was saved on rank 0
+            # so we need to map to the current rank
+            map_location = (
+                {"cuda:%d" % 0: "cuda:%d" % self.rank}
+                if self.is_distributed()
+                else None
+            )
+            checkpoint = torch.load(path, map_location=map_location)
             self.start_epoch = checkpoint["epoch"]
             self.trainLoss = checkpoint["train_loss"]
             self.valLoss = checkpoint["val_loss"]
@@ -603,7 +666,7 @@ class fdqExperiment:
             if model_def.freeze:
                 iprint(f"Skipping loading of frozen model {model_name}.")
                 continue
-            self.models[model_name].load_state_dict(
+            self.models_no_ddp[model_name].load_state_dict(
                 checkpoint["model_state_dict"][model_name]
             )
 
@@ -615,6 +678,10 @@ class fdqExperiment:
                 )
 
     def save_checkpoint(self) -> None:
+        if not self.is_main_process():
+            # only the main process saves the checkpoint
+            return
+
         if self.checkpoint_frequency is None or self.checkpoint_frequency == 0:
             return
 
@@ -643,7 +710,8 @@ class fdqExperiment:
             if model_def.freeze:
                 model_state[model_name] = "FROZEN"
             else:
-                model_state[model_name] = self.models[model_name].state_dict()
+                # we save only the non-ddp wrapped model in the rank 0 process
+                model_state[model_name] = self.models_no_ddp[model_name].state_dict()
 
         checkpoint = {
             "epoch": self.current_epoch,
@@ -656,6 +724,8 @@ class fdqExperiment:
         }
 
         torch.save(checkpoint, self.checkpoint_path)
+
+        # torch.distributed.barrier()
 
     def get_next_export_fn(
         self, name: str | None = None, file_ending: str = "jpg"
@@ -772,6 +842,21 @@ class fdqExperiment:
         log_images_tensorboard: Any | None = None,
         log_text_tensorboard: Any | None = None,
     ) -> None:
+
+        # update learning rate
+        for model_name in self.models:
+            scheduler = self.lr_schedulers[model_name]
+            if scheduler is not None:
+                current_LR = scheduler.get_last_lr()
+                scheduler.step()
+                new_LR = scheduler.get_last_lr()
+                if current_LR != new_LR:
+                    iprint(f"Updating LR of {model_name} from {current_LR} to {new_LR}")
+
+        if not self.is_main_process():
+            # only the main process shows the training progress
+            return
+
         show_train_progress(self)
         save_tensorboard(
             experiment=self,
@@ -784,16 +869,6 @@ class fdqExperiment:
             images=log_images_wandb,
             scalars=log_scalars,
         )
-
-        # update learning rate
-        for model_name in self.models:
-            scheduler = self.lr_schedulers[model_name]
-            if scheduler is not None:
-                current_LR = scheduler.get_last_lr()
-                scheduler.step()
-                new_LR = scheduler.get_last_lr()
-                if current_LR != new_LR:
-                    iprint(f"Updating LR of {model_name} from {current_LR} to {new_LR}")
 
         # end of last epoch
         if self.current_epoch == self.nb_epochs - 1:

@@ -19,8 +19,8 @@ def get_template() -> str:
 #SBATCH --ntasks=#ntasks#
 #SBATCH --cpus-per-task=#cpus_per_task#
 #SBATCH --nodes=#nodes#
-#SBATCH --gres=#gres#
-#SBATCH --mem=#mem#
+#SBATCH --gpus-per-task=#gpus_per_task#
+#SBATCH --mem-per-gpu=#mem_per_gpu#
 #SBATCH --partition=#partition#
 #SBATCH --account=#account#
 #SBATCH --mail-user=#user#@zhaw.ch
@@ -208,7 +208,12 @@ if [ "$RUN_TEST" == True ]; then
         echo ------------------------------------------------------------
         echo "Launching test job.."
         echo ------------------------------------------------------------
-        sed  -e "s|IS_TEST=False|IS_TEST=True|g" -e "s|RUN_TRAIN=True|RUN_TRAIN=False|g" -e "s|RUN_TEST=True|RUN_TEST=False|g" -e "s|_train.|_test.|g" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
+        sed -e "s|IS_TEST=False|IS_TEST=True|g" \
+            -e "s|RUN_TRAIN=True|RUN_TRAIN=False|g" \
+            -e "s|RUN_TEST=True|RUN_TEST=False|g" \
+            -e "s|_train.|_test.|g" \
+            -e "s|^#SBATCH --ntasks=.*|#SBATCH --ntasks=1|" \
+            "$SCRATCH_SUBMIT_FILE_PATH" > "$SCRATCH_SUBMIT_FILE_PATH.resub"
         rm $SCRATCH_SUBMIT_FILE_PATH
         mv $SCRATCH_SUBMIT_FILE_PATH.resub $SCRATCH_SUBMIT_FILE_PATH
         sleep 1
@@ -364,8 +369,8 @@ def get_default_config(slurm_conf: Any) -> dict[str, Any]:
         "ntasks": 1,
         "cpus_per_task": 8,
         "nodes": 1,
-        "gres": "gpu:1",
-        "mem": "32G",
+        "gpus_per_task": 1,
+        "mem_per_gpu": "32G",
         "partition": None,
         "account": None,
         "run_train": True,

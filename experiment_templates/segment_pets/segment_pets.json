@@ -119,7 +119,7 @@
         }
     },
     "slurm_cluster": {
-        "fdq_version": "0.0.24",
+        "fdq_version": "0.0.30",
         "python_env_module": "python/3.12.4",
         "uv_env_module": "uv/0.6.12",
         "scratch_results_path": "/scratch/fdq_results/",
@@ -127,10 +127,10 @@
         "log_path": "~/dev/fonduecaquelon/slurm_log",
         "job_time": 8,
         "stop_grace_time": 3,
-        "ntasks": 1,
+        "ntasks": 2,
         "cpus_per_task": 8,
-        "gres": "gpu:1",
-        "mem": "20G",
+        "gpus_per_task": 1,
+        "mem_per_gpu": "20G",
         "partition": "gpu",
         "account": "cai_ivs",
         "run_train": true,

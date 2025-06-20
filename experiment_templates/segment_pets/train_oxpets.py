@@ -26,6 +26,11 @@ def fdq_train(experiment: fdqExperiment) -> None:
         model.train()
         pbar = startProgBar(data.n_train_samples, "training...")
 
+        if experiment.is_distributed:
+            # necessary to make shuffling work properly
+            data.train_sampler.set_epoch(epoch)
+            data.val_sampler.set_epoch(epoch)
+
         for nb_tbatch, batch in enumerate(data.train_data_loader):
             pbar.update(nb_tbatch * len(batch["image"]))
 

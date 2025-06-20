@@ -291,6 +291,10 @@ def dump_model(experiment: Any) -> None:
     iprint("\n-----------------------------------------------------------")
     iprint("Dump model")
     iprint("-----------------------------------------------------------\n")
+    if experiment.is_distributed():
+        raise ValueError(
+            "ERROR: Cannot run test in distributed mode! Please run in single process mode."
+        )
     # dumping requires a sample input to trace the model
     # -> set exp t train mode so that train loader is created.
     experiment.mode.train()

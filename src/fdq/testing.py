@@ -243,6 +243,11 @@ def run_test(experiment: Any) -> None:
     iprint("Starting Test...")
     iprint("-------------------------------------------")
 
+    if experiment.is_distributed():
+        raise ValueError(
+            "ERROR: Cannot run test in distributed mode! Please run in single process mode."
+        )
+
     experiment.file_store_cnt = 0
 
     _set_test_mode(experiment)

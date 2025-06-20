@@ -3,6 +3,7 @@ import shutil
 from urllib.request import urlretrieve
 
 import torch
+from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import DataLoader
 from torchvision import transforms
 import numpy as np
@@ -159,37 +160,58 @@ def create_datasets(experiment, args=None):
     n_val = len(val_set)
     n_test = len(test_set)
 
+    if experiment.world_size > 1:
+        train_sampler = DistributedSampler(train_set, shuffle=args.shuffle_train)
+        val_sampler = DistributedSampler(val_set, shuffle=args.shuffle_val)
+        test_sampler = DistributedSampler(test_set, shuffle=args.shuffle_test)
+        shuffle_train = False
+        shuffle_val = False
+        shuffle_test = False
+    else:
+        train_sampler = None
+        val_sampler = None
+        test_sampler = None
+        shuffle_train = args.shuffle_train
+        shuffle_val = args.shuffle_val
+        shuffle_test = args.shuffle_test
+
     train_loader = DataLoader(
         train_set,
         batch_size=args.train_batch_size,
-        shuffle=args.shuffle_train,
+        shuffle=shuffle_train,
         num_workers=args.num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,
+        sampler=train_sampler,
     )
 
     test_loader = DataLoader(
         test_set,
         batch_size=args.test_batch_size,
-        shuffle=args.shuffle_test,
+        shuffle=shuffle_test,
         num_workers=args.num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,
+        sampler=test_sampler,
     )
 
     val_loader = DataLoader(
         val_set,
         batch_size=args.val_batch_size,
-        shuffle=args.shuffle_val,
+        shuffle=shuffle_val,
         num_workers=args.num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,
+        sampler=val_sampler,
     )
 
     return {
         "train_data_loader": train_loader,
         "val_data_loader": val_loader,
         "test_data_loader": test_loader,
+        "train_sampler": train_sampler,
+        "val_sampler": val_sampler,
+        "test_sampler": test_sampler,
         "n_train_samples": n_train,
         "n_val_samples": n_val,
         "n_test_samples": n_test,
