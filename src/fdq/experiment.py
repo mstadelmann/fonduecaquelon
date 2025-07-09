@@ -111,9 +111,12 @@ class fdqExperiment:
         # distributed training
         set_global_rank(rank)
         self.rank: int = rank
-        self.world_size: int = self.exp_def.get("slurm_cluster", {}).get(
-            "world_size", 1
-        )
+        if not self.inargs.train_model:
+            self.world_size = 1
+        else:
+            self.world_size: int = self.exp_def.get("slurm_cluster", {}).get(
+                "world_size", 1
+            )
         self.master_port: int = self.exp_def.get("slurm_cluster", {}).get(
             "master_port")
         self.init_distributed_mode()

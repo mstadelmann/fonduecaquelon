@@ -111,7 +111,7 @@ def main():
     exp_config = load_conf_file(inargs.experimentfile)
     world_size = exp_config.get("slurm_cluster", {}).get("world_size", 1)
 
-    if inargs.test_model_auto or inargs.test_model_ia:
+    if not inargs.train_model:
         world_size = 1
 
     if world_size > torch.cuda.device_count():

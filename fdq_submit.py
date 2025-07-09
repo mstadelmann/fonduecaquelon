@@ -33,7 +33,7 @@ script_start=$(date +%s.%N)
 RUN_TRAIN=#run_train#
 RUN_TEST=#run_test# # test will be run automatically, but not necessarily in this job
 IS_TEST=#is_test# # if True, start test in this job
-GRES_TEST=#gres_test# # GRES for test job
+GRES_TEST=#gres_test#
 AUTO_RESUBMIT=#auto_resubmit# # resubmit the job if stopped due to time constraints
 RESUME_CHPT_PATH=#resume_chpt_path# # path to checkpoint file to resume training
 EXP_FILE_PATH=#exp_file_path#
@@ -214,7 +214,7 @@ if [ "$RUN_TEST" == True ]; then
             -e "s|RUN_TRAIN=True|RUN_TRAIN=False|g" \
             -e "s|RUN_TEST=True|RUN_TEST=False|g" \
             -e "s|_train.|_test.|g" \
-            -e "s|^#SBATCH --gres==.*|#SBATCH --gres=$GRES_TEST|" \
+            -e "s|^#SBATCH --gres==.*|#SBATCH --gres=$GRES_TEST|g" \
             "$SCRATCH_SUBMIT_FILE_PATH" > "$SCRATCH_SUBMIT_FILE_PATH.resub"
         rm $SCRATCH_SUBMIT_FILE_PATH
         mv $SCRATCH_SUBMIT_FILE_PATH.resub $SCRATCH_SUBMIT_FILE_PATH
