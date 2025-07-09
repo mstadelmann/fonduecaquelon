@@ -33,6 +33,7 @@ script_start=$(date +%s.%N)
 RUN_TRAIN=#run_train#
 RUN_TEST=#run_test# # test will be run automatically, but not necessarily in this job
 IS_TEST=#is_test# # if True, start test in this job
+GRES_TEST=#gres_test# # GRES for test job
 AUTO_RESUBMIT=#auto_resubmit# # resubmit the job if stopped due to time constraints
 RESUME_CHPT_PATH=#resume_chpt_path# # path to checkpoint file to resume training
 EXP_FILE_PATH=#exp_file_path#
@@ -208,11 +209,12 @@ if [ "$RUN_TEST" == True ]; then
         echo ------------------------------------------------------------
         echo "Launching test job.."
         echo ------------------------------------------------------------
+        GRES_TEST=$(awk -F= '/^GRES_TEST=/{print $2}' "$SUBMIT_FILE_PATH")
         sed -e "s|IS_TEST=False|IS_TEST=True|g" \
             -e "s|RUN_TRAIN=True|RUN_TRAIN=False|g" \
             -e "s|RUN_TEST=True|RUN_TEST=False|g" \
             -e "s|_train.|_test.|g" \
-            -e "s|^#SBATCH --gpus-per-task=.*|#SBATCH --gpus-per-task=1|" \
+            -e "s|^#SBATCH --gres==.*|#SBATCH --gres=$GRES_TEST|" \
             "$SCRATCH_SUBMIT_FILE_PATH" > "$SCRATCH_SUBMIT_FILE_PATH.resub"
         rm $SCRATCH_SUBMIT_FILE_PATH
         mv $SCRATCH_SUBMIT_FILE_PATH.resub $SCRATCH_SUBMIT_FILE_PATH
@@ -370,6 +372,7 @@ def get_default_config(slurm_conf: Any) -> dict[str, Any]:
         "cpus_per_task": 8,
         "nodes": 1,
         "gres": "gpu:1",
+        "gres_test": "gpu:1",
         "mem": "32G",
         "partition": None,
         "account": None,

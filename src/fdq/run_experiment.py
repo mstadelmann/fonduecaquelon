@@ -111,6 +111,9 @@ def main():
     exp_config = load_conf_file(inargs.experimentfile)
     world_size = exp_config.get("slurm_cluster", {}).get("world_size", 1)
 
+    if inargs.test_model_auto or inargs.test_model_ia:
+        world_size = 1
+
     if world_size > torch.cuda.device_count():
         raise ValueError(
             f"ERROR, world size {inargs.world_size} is larger than available GPUs: {torch.cuda.device_count()}"
