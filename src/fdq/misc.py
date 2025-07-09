@@ -421,7 +421,7 @@ def init_tensorboard(experiment: Any) -> None:
     experiment.tb_writer = SummaryWriter(f"{experiment.results_dir}/tb/")
     experiment.tb_graph_stored = False
     iprint("-------------------------------------------------------")
-    iprint("Start tensorboard typing:")
+    iprint("To launch tensorboard, run:")
     iprint(f"tensorboard --logdir={experiment.results_dir}/tb/ --bind_all")
     iprint("-------------------------------------------------------")
 

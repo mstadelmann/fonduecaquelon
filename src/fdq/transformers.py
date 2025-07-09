@@ -5,13 +5,102 @@ import torch.nn.functional as F
 from torchvision.transforms import v2 as transforms
 
 
-def resize_max_dim_pad(
-    img: torch.Tensor,
-    max_dim: int,
-    interpol_mode: str,
-    mode: str,
-    value: int | float,
-) -> torch.Tensor:
+class AddValueTransform:
+    def __init__(self, value):
+        self.value = value
+
+    def __call__(self, t):
+        return t + self.value
+
+
+class MultValueTransform:
+    def __init__(self, value):
+        self.value = value
+
+    def __call__(self, t):
+        return t * self.value
+
+
+class DivValueTransform:
+    def __init__(self, value):
+        self.value = value
+
+    def __call__(self, t):
+        return t / self.value
+
+
+class ClampAbsTransform:
+    def __init__(self, lower, upper):
+        self.lower = lower
+        self.upper = upper
+
+    def __call__(self, t):
+        return t.clamp(self.lower, self.upper)
+
+
+class ClampPercTransform:
+    def __init__(self, lower_perc, upper_perc):
+        self.lower_perc = lower_perc
+        self.upper_perc = upper_perc
+
+    def __call__(self, t):
+        lower = torch.quantile(self.rdm_reduce(t), self.lower_perc)
+        upper = torch.quantile(self.rdm_reduce(t), self.upper_perc)
+        return t.clamp(lower, upper)
+
+    def rdm_reduce(self, tensor: torch.Tensor) -> torch.Tensor:
+        # random reduce tensor size for quantile computation -> estimation
+        n = 12582912  # random defined as 8*3*32*128*128
+        if tensor.numel() > n:
+            n = min(n, tensor.numel())
+            random_indices = torch.randperm(tensor.numel())[:n]
+            return tensor.view(-1)[random_indices]
+        return tensor
+
+
+class ReRangeTransform:
+    def __init__(self, in_min, in_max, out_min, out_max):
+        self.in_min = in_min
+        self.in_max = in_max
+        self.out_min = out_min
+        self.out_max = out_max
+
+    def __call__(self, t):
+        return (t - self.in_min) / (self.in_max - self.in_min) * (
+            self.out_max - self.out_min
+        ) + self.out_min
+
+
+class ReRangeMinMaxTransform:
+    def __init__(self, out_min, out_max):
+        self.out_min = out_min
+        self.out_max = out_max
+
+    def __call__(self, t):
+        t_min = t.min()
+        t_max = t.max()
+        return (t - t_min) / (t_max - t_min) * (
+            self.out_max - self.out_min
+        ) + self.out_min
+
+
+class Stack3DTransform:
+    def __init__(self, stack_n):
+        self.stack_n = stack_n
+
+    def __call__(self, t):
+        # # Assumes t is [B, C, H, W] or [C, H, W]
+        # if t.dim() == 3:
+        #     t = t.unsqueeze(1)  # [C, H, W] -> [C, 1, H, W]
+        # elif t.dim() == 4:
+        #     t = t.unsqueeze(2)  # [B, C, H, W] -> [B, C, 1, H, W]
+        # return t.repeat_interleave(self.stack_n, dim=-3)  # Repeat along D
+
+        # [B,C,H,W] -> [B,C,D,H,W] -> dim = 2
+        return torch.stack([t] * self.stack_n, dim=2)
+
+
+class ResizeMaxDimPadTransform:
     """Resizes an image tensor so its largest dimension matches 'max_dim' and pads the rest to make it square.
 
     Args:
@@ -24,61 +113,43 @@ def resize_max_dim_pad(
     Returns:
         torch.Tensor: The resized and padded image tensor.
     """
-    _, h, w = img.shape
 
-    # Scale to max_dim
-    scale = max_dim / max(h, w)
-    new_h, new_w = int(h * scale), int(w * scale)
+    def __init__(self, max_dim, interpol_mode="bilinear", mode="constant", value=0):
+        self.max_dim = max_dim
+        self.interpol_mode = interpol_mode
+        self.mode = mode
+        self.value = value
 
-    # Resize
-    img = F.interpolate(
-        img.unsqueeze(0),
-        size=(new_h, new_w),
-        mode=interpol_mode,
-        # align_corners=False,
-    ).squeeze(0)
+    def __call__(self, t):
 
-    # Padding
-    pad_h = max_dim - new_h
-    pad_w = max_dim - new_w
-    pad_top = pad_h // 2
-    pad_bottom = pad_h - pad_top
-    pad_left = pad_w // 2
-    pad_right = pad_w - pad_left
+        _, h, w = t.shape
 
-    img = F.pad(img, (pad_left, pad_right, pad_top, pad_bottom), mode, value)
+        # Scale to max_dim
+        scale = self.max_dim / max(h, w)
+        new_h, new_w = int(h * scale), int(w * scale)
 
-    return img
+        # Resize
+        t = F.interpolate(
+            t.unsqueeze(0),
+            size=(new_h, new_w),
+            mode=self.interpol_mode,
+            # align_corners=False,
+        ).squeeze(0)
 
+        # Padding
+        pad_h = self.max_dim - new_h
+        pad_w = self.max_dim - new_w
+        pad_top = pad_h // 2
+        pad_bottom = pad_h - pad_top
+        pad_left = pad_w // 2
+        pad_right = pad_w - pad_left
 
-def select_2d_from_3d(
-    img: torch.Tensor, axis: int, index: int | None = None
-) -> torch.Tensor:
-    """Selects a 2D slice from a 3D tensor along the specified axis and index.
-
-    Args:
-        img (torch.Tensor): The input 3D tensor.
-        axis (int): The axis along which to select the slice.
-        index (int, optional): The index of the slice to select. Defaults to the middle slice.
-
-    Returns:
-        torch.Tensor: The selected 2D slice.
-    """
-    if index is None:
-        index = img.shape[axis] // 2  # Default to the middle slice
-    if axis < 0 or axis >= img.dim():
-        raise ValueError(
-            f"Axis {axis} is out of bounds for the tensor with {img.dim()} dimensions."
+        return F.pad(
+            t, (pad_left, pad_right, pad_top, pad_bottom), self.mode, self.value
         )
-    return img.select(dim=axis, index=index)
 
 
-def add_padding(
-    img: torch.Tensor,
-    pad: list | tuple,
-    mode: str = "constant",
-    value: int | float = 0,
-) -> torch.Tensor:
+class PaddingTransform:
     """Add padding to an N-dimensional input tensor.
 
     Img = N-di m input tensor
@@ -93,45 +164,101 @@ def add_padding(
                          pad second last dim by 2 on both sides,
                          pad third last dim by 3 on both sides
     """
-    if mode not in ["constant", "edge", "replicate", "circular"]:
-        raise ValueError(f"Padding mode {mode} not supported!")
 
-    return torch.nn.functional.pad(input=img, pad=pad, mode=mode, value=value)
+    def __init__(self, padding_size, padding_mode="constant", padding_value=0):
+
+        if padding_mode not in ["constant", "edge", "replicate", "circular"]:
+            raise ValueError(f"Padding mode {padding_mode} not supported!")
+
+        self.padding_size = padding_size
+        self.padding_mode = padding_mode
+        self.padding_value = padding_value
+
+    def __call__(self, t):
+        return F.pad(
+            input=t,
+            pad=self.padding_size,
+            mode=self.padding_mode,
+            value=self.padding_value,
+        )
 
 
-def remove_padding(img: torch.Tensor, pad: list) -> torch.Tensor:
+class UnPaddingTransform:
     """Removes padding from tensor.
 
     img = N-di m input tensor
     pad = padding values (tuple) - same format as used in add_padding
     """
-    req_pad_dim = img.dim() * 2
-    pad = pad + [0] * (req_pad_dim - len(pad))
-    ps_start = pad[::2]
-    ps_stop = pad[1::2]
 
-    for dim in range(img.dim()):
-        if ps_stop[dim] == 0:
-            ps_stop[dim] = img.shape[dim]
-        else:
-            ps_stop[dim] = img.shape[dim] - ps_stop[dim]
+    def __init__(self, padding_size):
+        self.padding_size = padding_size
 
-    if img.dim() == 4:
-        return img[
-            ps_start[0] : ps_stop[0],
-            ps_start[1] : ps_stop[1],
-            ps_start[2] : ps_stop[2],
-            ps_start[3] : ps_stop[3],
-        ]
-    if img.dim() == 5:
-        return img[
-            ps_start[0] : ps_stop[0],
-            ps_start[1] : ps_stop[1],
-            ps_start[2] : ps_stop[2],
-            ps_start[3] : ps_stop[3],
-            ps_start[4] : ps_stop[4],
-        ]
-    raise ValueError("Only 4D and 5D tensors are supported!")
+    def __call__(self, t):
+        req_pad_dim = t.dim() * 2
+        pad = self.padding_size + [0] * (req_pad_dim - len(self.padding_size))
+        ps_start = pad[::2]
+        ps_stop = pad[1::2]
+
+        for dim in range(t.dim()):
+            if ps_stop[dim] == 0:
+                ps_stop[dim] = t.shape[dim]
+            else:
+                ps_stop[dim] = t.shape[dim] - ps_stop[dim]
+
+        if t.dim() == 4:
+            return t[
+                ps_start[0] : ps_stop[0],
+                ps_start[1] : ps_stop[1],
+                ps_start[2] : ps_stop[2],
+                ps_start[3] : ps_stop[3],
+            ]
+        if t.dim() == 5:
+            return t[
+                ps_start[0] : ps_stop[0],
+                ps_start[1] : ps_stop[1],
+                ps_start[2] : ps_stop[2],
+                ps_start[3] : ps_stop[3],
+                ps_start[4] : ps_stop[4],
+            ]
+        raise ValueError("Only 4D and 5D tensors are supported!")
+
+
+class Float32Transform:
+    def __call__(self, t):
+        # return t.to(dtype=t.new_empty(0).float().dtype)
+        return t.type(torch.float32)
+
+
+class Uint8Transform:
+    def __call__(self, t):
+        # return t.to(dtype=t.new_empty(0).byte().dtype)
+        return t.type(torch.uint8)
+
+
+class Get2DFrom3DTransform:
+    """Selects a 2D slice from a 3D tensor along the specified axis and index.
+
+    Args:
+        img (torch.Tensor): The input 3D tensor.
+        axis (int): The axis along which to select the slice.
+        index (int, optional): The index of the slice to select. Defaults to the middle slice.
+
+    Returns:
+        torch.Tensor: The selected 2D slice.
+    """
+
+    def __init__(self, axis, index):
+        self.axis = axis
+        self.index = index
+
+    def __call__(self, t):
+        if self.index is None:
+            self.index = t.shape[self.axis] // 2  # Default to the middle slice
+        if self.axis < 0 or self.axis >= t.dim():
+            raise ValueError(
+                f"Axis {self.axis} is out of bounds for the tensor with {t.dim()} dimensions."
+            )
+        return t.select(dim=self.axis, index=self.index)
 
 
 def get_transformers(t_defs: Any) -> transforms.Compose:
@@ -160,9 +287,7 @@ def get_transformer_by_names(
         torchvision.transforms.Transform: The corresponding transformer instance.
     """
     if transformer_name == "Stack3D":
-        stack_n = parameters.get("stack_n")
-        # [B,C,H,W] -> [B,C,D,H,W] -> dim = 2
-        transformer = transforms.Lambda(lambda t: torch.stack([t] * stack_n, dim=2))
+        transformer = Stack3DTransform(parameters["stack_n"])
 
     elif transformer_name == "Resize_HW":
         transformer = transforms.Resize(
@@ -170,55 +295,32 @@ def get_transformer_by_names(
         )
 
     elif transformer_name == "ResizeMaxDimPad":
-        transformer = transforms.Lambda(
-            lambda t: resize_max_dim_pad(
-                t,
-                max_dim=parameters.get("max_dim"),
-                interpol_mode=parameters.get("interpol_mode", "bilinear"),
-                mode=parameters.get("mode", "constant"),
-                value=parameters.get("value", 0),
-            )
+        transformer = ResizeMaxDimPadTransform(
+            parameters["max_dim"],
+            parameters.get("interpol_mode", "bilinear"),
+            parameters.get("mode", "constant"),
+            parameters.get("value", 0),
         )
 
     elif transformer_name == "CLAMP_abs":
-        transformer = transforms.Lambda(
-            lambda t: torch.clamp(t, parameters.get("lower"), parameters.get("upper"))
-        )
+        transformer = ClampAbsTransform(parameters["lower"], parameters["upper"])
 
     elif transformer_name == "CLAMP_perc":
-
-        def _rdm_reduce(tensor: torch.Tensor) -> torch.Tensor:
-            # random reduce tensor size for quantile computation -> estimation
-            n = 12582912  # random defined as 8*3*32*128*128
-            if tensor.numel() > n:
-                n = min(n, tensor.numel())
-                random_indices = torch.randperm(tensor.numel())[:n]
-                return tensor.view(-1)[random_indices]
-            return tensor
-
-        transformer = transforms.Lambda(
-            lambda t: torch.clamp(
-                t,
-                torch.quantile(_rdm_reduce(t), parameters.get("lower_perc")),
-                torch.quantile(_rdm_reduce(t), parameters.get("upper_perc")),
-            )
+        transformer = ClampPercTransform(
+            parameters["lower_perc"], parameters["upper_perc"]
         )
 
     elif transformer_name == "ReRange":
-        in_min = parameters.get("in_min")
-        in_max = parameters.get("in_max")
-        out_min = parameters.get("out_min")
-        out_max = parameters.get("out_max")
-        transformer = transforms.Lambda(
-            lambda t: ((t - in_min) * (out_max - out_min)) / (in_max - in_min) + out_min
+        transformer = ReRangeTransform(
+            parameters["in_min"],
+            parameters["in_max"],
+            parameters["out_min"],
+            parameters["out_max"],
         )
 
     elif transformer_name == "ReRange_minmax":
-        out_min = parameters.get("out_min")
-        out_max = parameters.get("out_max")
-        transformer = transforms.Lambda(
-            lambda t: ((t - t.min()) * (out_max - out_min)) / (t.max() - t.min())
-            + out_min
+        transformer = ReRangeMinMaxTransform(
+            parameters["out_min"], parameters["out_max"]
         )
 
     elif transformer_name == "Gaussian_Blur":
@@ -228,38 +330,25 @@ def get_transformer_by_names(
         )
 
     elif transformer_name == "Padding":
-        pad = parameters.get("padding_size")
-        if pad is None:
-            raise ValueError("padding_size must be provided for Padding transformer.")
-        transformer = transforms.Lambda(
-            lambda t: add_padding(
-                t,
-                pad=pad,
-                mode=parameters.get("padding_mode", "constant"),
-                value=parameters.get("padding_value", 0),
-            )
+        transformer = PaddingTransform(
+            parameters["padding_size"],
+            parameters.get("padding_mode", "constant"),
+            parameters.get("padding_value", 0),
         )
 
     elif transformer_name == "UnPadding":
-        pad = parameters.get("padding_size")
-        if not isinstance(pad, list):
-            raise ValueError(
-                "padding_size must be provided as a list for UnPadding transformer."
-            )
-        transformer = transforms.Lambda(lambda t: remove_padding(t, pad=pad))
+        transformer = UnPaddingTransform(parameters["padding_size"])
 
     elif transformer_name == "Get2DFrom3D":
-        axis = parameters.get("axis", 0)
-        index = parameters.get("index")
-        transformer = transforms.Lambda(
-            lambda t: select_2d_from_3d(t, axis=axis, index=index)
+        transformer = Get2DFrom3DTransform(
+            parameters.get("axis", 0), parameters.get("index")
         )
 
     elif transformer_name == "ADD":
-        transformer = transforms.Lambda(lambda t: t + parameters.get("value"))
+        transformer = AddValueTransform(parameters["value"])
 
     elif transformer_name == "DIV":
-        transformer = transforms.Lambda(lambda t: t / parameters.get("value"))
+        transformer = DivValueTransform(parameters["value"])
 
     elif transformer_name == "NORM":
         transformer = transforms.Normalize(
@@ -267,7 +356,7 @@ def get_transformer_by_names(
         )
 
     elif transformer_name == "MULT":
-        transformer = transforms.Lambda(lambda t: t * parameters.get("value"))
+        transformer = MultValueTransform(parameters["value"])
 
     elif transformer_name == "RandomAffine":
         degrees = parameters.get("degrees", 0)
@@ -300,10 +389,10 @@ def get_transformer_by_names(
         transformer = transforms.ToTensor()
 
     elif transformer_name == "Float32":
-        transformer = transforms.Lambda(lambda t: t.type(torch.float32))
+        transformer = Float32Transform()
 
     elif transformer_name == "Uint8":
-        transformer = transforms.Lambda(lambda t: t.type(torch.uint8))
+        transformer = Uint8Transform()
 
     elif transformer_name == "RGB_Normalize":
         transformer = transforms.Normalize(
@@ -314,22 +403,22 @@ def get_transformer_by_names(
         transformer = transforms.Grayscale(num_output_channels=1)
 
     elif transformer_name == "ToPil":
-        transformer = transforms.Lambda(lambda t: transforms.ToPILImage()(t))
+        transformer = transforms.ToPILImage()
 
     elif transformer_name == "Squeeze":
-        transformer = transforms.Lambda(lambda t: t.squeeze())
+        transformer = torch.squeeze
 
     elif transformer_name == "LOG":
-        transformer = transforms.Lambda(torch.log)
+        transformer = torch.log
 
     elif transformer_name == "EXP":
-        transformer = transforms.Lambda(torch.exp)
+        transformer = torch.exp
 
     elif transformer_name == "FLOOR":
-        transformer = transforms.Lambda(torch.floor)
+        transformer = torch.floor
 
     elif transformer_name == "NOP":
-        transformer = transforms.Lambda(lambda t: t)
+        transformer = lambda t: t
 
     else:
         raise ValueError(f"Transformation {t_defs} is not supported!")

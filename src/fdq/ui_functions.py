@@ -7,8 +7,13 @@ from colorama import init
 from termcolor import colored
 
 
-colorama_initialized: bool | None = None
+GLOB_COLORAMA_INITIALIZED: bool | None = None
+GLOBAL_RANK: int = 0  # Global variable to track the rank of the process in distributed training
 
+def set_global_rank(rank: int) -> None:
+    """Sets the global rank for the process."""
+    global GLOBAL_RANK
+    GLOBAL_RANK = rank
 
 def getIntInput(message: str, drange: Sequence[int]) -> int:
     """UI helper function to get an integer input from the user within a specified range."""
@@ -88,8 +93,15 @@ def startProgBar(
     nbstepts: int, message: str | None = None, is_active: bool = True
 ) -> CustomProgressBar:
     """Starts and returns a progress bar with the specified number of steps and optional message."""
-    if message is not None:
+
+    global GLOBAL_RANK
+    if GLOBAL_RANK != 0:
+        # show prog. bar on rank 0 process only
+        is_active = False
+
+    elif message is not None:
         print(message)
+
     pbar = CustomProgressBar(
         maxval=nbstepts,
         widgets=[progressbar.Bar("=", "[", "]"), " ", progressbar.Percentage()],
@@ -100,7 +112,9 @@ def startProgBar(
 
 
 def show_train_progress(experiment: Any) -> None:
-    """Displays training and validation loss progress for the given experiment."""
+    """Displays training and validation loss progress for the given experiment.
+    This function requires GNUplot to be installed."""
+
     print(
         f"\nProject: {experiment.project} | Experiment name: {experiment.experimentName}"
     )
@@ -127,28 +141,41 @@ def show_train_progress(experiment: Any) -> None:
     )
 
 
-def iprint(msg: Any) -> None:
-    """Info print: plots information string in green."""
-    cprint(msg, text_color="green")
+def iprint(msg: Any, distributed=False) -> None:
+    """Info print: plots information string in green.
+    In distributed training, only the main process (rank 0) prints.
+    Set `distributed` to True to print from all processes."""
+    cprint(msg, text_color="green",dist_print=distributed)
 
 
-def wprint(msg: Any) -> None:
-    """Warning print: plots warning string in yellow."""
-    cprint(msg, text_color="yellow")
+def wprint(msg: Any, distributed=False) -> None:
+    """Warning print: plots warning string in yellow.
+    In distributed training, only the main process (rank 0) prints.
+    Set `distributed` to True to print from all processes."""
+    cprint(msg, text_color="yellow",dist_print=distributed)
 
 
-def eprint(msg: Any) -> None:
-    """Error print: plots error string in red."""
-    cprint(msg, text_color="red")
+def eprint(msg: Any, distributed=False) -> None:
+    """Error print: plots error string in red.
+    In distributed training, only the main process (rank 0) prints.
+    Set `distributed` to True to print from all processes."""
+    cprint(msg, text_color="red",dist_print=distributed)
 
 
 def cprint(
-    msg: Any, text_color: str | None = None, bg_color: str | None = None
+    msg: Any, text_color: str | None = None, bg_color: str | None = None, dist_print: bool =False
 ) -> None:
     """Prints a message with optional text and background color in the terminal."""
-    global colorama_initialized
-    if "colorama_initialized" not in globals():
-        colorama_initialized = True
+
+    # Only print if this is the main process in distributed training
+    if not dist_print:
+        global GLOBAL_RANK
+        if GLOBAL_RANK != 0:
+            return  
+    
+    global GLOB_COLORAMA_INITIALIZED
+    if "GLOB_COLORAMA_INITIALIZED" not in globals():
+        GLOB_COLORAMA_INITIALIZED = True
         init()
 
     supported_colors = ["red", "green", "yellow", "blue", "magenta"]

@@ -5,6 +5,9 @@
         "parent": "segment_pets.json"
     },
     "slurm_cluster": {
-        "ntasks": 2
+        "world_size": 2,
+        "cpus_per_task": 16,
+        "gres": "gpu:2",
+        "mem": "40G"
     }
 }

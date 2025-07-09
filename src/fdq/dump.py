@@ -2,8 +2,6 @@ import os
 import time
 from typing import Any
 import torch
-import torch_tensorrt
-from torch_tensorrt import Input
 from fdq.misc import iprint, wprint
 from fdq.ui_functions import getIntInput, getYesNoInput
 
@@ -209,6 +207,8 @@ def compile_model(
     model_name: str,
 ) -> None:
     """Compile, optionally JIT trace/script, and optimize a model using Torch-TensorRT, with interactive configuration and testing."""
+    import torch_tensorrt
+    from torch_tensorrt import Input
     try:
         jit_model, config = jit_trace_model(
             experiment, config, model, model_name, example
@@ -293,7 +293,7 @@ def dump_model(experiment: Any) -> None:
     iprint("-----------------------------------------------------------\n")
     if experiment.is_distributed():
         raise ValueError(
-            "ERROR: Cannot run test in distributed mode! Please run in single process mode."
+            "ERROR: Cannot dump with world size > 1; please run in single process mode."
         )
     # dumping requires a sample input to trace the model
     # -> set exp t train mode so that train loader is created.

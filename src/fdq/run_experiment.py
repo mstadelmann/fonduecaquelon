@@ -1,6 +1,7 @@
 import argparse
 import random
 import sys
+import json
 from typing import Any
 
 import numpy as np
@@ -11,8 +12,18 @@ from fdq.testing import run_test
 from fdq.ui_functions import iprint
 
 
-def main() -> None:
-    """Main entry point for running an FDQ experiment based on command-line arguments."""
+def load_conf_file(path) -> None:
+    with open(path, encoding="utf8") as fp:
+        try:
+            conf = json.load(fp)
+        except Exception as exc:
+            raise ValueError(
+                f"Error loading experiment file {path} (check syntax?)."
+            ) from exc
+    return conf
+
+
+def parse_args() -> argparse.Namespace:
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="FCQ deep learning framework."
     )
@@ -52,8 +63,13 @@ def main() -> None:
         help="Path to checkpoint.",
     )
 
-    args: argparse.Namespace = parser.parse_args()
-    experiment: fdqExperiment = fdqExperiment(args)
+    return parser.parse_args()
+
+
+def main(rank: int, args: argparse.Namespace, conf: dict) -> None:
+    """Main entry point for running an FDQ experiment based on command-line arguments."""
+    
+    experiment: fdqExperiment = fdqExperiment(args, exp_conf=conf, rank=rank)
 
     random_seed: Any = experiment.exp_def.globals.set_random_seed
     if random_seed is not None:
@@ -91,4 +107,13 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    mp.spawn(main, nprocs=torch.cuda.device_count())
+    inargs = parse_args()
+    exp_config = load_conf_file(inargs.experimentfile)
+    world_size = exp_config.get("slurm_cluster", {}).get("world_size", 1)
+
+    if world_size > torch.cuda.device_count():
+        raise ValueError(
+            f"ERROR, world size {inargs.world_size} is larger than available GPUs: {torch.cuda.device_count()}"
+        )
+
+    mp.spawn(main, args=(inargs, exp_config), nprocs=world_size, join=True)

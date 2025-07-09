@@ -239,9 +239,9 @@ def _set_test_mode(experiment: Any) -> None:
 
 def run_test(experiment: Any) -> None:
     """Runs the test procedure for the given experiment."""
-    iprint("-------------------------------------------")
+    iprint("-----------------------------------------------------------")
     iprint("Starting Test...")
-    iprint("-------------------------------------------")
+    iprint("-----------------------------------------------------------")
 
     if experiment.is_distributed():
         raise ValueError(

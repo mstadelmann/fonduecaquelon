@@ -14,7 +14,7 @@ import funkybob
 from torchview import draw_graph
 from torch.nn.parallel import DistributedDataParallel as DDP
 import wandb
-from fdq.ui_functions import iprint, eprint, wprint, show_train_progress, startProgBar
+from fdq.ui_functions import iprint, eprint, wprint, show_train_progress, startProgBar, set_global_rank
 from fdq.testing import find_model_path
 from fdq.transformers import get_transformers
 from fdq.dump import dump_model
@@ -37,14 +37,14 @@ class fdqExperiment:
     It manages the setup, training, evaluation, and management of machine learning experiments.
     """
 
-    def __init__(self, inargs: argparse.Namespace) -> None:
+    def __init__(self, inargs: argparse.Namespace, exp_conf: dict, rank: int) -> None:
         """Initialize the fdqExperiment class with the provided arguments.
 
         Args:
             inargs (argparse.Namespace): The input arguments containing experiment configurations.
         """
         self.inargs: argparse.Namespace = inargs
-        self.parse_and_clean_args()
+        self.parse_and_clean_config(exp_conf)
         self.project: str = self.exp_def.globals.project.replace(" ", "_")
         self.experimentName: str = self.experiment_file_path.split("/")[-1].split(
             ".json"
@@ -97,7 +97,6 @@ class fdqExperiment:
         self.tb_writer: Any | None = None
         self.useWandb: bool = self.exp_def.store.use_wandb
         self.wandb_initialized: bool = False
-        self.rank: int = 0
         slurm_job_id: str | None = os.getenv("SLURM_JOB_ID")
         if isinstance(slurm_job_id, str) and slurm_job_id.isdigit():
             self.is_slurm: bool = True
@@ -105,20 +104,22 @@ class fdqExperiment:
             self.scratch_data_path: str | None = self.exp_def.get(
                 "slurm_cluster", {}
             ).get("scratch_data_path")
-            self.world_size: int = self.exp_def.get("slurm_cluster", {}).get(
-                "world_size", 1
-            )
-            if self.world_size > 1:
-                self.init_distributed_mode()
         else:
             self.is_slurm = False
             self.slurm_job_id = None
             self.scratch_data_path = None
-            self.world_size: int = 1
+        # distributed training
+        set_global_rank(rank)
+        self.rank: int = rank
+        self.world_size: int = self.exp_def.get("slurm_cluster", {}).get(
+            "world_size", 1
+        )
+        self.init_distributed_mode()
+
         self.previous_slurm_job_id: str | None = None
         if torch.cuda.is_available() and bool(self.exp_def.train.args.use_GPU):
             torch.cuda.empty_cache()
-            self.device: torch.device = torch.device("cuda")
+            self.device: torch.device = torch.device("cuda", self.rank)
             self.is_cuda: bool = True
             iprint(
                 f"CUDA available: {torch.cuda.is_available()}. NB devices: {torch.cuda.device_count()}"
@@ -230,16 +231,9 @@ class fdqExperiment:
         """Check if the current setup is distributed."""
         return self.world_size > 1
 
-    def parse_and_clean_args(self) -> None:
+    def parse_and_clean_config(self, exp_conf) -> None:
         self.experiment_file_path = self.inargs.experimentfile
-
-        with open(self.experiment_file_path, encoding="utf8") as fp:
-            try:
-                self.exp_file = json.load(fp)
-            except Exception as exc:
-                raise ValueError(
-                    f"Error loading experiment file {self.experiment_file_path} (check syntax?)."
-                ) from exc
+        self.exp_file = exp_conf
 
         self.globals = self.exp_file.get("globals")
         if self.globals is None:
@@ -280,27 +274,30 @@ class fdqExperiment:
         self.exp_def = DictToObj(self.exp_file)
 
     def init_distributed_mode(self):
-        if "SLURM_PROCID" not in os.environ or os.environ["SLURM_JOB_NAME"] == "bash":
-            return
-
-        print(f"Initializing distributed mode with world size {self.world_size}.")
+        # if "SLURM_PROCID" not in os.environ or os.environ["SLURM_JOB_NAME"] == "bash":
+        #     return
 
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
-        self.rank = int(os.environ["SLURM_PROCID"])
-        gpu = self.rank % torch.cuda.device_count()
+        torch.cuda.set_device(self.rank)
+
         dist_backend = "nccl"
-        dist_url = "env://"
-        torch.cuda.set_device(gpu)
+        # dist_url = "env://"
+
+        iprint("Initializing distributed mode.")
+        iprint(f"world size {self.world_size}, rank: {self.rank}")
 
         torch.distributed.init_process_group(
             backend=dist_backend,
-            init_method=dist_url,
+            init_method=None,
             world_size=self.world_size,
             rank=self.rank,
-            timeout=timedelta(minutes=15),
+            # timeout=timedelta(minutes=15),
+            # device_id=torch.device("cuda", self.rank),
         )
-        torch.distributed.barrier()
+
+        print(f"Distributed mode initialized on rank {self.rank}.")
+        self.dist_barrier()
 
     def store_experiment_git_hash(self):
         """Check if the experiment directory is a git repository and store the current git hash."""
@@ -426,17 +423,18 @@ class fdqExperiment:
 
             # or instantiate new model with random weights
             elif instantiate:
-                self.models[model_name] = cls(**model_def.args.to_dict()).to(
-                    self.device
-                )
+                self.models[model_name] = cls(**model_def.args.to_dict()).to(self.device)
+                iprint(f"Model {model_name} instantiated on rank {self.rank}.", distributed=True)
 
             if self.is_distributed():
-                # assign GPUs in a round-robin fashion
+                self.dist_barrier()
+
                 self.models[model_name] = DDP(
-                    self.models[model_name],
-                    device_ids=[self.rank % torch.cuda.device_count()],
-                    find_unused_parameters=True,
+                    self.models[model_name].cuda(self.rank),
+                    device_ids=[self.rank],
+                    # find_unused_parameters=True,
                 )
+                iprint(f"Model {model_name} wrapped in DDP on rank {self.rank}. ", distributed=True)
                 self.models_no_ddp[model_name] = self.models[model_name].module
             else:
                 self.models_no_ddp[model_name] = self.models[model_name]
@@ -475,7 +473,11 @@ class fdqExperiment:
         [self.models[model_name].eval() for model_name, _ in self.exp_def.models]
 
     def setupData(self) -> None:
+        if self.exp_def.data is None:
+            wprint("No data section found in the experiment file. Data setup must be handled manually in the training loop.")
+            return
         if self.data:
+            # data already loaded, skip setup
             return
         self.copy_data_to_scratch()
         for data_name, data_source in self.exp_def.data.items():
@@ -538,14 +540,14 @@ class fdqExperiment:
     def print_nb_weights(self) -> None:
         """Print the number of parameters for each model in the experiment."""
         for model_name, model in self.models.items():
-            iprint("-------------------------------------------")
+            iprint("-----------------------------------------------------------")
             iprint(f"Model: {model_name}")
             nbp = sum(p.numel() for p in model.parameters())
             iprint(f"nb parameters: {nbp / 1e6:.2f}M")
             iprint(
                 f"Using Float32, This will require {nbp * 4 / 1e9:.3f} GB of memory."
             )
-            iprint("-------------------------------------------")
+            iprint("-----------------------------------------------------------")
             self.processing_log_dict[model_name] = {
                 "nb_parameters": f"{nbp / 1e6:.2f}M",
                 "memory_usage_GB": f"{nbp * 4 / 1e9:.3f} GB",
@@ -583,6 +585,7 @@ class fdqExperiment:
             self.cp_to_res_dir(file_path=self.parent_file_path)
 
         store_processing_infos(self)
+        self.dist_barrier()
 
     def createOptimizer(self) -> None:
         for model_name, margs in self.exp_def.models:
@@ -594,10 +597,6 @@ class fdqExperiment:
 
             cls = self.instantiate_class(margs.optimizer.class_name)
 
-            # optimizer = cls(
-            #     self.models_no_ddp[model_name].parameters(),
-            #     **margs.optimizer.args.to_dict(),
-            # )
             optimizer = cls(
                 self.models[model_name].parameters(),
                 **margs.optimizer.args.to_dict(),
@@ -634,6 +633,9 @@ class fdqExperiment:
             )
 
     def createLosses(self) -> None:
+        if self.exp_def.losses is None:
+            wprint("No losses defined in the experiment file. Losses must be defined in the training loop.")
+            return
         for loss_name, largs in self.exp_def.losses:
             if largs.path is not None:
                 cls = self.instantiate_class(
@@ -744,8 +746,6 @@ class fdqExperiment:
 
         torch.save(checkpoint, self.checkpoint_path)
 
-        # torch.distributed.barrier()
-
     def get_next_export_fn(
         self, name: str | None = None, file_ending: str = "jpg"
     ) -> str:
@@ -769,7 +769,7 @@ class fdqExperiment:
         return path
 
     def print_dataset_infos(self) -> None:
-        iprint("-------------------------------------------")
+        iprint("-----------------------------------------------------------")
         for data_name, data_source in self.exp_def.data.items():
             iprint(f"Dataset: {data_name}")
             iprint(f"Train batch size: {data_source.args.train_batch_size}")
@@ -778,19 +778,22 @@ class fdqExperiment:
             iprint(f"Nb samples train: {self.data[data_name].n_train_samples}")
             iprint(f"Nb samples val: {self.data[data_name].n_val_samples}")
             iprint(f"Nb samples test: {self.data[data_name].n_test_samples}")
-        iprint("-------------------------------------------")
+        iprint("-----------------------------------------------------------")
 
     def clean_up(self) -> None:
-        iprint("-------------------------------------------")
+        iprint("-----------------------------------------------------------")
         iprint("Training done!\nCleaning up..")
-        iprint("-------------------------------------------")
-        if self.useTensorboard:
-            self.tb_writer.close()
+        iprint("-----------------------------------------------------------")
+        if self.is_main_process():
+            if self.useTensorboard:
+                self.tb_writer.close()
 
-        if self.wandb_initialized:
-            wandb.finish()
+            if self.wandb_initialized:
+                wandb.finish()
 
-        store_processing_infos(self)
+            store_processing_infos(self)
+
+        torch.distributed.destroy_process_group()
 
     def check_early_stop(self) -> bool:
         """Check if training should be stopped.
@@ -864,7 +867,7 @@ class fdqExperiment:
         log_images_tensorboard: Any | None = None,
         log_text_tensorboard: Any | None = None,
     ) -> None:
-
+        
         # update learning rate
         for model_name in self.models:
             scheduler = self.lr_schedulers[model_name]
@@ -941,56 +944,65 @@ class fdqExperiment:
         if self.scratch_data_path is None:
             return
 
-        if not os.path.exists(self.scratch_data_path):
-            os.makedirs(self.scratch_data_path)
+        if self.is_main_process():
+            if not os.path.exists(self.scratch_data_path):
+                os.makedirs(self.scratch_data_path)
 
-        iprint("----------------------------------------------------")
-        iprint("Copy datasets to temporary scratch location...")
-        iprint("----------------------------------------------------")
+            iprint("----------------------------------------------------")
+            iprint("Copy datasets to temporary scratch location...")
+            iprint("----------------------------------------------------")
 
-        for data_name, data_source in self.exp_def.data.items():
-            dargs = data_source.args
-            if dargs.base_path is not None:
-                try:
-                    # cleanup old data first -> in case this is a debugging run with dirty data
-                    dst_path = os.path.join(self.scratch_data_path, data_name)
-                    if os.path.exists(dst_path):
-                        shutil.rmtree(dst_path)
-                    os.system(f"rsync -au {dargs.base_path} {dst_path}")
-                except Exception as exc:
-                    raise ValueError(
-                        f"Unable to copy {dargs.base_path} to  to scratch location at {self.scratch_data_path}!"
-                    ) from exc
-
-                dargs.base_path = dst_path
-            else:
-                for file_cat in [
-                    "train_files_path",
-                    "test_files_path",
-                    "val_files_path",
-                ]:
-                    fps = dargs.get(file_cat)
-                    if not fps:
-                        continue
-                    if not isinstance(fps, list):
+            for data_name, data_source in self.exp_def.data.items():
+                dargs = data_source.args
+                if dargs.base_path is not None:
+                    try:
+                        # cleanup old data first -> in case this is a debugging run with dirty data
+                        dst_path = os.path.join(self.scratch_data_path, data_name)
+                        if os.path.exists(dst_path):
+                            shutil.rmtree(dst_path)
+                        os.system(f"rsync -au {dargs.base_path} {dst_path}")
+                    except Exception as exc:
                         raise ValueError(
-                            f"Error, {data_name} dataset files must be a list of file paths. Got: {fps}"
-                        )
-                    new_paths = []
-                    pbar = startProgBar(len(fps), f"Copy {file_cat} files to scratch")
-                    for i, src_file in enumerate(fps):
-                        pbar.update(i)
-                        rel_path = os.path.relpath(src_file, "/")
-                        dst_file = os.path.join(self.scratch_data_path, rel_path)
-                        os.makedirs(os.path.dirname(dst_file), exist_ok=True)
-                        shutil.copy(src_file, dst_file)
-                        new_paths.append(dst_file)
-                    dargs.set(file_cat, new_paths)
-                    pbar.finish()
+                            f"Unable to copy {dargs.base_path} to  to scratch location at {self.scratch_data_path}!"
+                        ) from exc
 
-        iprint("----------------------------------------------------")
-        iprint("Copy datasets to temporary scratch location... Done!")
-        iprint("----------------------------------------------------")
+                    dargs.base_path = dst_path
+                else:
+                    for file_cat in [
+                        "train_files_path",
+                        "test_files_path",
+                        "val_files_path",
+                    ]:
+                        fps = dargs.get(file_cat)
+                        if not fps:
+                            continue
+                        if not isinstance(fps, list):
+                            raise ValueError(
+                                f"Error, {data_name} dataset files must be a list of file paths. Got: {fps}"
+                            )
+                        new_paths = []
+                        pbar = startProgBar(
+                            len(fps), f"Copy {file_cat} files to scratch"
+                        )
+                        for i, src_file in enumerate(fps):
+                            pbar.update(i)
+                            rel_path = os.path.relpath(src_file, "/")
+                            dst_file = os.path.join(self.scratch_data_path, rel_path)
+                            os.makedirs(os.path.dirname(dst_file), exist_ok=True)
+                            shutil.copy(src_file, dst_file)
+                            new_paths.append(dst_file)
+                        dargs.set(file_cat, new_paths)
+                        pbar.finish()
+
+            iprint("----------------------------------------------------")
+            iprint("Copy datasets to temporary scratch location... Done!")
+            iprint("----------------------------------------------------")
+        self.dist_barrier()
+
+    def dist_barrier(self) -> None:
+        """Barrier for distributed training."""
+        if self.is_distributed():
+            torch.distributed.barrier()
 
     def prepare_transformers(self) -> None:
         """Prepare transformers for the experiment."""

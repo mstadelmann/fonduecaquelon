@@ -118,7 +118,7 @@ class OxfordPetDataset(torch.utils.data.Dataset):
 
 def create_datasets(experiment, args=None):
     """Creates and returns data loaders and dataset statistics for the Oxford Pet dataset based on the experiment configuration."""
-    pin_mem = False if not experiment.is_cuda else args.get("pin_memory", False)
+    pin_mem = True if experiment.is_cuda else args.get("pin_memory", False)
     drop_last = args.get("drop_last", True)
 
     if not os.path.exists(args.base_path):
@@ -160,25 +160,13 @@ def create_datasets(experiment, args=None):
     n_val = len(val_set)
     n_test = len(test_set)
 
-    if experiment.world_size > 1:
-        train_sampler = DistributedSampler(train_set, shuffle=args.shuffle_train)
-        val_sampler = DistributedSampler(val_set, shuffle=args.shuffle_val)
-        test_sampler = DistributedSampler(test_set, shuffle=args.shuffle_test)
-        shuffle_train = False
-        shuffle_val = False
-        shuffle_test = False
-    else:
-        train_sampler = None
-        val_sampler = None
-        test_sampler = None
-        shuffle_train = args.shuffle_train
-        shuffle_val = args.shuffle_val
-        shuffle_test = args.shuffle_test
+    train_sampler = DistributedSampler(train_set, shuffle=args.shuffle_train)
+    val_sampler = DistributedSampler(val_set, shuffle=args.shuffle_val)
+    test_sampler = DistributedSampler(test_set, shuffle=args.shuffle_test)
 
     train_loader = DataLoader(
         train_set,
         batch_size=args.train_batch_size,
-        shuffle=shuffle_train,
         num_workers=args.num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,
@@ -188,7 +176,6 @@ def create_datasets(experiment, args=None):
     test_loader = DataLoader(
         test_set,
         batch_size=args.test_batch_size,
-        shuffle=shuffle_test,
         num_workers=args.num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,
@@ -198,7 +185,6 @@ def create_datasets(experiment, args=None):
     val_loader = DataLoader(
         val_set,
         batch_size=args.val_batch_size,
-        shuffle=shuffle_val,
         num_workers=args.num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,
