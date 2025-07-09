@@ -66,7 +66,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main(rank: int, args: argparse.Namespace, conf: dict) -> None:
+def start(rank: int, args: argparse.Namespace, conf: dict) -> None:
     """Main entry point for running an FDQ experiment based on command-line arguments."""
     
     experiment: fdqExperiment = fdqExperiment(args, exp_conf=conf, rank=rank)
@@ -106,7 +106,7 @@ def main(rank: int, args: argparse.Namespace, conf: dict) -> None:
         sys.exit(1)
 
 
-if __name__ == "__main__":
+def main():
     inargs = parse_args()
     exp_config = load_conf_file(inargs.experimentfile)
     world_size = exp_config.get("slurm_cluster", {}).get("world_size", 1)
@@ -116,4 +116,8 @@ if __name__ == "__main__":
             f"ERROR, world size {inargs.world_size} is larger than available GPUs: {torch.cuda.device_count()}"
         )
 
-    mp.spawn(main, args=(inargs, exp_config), nprocs=world_size, join=True)
+    mp.spawn(start, args=(inargs, exp_config), nprocs=world_size, join=True)
+
+
+if __name__ == "__main__":
+    main()

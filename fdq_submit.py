@@ -19,8 +19,8 @@ def get_template() -> str:
 #SBATCH --ntasks=#ntasks#
 #SBATCH --cpus-per-task=#cpus_per_task#
 #SBATCH --nodes=#nodes#
-#SBATCH --gpus-per-task=#gpus_per_task#
-#SBATCH --mem-per-gpu=#mem_per_gpu#
+#SBATCH --gres=#gres#
+#SBATCH --mem=#mem#
 #SBATCH --partition=#partition#
 #SBATCH --account=#account#
 #SBATCH --mail-user=#user#@zhaw.ch
@@ -369,8 +369,8 @@ def get_default_config(slurm_conf: Any) -> dict[str, Any]:
         "ntasks": 1,
         "cpus_per_task": 8,
         "nodes": 1,
-        "gpus_per_task": 1,
-        "mem_per_gpu": "32G",
+        "gres": "gpu:1",
+        "mem": "32G",
         "partition": None,
         "account": None,
         "run_train": True,
