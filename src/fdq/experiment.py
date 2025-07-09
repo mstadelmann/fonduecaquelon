@@ -114,6 +114,8 @@ class fdqExperiment:
         self.world_size: int = self.exp_def.get("slurm_cluster", {}).get(
             "world_size", 1
         )
+        self.master_port: int = self.exp_def.get("slurm_cluster", {}).get(
+            "master_port")
         self.init_distributed_mode()
 
         self.previous_slurm_job_id: str | None = None
@@ -278,7 +280,7 @@ class fdqExperiment:
         #     return
 
         os.environ["MASTER_ADDR"] = "localhost"
-        os.environ["MASTER_PORT"] = "12355"
+        os.environ["MASTER_PORT"] = str(self.master_port)
         torch.cuda.set_device(self.rank)
 
         dist_backend = "nccl"
