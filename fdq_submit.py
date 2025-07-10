@@ -376,12 +376,12 @@ def get_default_config(slurm_conf: Any) -> dict[str, Any]:
         "job_time": None,
         "ntasks": 1,
         "cpus_per_task": 8,
-        "cpus_per_task_test": 8,
+        "cpus_per_task_test": None,
         "nodes": 1,
         "gres": "gpu:1",
-        "gres_test": "gpu:1",
+        "gres_test": None,
         "mem": "32G",
-        "mem_test": "32G",
+        "mem_test": None,
         "partition": None,
         "account": None,
         "run_train": True,
@@ -406,6 +406,11 @@ def get_default_config(slurm_conf: Any) -> dict[str, Any]:
         val = slurm_conf.get(key)
         if val is not None:
             job_config[key] = val
+
+    # manually set test parameters if not set
+    for param in ["gres_test","mem_test","cpus_per_task_test"]:
+        if job_config[param] is None:
+            job_config[param] = job_config[param.replace("_test", "")]
 
     return job_config
 
