@@ -118,8 +118,12 @@ def main():
         raise ValueError(
             f"ERROR, world size {inargs.world_size} is larger than available GPUs: {torch.cuda.device_count()}"
         )
-
-    mp.spawn(start, args=(inargs, exp_config), nprocs=world_size, join=True)
+    
+    if world_size == 1:
+        # Single process, no need for multiprocessing
+        start(0, inargs, exp_config)
+    else:
+        mp.spawn(start, args=(inargs, exp_config), nprocs=world_size, join=True)
 
 
 if __name__ == "__main__":
