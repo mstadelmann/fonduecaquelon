@@ -119,6 +119,8 @@ class fdqExperiment:
             )
         self.master_port: int = self.exp_def.get("slurm_cluster", {}).get(
             "master_port")
+        self.ddp_rdvz_path: int = self.exp_def.get("slurm_cluster", {}).get(
+            "ddp_rdvz_path", "/scratch/")
         self.init_distributed_mode()
 
         self.previous_slurm_job_id: str | None = None
@@ -283,18 +285,19 @@ class fdqExperiment:
         #     return
 
         os.environ["MASTER_ADDR"] = "localhost"
-        os.environ["MASTER_PORT"] = str(self.master_port)
+        # os.environ["MASTER_PORT"] = str(self.master_port)
         torch.cuda.set_device(self.rank)
 
         dist_backend = "nccl"
         # dist_url = "env://"
+        rdvz_location = f"file://{self.ddp_rdvz_path}ddp_rendezvous_{self.experimentName}"
 
         iprint("Initializing distributed mode.")
         iprint(f"world size {self.world_size}, rank: {self.rank}")
 
         torch.distributed.init_process_group(
             backend=dist_backend,
-            init_method=None,
+            init_method=rdvz_location,
             world_size=self.world_size,
             rank=self.rank,
             # timeout=timedelta(minutes=15),

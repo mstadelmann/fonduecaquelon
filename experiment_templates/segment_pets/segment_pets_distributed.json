@@ -8,7 +8,6 @@
         "world_size": 2,
         "cpus_per_task": 16,
         "gres": "gpu:2",
-        "mem": "60G",
-        "master_port": "8601"
+        "mem": "60G"
     }
 }
