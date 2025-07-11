@@ -106,6 +106,7 @@ def start(rank: int, args: argparse.Namespace, conf: dict) -> None:
 
 
 def main():
+    """Main function to parse arguments, load configuration, and run the FDQ experiment."""
     inargs = parse_args()
     exp_config = load_conf_file(inargs.experimentfile)
     world_size = exp_config.get("slurm_cluster", {}).get("world_size", 1)
@@ -115,7 +116,7 @@ def main():
 
     if world_size > torch.cuda.device_count():
         raise ValueError(
-            f"ERROR, world size {inargs.world_size} is larger than available GPUs: {torch.cuda.device_count()}"
+            f"ERROR, world size {world_size} is larger than available GPUs: {torch.cuda.device_count()}"
         )
 
     if world_size == 1:
