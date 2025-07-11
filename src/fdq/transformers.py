@@ -6,6 +6,8 @@ from torchvision.transforms import v2 as transforms
 
 
 class AddValueTransform:
+    """A transform that adds a specified value to the input tensor."""
+
     def __init__(self, value):
         self.value = value
 
@@ -14,6 +16,8 @@ class AddValueTransform:
 
 
 class MultValueTransform:
+    """A transform that multiplies the input tensor by a specified value."""
+
     def __init__(self, value):
         self.value = value
 
@@ -22,6 +26,8 @@ class MultValueTransform:
 
 
 class DivValueTransform:
+    """A transform that divides the input tensor by a specified value."""
+
     def __init__(self, value):
         self.value = value
 
@@ -30,6 +36,8 @@ class DivValueTransform:
 
 
 class ClampAbsTransform:
+    """A transform that clamps the input tensor to the specified lower and upper bounds."""
+
     def __init__(self, lower, upper):
         self.lower = lower
         self.upper = upper
@@ -39,6 +47,13 @@ class ClampAbsTransform:
 
 
 class ClampPercTransform:
+    """A transform that clamps the input tensor based on lower and upper percentiles.
+
+    Args:
+        lower_perc (float): The lower percentile for clamping.
+        upper_perc (float): The upper percentile for clamping.
+    """
+
     def __init__(self, lower_perc, upper_perc):
         self.lower_perc = lower_perc
         self.upper_perc = upper_perc
@@ -54,11 +69,16 @@ class ClampPercTransform:
         if tensor.numel() > n:
             n = min(n, tensor.numel())
             random_indices = torch.randperm(tensor.numel())[:n]
+            # random_indices = torch.multinomial(
+            #     torch.ones(tensor.numel()), n, replacement=False
+            # )
             return tensor.view(-1)[random_indices]
         return tensor
 
 
 class ReRangeTransform:
+    """Re-ranges the input tensor from [in_min, in_max] to [out_min, out_max]."""
+
     def __init__(self, in_min, in_max, out_min, out_max):
         self.in_min = in_min
         self.in_max = in_max
@@ -72,6 +92,8 @@ class ReRangeTransform:
 
 
 class ReRangeMinMaxTransform:
+    """Re-ranges the input tensor so that its minimum and maximum values are mapped to out_min and out_max, respectively."""
+
     def __init__(self, out_min, out_max):
         self.out_min = out_min
         self.out_max = out_max
@@ -85,6 +107,12 @@ class ReRangeMinMaxTransform:
 
 
 class Stack3DTransform:
+    """A transform that stacks a 2D image tensor along a new dimension to create a 3D tensor.
+
+    Args:
+        stack_n (int): The number of times to stack the input tensor along the new dimension.
+    """
+
     def __init__(self, stack_n):
         self.stack_n = stack_n
 
@@ -121,7 +149,6 @@ class ResizeMaxDimPadTransform:
         self.value = value
 
     def __call__(self, t):
-
         _, h, w = t.shape
 
         # Scale to max_dim
@@ -166,7 +193,6 @@ class PaddingTransform:
     """
 
     def __init__(self, padding_size, padding_mode="constant", padding_value=0):
-
         if padding_mode not in ["constant", "edge", "replicate", "circular"]:
             raise ValueError(f"Padding mode {padding_mode} not supported!")
 
@@ -224,12 +250,16 @@ class UnPaddingTransform:
 
 
 class Float32Transform:
+    """A transform that converts the input tensor to torch.float32 dtype."""
+
     def __call__(self, t):
         # return t.to(dtype=t.new_empty(0).float().dtype)
         return t.type(torch.float32)
 
 
 class Uint8Transform:
+    """A transform that converts the input tensor to torch.uint8 dtype."""
+
     def __call__(self, t):
         # return t.to(dtype=t.new_empty(0).byte().dtype)
         return t.type(torch.uint8)
@@ -418,7 +448,11 @@ def get_transformer_by_names(
         transformer = torch.floor
 
     elif transformer_name == "NOP":
-        transformer = lambda t: t
+
+        def nop_transform(t):
+            return t
+
+        transformer = nop_transform
 
     else:
         raise ValueError(f"Transformation {t_defs} is not supported!")

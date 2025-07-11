@@ -12,7 +12,7 @@ from fdq.testing import run_test
 from fdq.ui_functions import iprint
 
 
-def load_conf_file(path) -> None:
+def load_conf_file(path) -> dict:
     with open(path, encoding="utf8") as fp:
         try:
             conf = json.load(fp)
@@ -68,7 +68,6 @@ def parse_args() -> argparse.Namespace:
 
 def start(rank: int, args: argparse.Namespace, conf: dict) -> None:
     """Main entry point for running an FDQ experiment based on command-line arguments."""
-    
     experiment: fdqExperiment = fdqExperiment(args, exp_conf=conf, rank=rank)
 
     random_seed: Any = experiment.exp_def.globals.set_random_seed
@@ -118,7 +117,7 @@ def main():
         raise ValueError(
             f"ERROR, world size {inargs.world_size} is larger than available GPUs: {torch.cuda.device_count()}"
         )
-    
+
     if world_size == 1:
         # Single process, no need for multiprocessing
         start(0, inargs, exp_config)

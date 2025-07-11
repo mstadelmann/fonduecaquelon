@@ -1,6 +1,5 @@
 import os
 import sys
-import git
 import json
 import math
 import shutil
@@ -8,13 +7,21 @@ import argparse
 import importlib
 from datetime import datetime, timedelta
 from typing import Any
+import git
 
 import torch
 import funkybob
 from torchview import draw_graph
 from torch.nn.parallel import DistributedDataParallel as DDP
 import wandb
-from fdq.ui_functions import iprint, eprint, wprint, show_train_progress, startProgBar, set_global_rank
+from fdq.ui_functions import (
+    iprint,
+    eprint,
+    wprint,
+    show_train_progress,
+    startProgBar,
+    set_global_rank,
+)
 from fdq.testing import find_model_path
 from fdq.transformers import get_transformers
 from fdq.dump import dump_model
@@ -117,10 +124,10 @@ class fdqExperiment:
             self.world_size: int = self.exp_def.get("slurm_cluster", {}).get(
                 "world_size", 1
             )
-        self.master_port: int = self.exp_def.get("slurm_cluster", {}).get(
-            "master_port")
+        self.master_port: int = self.exp_def.get("slurm_cluster", {}).get("master_port")
         self.ddp_rdvz_path: int = self.exp_def.get("slurm_cluster", {}).get(
-            "ddp_rdvz_path", "/scratch/")
+            "ddp_rdvz_path", "/scratch/"
+        )
         self.init_distributed_mode()
 
         self.previous_slurm_job_id: str | None = None
@@ -140,7 +147,6 @@ class fdqExperiment:
 
     @property
     def results_dir(self) -> str:
-
         if not self.is_main_process():
             return None
 
@@ -290,7 +296,9 @@ class fdqExperiment:
 
         dist_backend = "nccl"
         # dist_url = "env://"
-        rdvz_location = f"file://{self.ddp_rdvz_path}ddp_rendezvous_{self.experimentName}"
+        rdvz_location = (
+            f"file://{self.ddp_rdvz_path}ddp_rendezvous_{self.experimentName}"
+        )
 
         iprint("Initializing distributed mode.")
         iprint(f"world size {self.world_size}, rank: {self.rank}")
@@ -431,8 +439,13 @@ class fdqExperiment:
 
             # or instantiate new model with random weights
             elif instantiate:
-                self.models[model_name] = cls(**model_def.args.to_dict()).to(self.device)
-                iprint(f"Model {model_name} instantiated on rank {self.rank}.", distributed=True)
+                self.models[model_name] = cls(**model_def.args.to_dict()).to(
+                    self.device
+                )
+                iprint(
+                    f"Model {model_name} instantiated on rank {self.rank}.",
+                    distributed=True,
+                )
 
             if self.is_distributed():
                 self.dist_barrier()
@@ -442,7 +455,10 @@ class fdqExperiment:
                     device_ids=[self.rank],
                     # find_unused_parameters=True,
                 )
-                iprint(f"Model {model_name} wrapped in DDP on rank {self.rank}. ", distributed=True)
+                iprint(
+                    f"Model {model_name} wrapped in DDP on rank {self.rank}. ",
+                    distributed=True,
+                )
                 self.models_no_ddp[model_name] = self.models[model_name].module
             else:
                 self.models_no_ddp[model_name] = self.models[model_name]
@@ -482,7 +498,9 @@ class fdqExperiment:
 
     def setupData(self) -> None:
         if self.exp_def.data is None:
-            wprint("No data section found in the experiment file. Data setup must be handled manually in the training loop.")
+            wprint(
+                "No data section found in the experiment file. Data setup must be handled manually in the training loop."
+            )
             return
         if self.data:
             # data already loaded, skip setup
@@ -642,7 +660,9 @@ class fdqExperiment:
 
     def createLosses(self) -> None:
         if self.exp_def.losses is None:
-            wprint("No losses defined in the experiment file. Losses must be defined in the training loop.")
+            wprint(
+                "No losses defined in the experiment file. Losses must be defined in the training loop."
+            )
             return
         for loss_name, largs in self.exp_def.losses:
             if largs.path is not None:
@@ -669,9 +689,7 @@ class fdqExperiment:
             # checkpoint was saved on rank 0
             # so we need to map to the current rank
             map_location = (
-                {"cuda:%d" % 0: "cuda:%d" % self.rank}
-                if self.is_distributed()
-                else None
+                {f"cuda:{0}": f"cuda:{self.rank}"} if self.is_distributed() else None
             )
             checkpoint = torch.load(path, map_location=map_location)
             self.start_epoch = checkpoint["epoch"]
@@ -875,7 +893,6 @@ class fdqExperiment:
         log_images_tensorboard: Any | None = None,
         log_text_tensorboard: Any | None = None,
     ) -> None:
-        
         # update learning rate
         for model_name in self.models:
             scheduler = self.lr_schedulers[model_name]

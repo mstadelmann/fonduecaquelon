@@ -8,12 +8,16 @@ from termcolor import colored
 
 
 GLOB_COLORAMA_INITIALIZED: bool | None = None
-GLOBAL_RANK: int = 0  # Global variable to track the rank of the process in distributed training
+GLOBAL_RANK: int = (
+    0  # Global variable to track the rank of the process in distributed training
+)
+
 
 def set_global_rank(rank: int) -> None:
     """Sets the global rank for the process."""
     global GLOBAL_RANK
     GLOBAL_RANK = rank
+
 
 def getIntInput(message: str, drange: Sequence[int]) -> int:
     """UI helper function to get an integer input from the user within a specified range."""
@@ -93,7 +97,6 @@ def startProgBar(
     nbstepts: int, message: str | None = None, is_active: bool = True
 ) -> CustomProgressBar:
     """Starts and returns a progress bar with the specified number of steps and optional message."""
-
     global GLOBAL_RANK
     if GLOBAL_RANK != 0:
         # show prog. bar on rank 0 process only
@@ -113,8 +116,9 @@ def startProgBar(
 
 def show_train_progress(experiment: Any) -> None:
     """Displays training and validation loss progress for the given experiment.
-    This function requires GNUplot to be installed."""
 
+    This function requires GNUplot to be installed.
+    """
     print(
         f"\nProject: {experiment.project} | Experiment name: {experiment.experimentName}"
     )
@@ -143,38 +147,46 @@ def show_train_progress(experiment: Any) -> None:
 
 def iprint(msg: Any, distributed=False) -> None:
     """Info print: plots information string in green.
+
     In distributed training, only the main process (rank 0) prints.
-    Set `distributed` to True to print from all processes."""
-    cprint(msg, text_color="green",dist_print=distributed)
+    Set `distributed` to True to print from all processes.
+    """
+    cprint(msg, text_color="green", dist_print=distributed)
 
 
 def wprint(msg: Any, distributed=False) -> None:
     """Warning print: plots warning string in yellow.
+
     In distributed training, only the main process (rank 0) prints.
-    Set `distributed` to True to print from all processes."""
-    cprint(msg, text_color="yellow",dist_print=distributed)
+    Set `distributed` to True to print from all processes.
+    """
+    cprint(msg, text_color="yellow", dist_print=distributed)
 
 
 def eprint(msg: Any, distributed=False) -> None:
     """Error print: plots error string in red.
+
     In distributed training, only the main process (rank 0) prints.
-    Set `distributed` to True to print from all processes."""
-    cprint(msg, text_color="red",dist_print=distributed)
+    Set `distributed` to True to print from all processes.
+    """
+    cprint(msg, text_color="red", dist_print=distributed)
 
 
 def cprint(
-    msg: Any, text_color: str | None = None, bg_color: str | None = None, dist_print: bool =False
+    msg: Any,
+    text_color: str | None = None,
+    bg_color: str | None = None,
+    dist_print: bool = False,
 ) -> None:
     """Prints a message with optional text and background color in the terminal."""
-
     # Only print if this is the main process in distributed training
     if not dist_print:
         global GLOBAL_RANK
         if GLOBAL_RANK != 0:
-            return  
-    
+            return
+
     global GLOB_COLORAMA_INITIALIZED
-    if "GLOB_COLORAMA_INITIALIZED" not in globals():
+    if not GLOB_COLORAMA_INITIALIZED:
         GLOB_COLORAMA_INITIALIZED = True
         init()
 
