@@ -1,19 +1,33 @@
 # FDQ | Fonduecaquelon
 
-If you’d rather enjoy a delicious fondue than waste time on repetitive PyTorch boilerplate, this project is for you. FDQ streamlines your deep learning workflow so you can focus on what matters—your experiments, not your setup.
+Fonduecaquelon (FDQ) is designed for researchers and practitioners who want to focus on deep learning experiments, not boilerplate code. FDQ streamlines your PyTorch workflow, automating repetitive tasks and providing a flexible, extensible framework for experiment management—so you can spend more time on innovation and less on setup.
 
-https://github.com/mstadelmann/fonduecaquelon
+- [GitHub Repository](https://github.com/mstadelmann/fonduecaquelon)
+- [PyPI Package](https://pypi.org/project/fdq/)
 
-https://pypi.org/project/fdq/
+---
 
-## SETUP
+## 🚀 Features
 
+- **Minimal Boilerplate:** Define only what matters — FDQ handles the rest.
+- **Flexible Experiment Configuration:** Use JSON config files with inheritance support for easy experiment management.
+- **Multi-Model Support:** Seamlessly manage multiple models, losses, and data loaders.
+- **Cluster Ready:** Effortlessly submit jobs to SLURM clusters with built-in utilities.
+- **Extensible:** Easily integrate custom models, data loaders, and training/testing loops.
+- **Automatic Dependency Management:** Install additional pip packages per experiment.
+- **Distributed Training:** Out-of-the-box support for distributed training using PyTorch DDP.
+
+---
+
+## 🛠️ Installation
+
+Install the latest release from PyPI:
 
 ```bash
 pip install fdq
 ```
 
-or
+Or, for development and the latest features, clone the repository:
 
 ```bash
 git clone https://github.com/mstadelmann/fonduecaquelon.git
@@ -21,27 +35,39 @@ cd fonduecaquelon
 pip install -e .
 ```
 
-## USAGE
+---
 
-### Local
-All experiment parameters must be stored in a [config file](experiment_templates/mnist/mnist_class_dense.json). Note that config files can be based on a [parent file](experiment_templates/mnist/mnist_parent.json).
+## 📖 Usage
+
+### Local Experiments
+
+All experiment parameters are defined in a [config file](experiment_templates/mnist/mnist_class_dense.json). Config files can inherit from a [parent file](experiment_templates/mnist/mnist_parent.json) for easy reuse and organization.
+
+To run an experiment locally:
 
 ```bash
 fdq <path_to_config_file.json>
 ```
 
-### Slum Cluster
-If you want to run your experiment on a Slurm cluster, you have to add the `slurm_cluster` section, check [here](experiment_templates/segment_pets/segment_pets.json) for an example.
+### SLURM Cluster Execution
+
+To run experiments on a SLURM cluster, add a `slurm_cluster` section to your config. See [this example](experiment_templates/segment_pets/segment_pets.json).
+
+Submit your experiment to the cluster:
 
 ```bash
 python <path_to>/fdq_submit.py <path_to_config_file.json>
 ```
 
-## Configuration
-To run an experiment with FDQ, you need to define your [experiment loop](experiment_templates/segment_pets/train_oxpets.py), a [data-loader](experiment_templates/segment_pets/oxfordpet_preparator.py) and, optionally, a [test loop](experiment_templates/segment_pets/oxpets_test.py). 
+---
 
-### Model(s)
-The model can either be a pre-installed one—such as [Chuchichaestli](https://github.com/CAIIVS/chuchichaestli) — or a custom model that you define and import yourself. Models, losses, and data loaders are always defined as dictionaries. For example, the following configuration:
+## ⚙️ Configuration Overview
+
+FDQ uses JSON configuration files to define experiments. These files specify models, data loaders, training/testing scripts, and cluster settings.
+
+### Models
+
+Models are defined as dictionaries. You can use pre-installed models (e.g., [Chuchichaestli](https://github.com/CAIIVS/chuchichaestli)) or your own. Example:
 
 ```json
 "models": {
@@ -51,11 +77,13 @@ The model can either be a pre-installed one—such as [Chuchichaestli](https://g
 }
 ```
 
-allows you to access the model in your training loop via `experiment.models["ccUNET"]`. The same dictionary-based structure applies to losses and data loaders as well. This setup enables you to define and manage as many models, losses, and data loaders as needed for your experiment.
+Access models in your training loop via `experiment.models["ccUNET"]`. The same structure applies to losses and data loaders.
 
-### Data-Loader(s)
-The Data-Loader class must provide a function `create_datasets(experiment, args)` which is expected to return a dictionary, e.g.
-```json
+### Data Loaders
+
+Your data loader class must implement a `create_datasets(experiment, args)` function, returning a dictionary like:
+
+```python
 return {
     "train_data_loader": train_loader,
     "val_data_loader": val_loader,
@@ -68,16 +96,18 @@ return {
     "n_test_batches": len(test_loader),
 }
 ```
-These values can then be accessed from your training loop.
 
-### Train
-Define the path to your training loop in the train section. FDQ expects this file to provide the following function:
+These values are accessible from your training loop as `experiment.data["<name>"].<key>`.
+
+### Training Loop
+
+Specify the path to your training script in the config. FDQ expects a function:
 
 ```python
 def fdq_train(experiment: fdqExperiment):
 ```
 
-Within the training loop, you can access the training arguments, model, and data as follows:
+Within this function, you can access all experiment components:
 
 ```python
 nb_epochs = experiment.exp_def.train.args.epochs
@@ -85,11 +115,11 @@ data_loader = experiment.data["OXPET"].train_data_loader
 model = experiment.models["ccUNET"]
 ```
 
-See [train_oxpets.py](experiment_templates/segment_pets/train_oxpets.py) for an example.
+See [train_oxpets.py](experiment_templates/segment_pets/train_oxpets.py) for a full example.
 
+### Testing Loop
 
-### Test
-Similar to the training loop, the test loop can be defined in a custom file (this can also be the same file as the training loop). FDQ expects the specified file to provide the following function:
+Testing works similarly. Define a function:
 
 ```python
 def fdq_test(experiment: fdqExperiment):
@@ -97,18 +127,47 @@ def fdq_test(experiment: fdqExperiment):
 
 See [oxpets_test.py](experiment_templates/segment_pets/oxpets_test.py) for an example.
 
-### Install additional pip packages
-If your experiment needs extra Python packages, you can install them on the worker by specifying them in your configuration. Just add the required package names (and optionally the version) under a `additional_pip_packages` section in your experiment setup file. This ensures all dependencies are installed automatically before your code runs.
+---
+
+## 📦 Installing Additional Python Packages
+
+If your experiment requires extra Python packages, specify them in your config under `additional_pip_packages`. FDQ will install them automatically before running your experiment.
 
 Example:
 
 ```json
-    "slurm_cluster": {
-        "fdq_version": "0.0.7",
-        "...": "...",
-        "additional_pip_packages": [
-            "monai==1.4.0",
-            "prettytable"
-        ]
-    }
+"slurm_cluster": {
+    "fdq_version": "0.0.48",
+    "...": "...",
+    "additional_pip_packages": [
+        "monai==1.4.0",
+        "prettytable"
+    ]
+}
 ```
+
+---
+
+## 📝 Tips
+
+- **Config Inheritance:** Use the `parent` key in your config to inherit settings from another file, reducing duplication.
+- **Multiple Models/Losses:** FDQ supports multiple models and losses per experiment — just add them to the config dictionaries.
+- **Cluster Submission:** The `fdq_submit.py` utility handles SLURM job script generation and submission, including environment setup and result copying.
+
+---
+
+## 📚 Resources
+
+- [Experiment Templates](experiment_templates/)
+- [Example Configs](experiment_templates/mnist/)
+- [Chuchichaestli Models](https://github.com/CAIIVS/chuchichaestli)
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please open issues or pull requests on [GitHub](https://github.com/mstadelmann/fonduecaquelon).
+
+---
+
+## 🧀 Enjoy your fondue and happy experimenting!

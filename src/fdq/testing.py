@@ -239,14 +239,21 @@ def _set_test_mode(experiment: Any) -> None:
 
 def run_test(experiment: Any) -> None:
     """Runs the test procedure for the given experiment."""
-    iprint("-------------------------------------------")
+    iprint("-----------------------------------------------------------")
     iprint("Starting Test...")
-    iprint("-------------------------------------------")
+    iprint("-----------------------------------------------------------")
+
+    if experiment.is_distributed():
+        raise ValueError(
+            "ERROR: Cannot run test in distributed mode! Please run in single process mode."
+        )
 
     experiment.file_store_cnt = 0
 
     _set_test_mode(experiment)
-    experiment.load_trained_models()
+
+    if experiment.exp_def.models is not None:
+        experiment.load_trained_models()
 
     experiment.copy_files_to_test_dir(experiment.experiment_file_path)
     if experiment.parent_file_path is not None:

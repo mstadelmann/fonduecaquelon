@@ -1,0 +1,13 @@
+{
+    "globals": {
+        "project": "Segment OXPET segmentation",
+        "author": "Marc",
+        "parent": "segment_pets.json"
+    },
+    "slurm_cluster": {
+        "world_size": 2,
+        "cpus_per_task": 16,
+        "gres": "gpu:2",
+        "mem": "60G"
+    }
+}

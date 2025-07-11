@@ -26,13 +26,13 @@
             "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxfordpet_preparator.py",
             "args": {
                 "base_path": "~/data/ML_data/oxford_pets/",
-                "subset_train": 0.2,
-                "subset_val": 0.2,
-                "subset_test": 0.2,
+                "subset_train": 0.8,
+                "subset_val": 0.8,
+                "subset_test": 0.8,
                 "pin_memory": true,
                 "num_workers": 4,
-                "train_batch_size": 8,
-                "val_batch_size": 8,
+                "train_batch_size": 32,
+                "val_batch_size": 16,
                 "test_batch_size": 1,
                 "shuffle_train": true,
                 "shuffle_val": false,
@@ -79,7 +79,7 @@
     "train": {
         "path": "~/dev/fonduecaquelon/experiment_templates/segment_pets/train_oxpets.py",
         "args": {
-            "epochs": 3,
+            "epochs": 30,
             "use_GPU": true,
             "use_AMP": false,
             "accumulate_grad_batches": 1,
@@ -114,28 +114,31 @@
         "test_model": "best",
         "args": {
             "metrics": {
-                "nb_test_samples": "100"
+                "nb_test_samples": "10"
             }
         }
     },
     "slurm_cluster": {
-        "fdq_version": "0.0.24",
+        "fdq_version": "0.0.48",
         "python_env_module": "python/3.12.4",
         "uv_env_module": "uv/0.6.12",
         "scratch_results_path": "/scratch/fdq_results/",
         "scratch_data_path": "/scratch/fdq_data/",
         "log_path": "~/dev/fonduecaquelon/slurm_log",
-        "job_time": 8,
+        "job_time": 90,
         "stop_grace_time": 3,
-        "ntasks": 1,
         "cpus_per_task": 8,
+        "cpus_per_task_test": 8,
         "gres": "gpu:1",
+        "gres_test": "gpu:1",
         "mem": "20G",
+        "mem_test": "20G",
         "partition": "gpu",
         "account": "cai_ivs",
         "run_train": true,
         "run_test": true,
         "auto_resubmit": true,
+        "world_size": 1,
         "resume_chpt_path": null
     }
 }

@@ -1,7 +1,7 @@
 import torch
 from fdq.ui_functions import startProgBar
 
-# THIS IS A VERY BASIC DEMO AND NEEDS TO BE UPDATED!
+# THIS IS A VERY BASIC DEMO - NEEDS TO BE UPDATED!
 
 
 def fdq_test(experiment):

@@ -218,6 +218,9 @@ def remove_file(path: str | None) -> None:
 
 def store_processing_infos(experiment: Any) -> None:
     """Store experiment information to results directory."""
+    if not experiment.is_main_process():
+        return
+
     experiment.run_info = collect_processing_infos(experiment=experiment)
     info_path = os.path.join(experiment.results_dir, "info.json")
 
@@ -331,6 +334,9 @@ def avoid_nondeterministic(experiment: Any, seed_overwrite: int = 0) -> None:
 
 def save_train_history(experiment: Any) -> None:
     """Save training history to json and pdf."""
+    if not experiment.is_main_process():
+        return
+
     try:
         out_json = os.path.join(experiment.results_dir, "history.json")
         out_pdf = os.path.join(experiment.results_dir, "history.pdf")
@@ -415,7 +421,7 @@ def init_tensorboard(experiment: Any) -> None:
     experiment.tb_writer = SummaryWriter(f"{experiment.results_dir}/tb/")
     experiment.tb_graph_stored = False
     iprint("-------------------------------------------------------")
-    iprint("Start tensorboard typing:")
+    iprint("To launch tensorboard, run:")
     iprint(f"tensorboard --logdir={experiment.results_dir}/tb/ --bind_all")
     iprint("-------------------------------------------------------")
 
@@ -536,7 +542,19 @@ def init_wandb(experiment: Any) -> bool:
     if experiment.mode.op_mode.train:
         wandb_name = f"{dt_string}__{experiment.experimentName[:20]}__{experiment.funky_name}{slurm_str}"
     else:
-        wandb_name = f"test__{dt_string}__{experiment.experimentName[:30]}{slurm_str}"
+        try:
+            res_dir_name = os.path.basename(experiment.results_dir).split("_")
+            wandb_name = (
+                f"{res_dir_name[0]}_{res_dir_name[1]}"
+                f"{res_dir_name[2]}{res_dir_name[3]}"
+                f"__{experiment.experimentName[:20]}"
+                f"__{res_dir_name[5]}_{res_dir_name[6]}"
+                f"__test{slurm_str}"
+            )
+        except (IndexError, AttributeError):
+            wandb_name = (
+                f"test__{dt_string}__{experiment.experimentName[:30]}{slurm_str}"
+            )
 
     try:
         wandb.login(key=experiment.exp_def.store.wandb_key)

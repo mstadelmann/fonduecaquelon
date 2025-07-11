@@ -24,8 +24,8 @@ def get_template() -> str:
 #SBATCH --partition=#partition#
 #SBATCH --account=#account#
 #SBATCH --mail-user=#user#@zhaw.ch
-#SBATCH --output=#log_path#/%j_%N__#job_name#.out
-#SBATCH --error=#log_path#/%j_%N__#job_name#.err
+#SBATCH --output=#log_path#/%j_%N__#job_name##job_tag#.out
+#SBATCH --error=#log_path#/%j_%N__#job_name##job_tag#.err
 #SBATCH --signal=B:SIGUSR1@#stop_grace_time#
 
 script_start=$(date +%s.%N)
@@ -33,6 +33,9 @@ script_start=$(date +%s.%N)
 RUN_TRAIN=#run_train#
 RUN_TEST=#run_test# # test will be run automatically, but not necessarily in this job
 IS_TEST=#is_test# # if True, start test in this job
+GRES_TEST=#gres_test#
+MEM_TEST=#mem_test#
+CPUS_TEST=#cpus_per_task_test#
 AUTO_RESUBMIT=#auto_resubmit# # resubmit the job if stopped due to time constraints
 RESUME_CHPT_PATH=#resume_chpt_path# # path to checkpoint file to resume training
 EXP_FILE_PATH=#exp_file_path#
@@ -208,7 +211,17 @@ if [ "$RUN_TEST" == True ]; then
         echo ------------------------------------------------------------
         echo "Launching test job.."
         echo ------------------------------------------------------------
-        sed  -e "s|IS_TEST=False|IS_TEST=True|g" -e "s|RUN_TRAIN=True|RUN_TRAIN=False|g" -e "s|RUN_TEST=True|RUN_TEST=False|g" $SCRATCH_SUBMIT_FILE_PATH > $SCRATCH_SUBMIT_FILE_PATH.resub
+        GRES_TEST=$(awk -F= '/^GRES_TEST=/{print $2}' "$SUBMIT_FILE_PATH")
+        MEM_TEST=$(awk -F= '/^MEM_TEST=/{print $2}' "$SUBMIT_FILE_PATH")
+        CPUS_TEST=$(awk -F= '/^CPUS_TEST=/{print $2}' "$SUBMIT_FILE_PATH")
+        sed -e "s|IS_TEST=False|IS_TEST=True|g" \
+            -e "s|RUN_TRAIN=True|RUN_TRAIN=False|g" \
+            -e "s|RUN_TEST=True|RUN_TEST=False|g" \
+            -e "s|_train.|_test.|g" \
+            -e "s|^#SBATCH --gres=.*|#SBATCH --gres=$GRES_TEST|g" \
+            -e "s|^#SBATCH --mem=.*|#SBATCH --mem=$MEM_TEST|g" \
+            -e "s|^#SBATCH --cpus-per-task=.*|#SBATCH --cpus-per-task=$CPUS_TEST|g" \
+            "$SCRATCH_SUBMIT_FILE_PATH" > "$SCRATCH_SUBMIT_FILE_PATH.resub"
         rm $SCRATCH_SUBMIT_FILE_PATH
         mv $SCRATCH_SUBMIT_FILE_PATH.resub $SCRATCH_SUBMIT_FILE_PATH
         sleep 1
@@ -363,14 +376,18 @@ def get_default_config(slurm_conf: Any) -> dict[str, Any]:
         "job_time": None,
         "ntasks": 1,
         "cpus_per_task": 8,
+        "cpus_per_task_test": None,
         "nodes": 1,
         "gres": "gpu:1",
+        "gres_test": None,
         "mem": "32G",
+        "mem_test": None,
         "partition": None,
         "account": None,
         "run_train": True,
         "run_test": False,
         "is_test": False,
+        "job_tag": "",
         "auto_resubmit": True,
         "resume_chpt_path": "",
         "log_path": None,
@@ -389,6 +406,11 @@ def get_default_config(slurm_conf: Any) -> dict[str, Any]:
         val = slurm_conf.get(key)
         if val is not None:
             job_config[key] = val
+
+    # manually set test parameters if not set
+    for param in ["gres_test","mem_test","cpus_per_task_test"]:
+        if job_config[param] is None:
+            job_config[param] = job_config[param.replace("_test", "")]
 
     return job_config
 
@@ -494,6 +516,9 @@ def main() -> None:
     # if this is a pure test job, set the is_test flag
     if not job_config["run_train"] and job_config["run_test"]:
         job_config["is_test"] = True
+        job_config["job_tag"] = "_test"
+    else:
+        job_config["job_tag"] = "_train"
 
     # check if all mandatory configs are set
     job_config = check_config(job_config)
@@ -503,8 +528,12 @@ def main() -> None:
 
     # start slurm job
     result = subprocess.run(
-        f"sbatch {submit_path}", shell=True, capture_output=True, text=True, check=True
+        f"sbatch {submit_path}", shell=True, capture_output=True, text=True
     )
+    if result.returncode != 0:
+        print(f"Error submitting job. Exit code: {result.returncode}")
+        print(f"stderr: {result.stderr}")
+        sys.exit(result.returncode)
 
     match = re.search(r"(\d+)\s*$", result.stdout)
     if match:
@@ -518,4 +547,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    print("----------")
+    print("FDQ submit")
     main()
