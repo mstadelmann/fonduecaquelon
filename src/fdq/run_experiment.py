@@ -89,6 +89,7 @@ def start(rank: int, args: argparse.Namespace, conf: dict) -> None:
 
     if experiment.inargs.test_model_auto or experiment.inargs.test_model_ia:
         run_test(experiment)
+        experiment.clean_up()
 
     if experiment.inargs.dump_model:
         experiment.dump_model()
