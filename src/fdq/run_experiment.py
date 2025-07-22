@@ -107,7 +107,7 @@ def main():
     """Main function to parse arguments, load configuration, and run the FDQ experiment."""
     inargs = parse_args()
 
-    if not inargs.train_model:
+    if inargs.train_model:
         world_size = (
             load_conf_file(inargs.experimentfile)
             .get("slurm_cluster", {})
@@ -125,7 +125,7 @@ def main():
         # No need for multiprocessing
         start(0, inargs)
     else:
-        mp.spawn(start, args=(inargs), nprocs=world_size, join=True)
+        mp.spawn(start, args=(inargs,), nprocs=world_size, join=True)
 
 
 if __name__ == "__main__":
