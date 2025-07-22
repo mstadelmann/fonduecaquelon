@@ -240,26 +240,77 @@ fi
 
 
 def recursive_dict_update(d_parent: dict, d_child: dict) -> dict:
-    """Recursively update the parent dictionary with values from the child dictionary.
+    """Merges two dictionaries recursively. The values of d_child will overwrite those in d_parent."""
+    result = copy.deepcopy(d_parent)
+
+    for key, value in d_child.items():
+        if isinstance(value, dict) and key in result and isinstance(result[key], dict):
+            result[key] = recursive_dict_update(result[key], value)
+        else:
+            result[key] = value
+
+    return result
+
+
+def load_json(path: str) -> dict:
+    """Load a JSON file and return its content as a dictionary."""
+    with open(path, encoding="utf8") as fp:
+        try:
+            data = json.load(fp)
+        except Exception as exc:
+            raise ValueError(
+                f"Error loading JSON file {path} (check syntax?)."
+            ) from exc
+
+    if data.get("globals") is None:
+        raise ValueError(
+            f"Error: experiment {path} does not contain 'globals' section. Check template!"
+        )
+    return data
+
+
+def get_parent_path(path: str, exp_file_path: str) -> str:
+    """Return the absolute path to the parent configuration file.
 
     Args:
-        d_parent (dict): The dictionary to be updated.
-        d_child (dict): The dictionary whose values will update the parent.
+        path (str): The path to the parent configuration file, which can be absolute or relative.
+        exp_file_path (str): The path to the current experiment file.
 
     Returns:
-        dict: A deep copy of the updated parent dictionary.
+        str: The absolute path to the parent configuration file.
     """
-    for key, value in d_child.items():
-        if (
-            isinstance(value, dict)
-            and key in d_parent
-            and isinstance(d_parent[key], dict)
-        ):
-            recursive_dict_update(d_parent[key], value)
-        else:
-            d_parent[key] = value
+    if path[0] == "/":
+        return path
+    else:
+        return os.path.abspath(os.path.join(os.path.split(exp_file_path)[0], path))
 
-    return copy.deepcopy(d_parent)
+
+def load_conf_file(path) -> dict:
+    """Load an experiment configuration file, recursively merging parent configurations if specified.
+
+    Args:
+        path (str): Path to the experiment configuration JSON file.
+
+    Returns:
+        dict: The merged configuration as a DictToObj instance.
+    """
+    reached_leaf = False
+    conf = load_json(path)
+    parent_conf = conf.copy()
+    parent = conf.get("globals").get("parent", {})
+    conf["globals"]["parent_hierarchy"] = []
+
+    while not reached_leaf:
+        parent = parent_conf.get("globals").get("parent", {})
+        if parent == {}:
+            reached_leaf = True
+        else:
+            parent_path = get_parent_path(parent, path)
+            conf["globals"]["parent_hierarchy"].append(parent_path)
+            parent_conf = load_json(parent_path)
+            conf = recursive_dict_update(d_parent=parent_conf, d_child=conf)
+
+    return DictToObj(conf)
 
 
 class DictToObj:
@@ -314,53 +365,6 @@ class DictToObj:
         return res
 
 
-def parse_input_file(exp_file_path: str) -> DictToObj:
-    """Parse the experiment JSON file, handle parent inheritance, and return a DictToObj representation.
-
-    Args:
-        exp_file_path (str): Path to the experiment JSON file.
-
-    Returns:
-        DictToObj: Parsed experiment configuration as an object.
-    """
-    if not os.path.isfile(exp_file_path):
-        print(f"Error: The file '{exp_file_path}' does not exist.")
-        sys.exit(1)
-
-    try:
-        with open(exp_file_path, encoding="utf8") as file:
-            exp_file = json.load(file)
-    except json.JSONDecodeError as exc:
-        raise ValueError(
-            f"Error: The file '{exp_file_path}' is not a valid JSON file."
-        ) from exc
-
-    globals_def = exp_file.get("globals")
-    parent = globals_def.get("parent", {})
-    if parent != {}:
-        if parent[0] == "/":
-            parent_file_path = parent
-        else:
-            parent_file_path = os.path.abspath(
-                os.path.join(os.path.split(exp_file_path)[0], parent)
-            )
-
-        if not os.path.exists(parent_file_path):
-            raise FileNotFoundError(f"Error: File {parent_file_path} not found.")
-
-        with open(parent_file_path, encoding="utf8") as fp:
-            try:
-                parent_expfile = json.load(fp)
-            except Exception as exc:
-                raise ValueError(
-                    f"Error loading experiment file {parent_file_path} (check syntax?)."
-                ) from exc
-
-        exp_file = recursive_dict_update(d_parent=parent_expfile, d_child=exp_file)
-
-    return DictToObj(exp_file)
-
-
 def get_default_config(slurm_conf: Any) -> dict[str, Any]:
     """Return a job configuration dictionary with defaults, updated from the given SLURM config.
 
@@ -408,7 +412,7 @@ def get_default_config(slurm_conf: Any) -> dict[str, Any]:
             job_config[key] = val
 
     # manually set test parameters if not set
-    for param in ["gres_test","mem_test","cpus_per_task_test"]:
+    for param in ["gres_test", "mem_test", "cpus_per_task_test"]:
         if job_config[param] is None:
             job_config[param] = job_config[param.replace("_test", "")]
 
@@ -480,8 +484,8 @@ def main() -> None:
             "Error: Exactly one argument is required which is the path to the JSON file."
         )
 
-    in_args: DictToObj = parse_input_file(sys.argv[1])
-    slurm_conf: Any = in_args.slurm_cluster
+    exp_config: DictToObj = load_conf_file(sys.argv[1])
+    slurm_conf: Any = exp_config.slurm_cluster
     if slurm_conf is None:
         raise ValueError(
             "Error: The 'slurm_cluster' section in the JSON config file is required to submit a job to the queue!"
@@ -498,7 +502,7 @@ def main() -> None:
 
     job_config["job_name"] = exp_name[:30].replace(" ", "_")
     job_config["user"] = getpass.getuser()
-    job_config["results_path"] = in_args.store.results_path
+    job_config["results_path"] = exp_config.store.results_path
     job_config["log_path"] = job_config["log_path"]
 
     # define path of submit script

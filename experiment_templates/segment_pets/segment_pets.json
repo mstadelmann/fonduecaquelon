@@ -1,7 +1,8 @@
 {
     "globals": {
         "project": "Segment OXPET segmentation",
-        "author": "Marc"
+        "author": "Marc",
+        "parent": "segment_pets_keys.json"
     },
     "transforms": {
         "resize_and_pad_bilinear": [
@@ -89,7 +90,7 @@
         }
     },
     "losses": {
-        "cp": {
+        "cross_ent": {
             "class_name": "torch.nn.CrossEntropyLoss",
             "args": {
                 "reduction": "mean"
@@ -106,8 +107,7 @@
         "use_tensorboard": true,
         "use_wandb": true,
         "wandb_project": "ox_pet_test",
-        "wandb_entity": "stmd",
-        "wandb_key": "126aea51c74a8e5533f79411f171a1a2860a2e4b"
+        "wandb_entity": "stmd"
     },
     "test": {
         "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxpets_test.py",

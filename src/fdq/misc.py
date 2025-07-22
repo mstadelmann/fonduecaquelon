@@ -105,18 +105,16 @@ class FCQmode:
 
 
 def recursive_dict_update(d_parent: dict, d_child: dict) -> dict:
-    """Recursively update the parent dictionary with values from the child dictionary, merging nested dictionaries."""
-    for key, value in d_child.items():
-        if (
-            isinstance(value, dict)
-            and key in d_parent
-            and isinstance(d_parent[key], dict)
-        ):
-            recursive_dict_update(d_parent[key], value)
-        else:
-            d_parent[key] = value
+    """Merges two dictionaries recursively. The values of d_child will overwrite those in d_parent."""
+    result = copy.deepcopy(d_parent)
 
-    return copy.deepcopy(d_parent)
+    for key, value in d_child.items():
+        if isinstance(value, dict) and key in result and isinstance(result[key], dict):
+            result[key] = recursive_dict_update(result[key], value)
+        else:
+            result[key] = value
+
+    return result
 
 
 class DictToObj:
@@ -562,7 +560,7 @@ def init_wandb(experiment: Any) -> bool:
             project=experiment.exp_def.store.wandb_project,
             entity=experiment.exp_def.store.wandb_entity,
             name=wandb_name,
-            config=experiment.exp_file,
+            config=experiment.exp_def.to_dict(),
         )
         experiment.wandb_initialized = True
         iprint(f"Init Wandb -  log path: {wandb.run.dir}")

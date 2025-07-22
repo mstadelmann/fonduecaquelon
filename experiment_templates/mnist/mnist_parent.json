@@ -2,6 +2,7 @@
     "globals": {
         "project": "MNIST classifier - parent",
         "author": "Marc",
+        "parent": "mnist_keys.json",
         "set_random_seed": 22
     },
     "transforms": {
@@ -44,8 +45,7 @@
         "use_tensorboard": true,
         "use_wandb": true,
         "wandb_project": "mnist_test",
-        "wandb_entity": "stmd",
-        "wandb_key": "126aea51c74a8e5533f79411f171a1a2860a2e4b"
+        "wandb_entity": "stmd"
     },
     "test": {
         "processor": "~/dev/fonduecaquelon/experiment_templates/mnist/mnist_test.py",

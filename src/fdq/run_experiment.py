@@ -1,6 +1,7 @@
 import argparse
 import random
 import sys
+import os
 import json
 from typing import Any
 
@@ -10,20 +11,89 @@ import torch.multiprocessing as mp
 from fdq.experiment import fdqExperiment
 from fdq.testing import run_test
 from fdq.ui_functions import iprint
+from fdq.misc import recursive_dict_update, DictToObj, replace_tilde_with_abs_path
+
+
+def load_json(path: str) -> dict:
+    """Load a JSON file and return its content as a dictionary."""
+    with open(path, encoding="utf8") as fp:
+        try:
+            data = json.load(fp)
+        except Exception as exc:
+            raise ValueError(
+                f"Error loading JSON file {path} (check syntax?)."
+            ) from exc
+
+    if data.get("globals") is None:
+        raise ValueError(
+            f"Error: experiment {path} does not contain 'globals' section. Check template!"
+        )
+    return data
+
+
+def get_parent_path(path: str, exp_file_path: str) -> str:
+    """Resolve the absolute path of a parent configuration file.
+
+    Parameters
+    ----------
+    path : str
+        Relative or absolute path to the parent configuration file.
+    exp_file_path : str
+        Path to the current experiment configuration file.
+
+    Returns:
+    -------
+    str
+        Absolute path to the parent configuration file.
+    """
+    if path[0] == "/":
+        return path
+    else:
+        return os.path.abspath(os.path.join(os.path.split(exp_file_path)[0], path))
 
 
 def load_conf_file(path) -> dict:
-    with open(path, encoding="utf8") as fp:
-        try:
-            conf = json.load(fp)
-        except Exception as exc:
-            raise ValueError(
-                f"Error loading experiment file {path} (check syntax?)."
-            ) from exc
-    return conf
+    """Load an experiment configuration file, recursively merging parent configurations.
+
+    Parameters
+    ----------
+    path : str
+        Path to the experiment configuration JSON file.
+
+    Returns:
+    -------
+    dict
+        The merged configuration as a dictionary-like object.
+    """
+    reached_leaf = False
+    conf = load_json(path)
+    parent_conf = conf.copy()
+    parent = conf.get("globals").get("parent", {})
+    conf["globals"]["parent_hierarchy"] = []
+
+    while not reached_leaf:
+        parent = parent_conf.get("globals").get("parent", {})
+        if parent == {}:
+            reached_leaf = True
+        else:
+            parent_path = get_parent_path(parent, path)
+            conf["globals"]["parent_hierarchy"].append(parent_path)
+            parent_conf = load_json(parent_path)
+            conf = recursive_dict_update(d_parent=parent_conf, d_child=conf)
+
+    replace_tilde_with_abs_path(conf)
+
+    return DictToObj(conf)
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for configuring and running an FDQ experiment.
+
+    Returns:
+    -------
+    argparse.Namespace
+        Parsed command-line arguments.
+    """
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="FCQ deep learning framework."
     )

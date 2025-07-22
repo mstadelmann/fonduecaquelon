@@ -52,7 +52,9 @@ class fdqExperiment:
             inargs (argparse.Namespace): The input arguments containing experiment configurations.
         """
         self.inargs: argparse.Namespace = inargs
-        self.parse_and_clean_config(exp_conf)
+        self.experiment_file_path = self.inargs.experimentfile
+        self.exp_def = exp_conf
+        self.globals = self.exp_def.globals
         self.project: str = self.exp_def.globals.project.replace(" ", "_")
         self.experimentName: str = self.experiment_file_path.split("/")[-1].split(
             ".json"
@@ -168,7 +170,7 @@ class fdqExperiment:
                     raise ValueError("Error, scratch_results_path was not defined.")
 
             else:
-                res_base_path = self.exp_file.get("store", {}).get("results_path", None)
+                res_base_path = self.exp_def.get("store", {}).get("results_path", None)
                 if res_base_path is None:
                     raise ValueError("Error, result path was not defined.")
 
@@ -246,51 +248,12 @@ class fdqExperiment:
         """Check if the current setup is distributed."""
         return self.world_size > 1
 
-    def parse_and_clean_config(self, exp_conf) -> None:
-        self.experiment_file_path = self.inargs.experimentfile
-        self.exp_file = exp_conf
-
-        self.globals = self.exp_file.get("globals")
-        if self.globals is None:
-            raise ValueError(
-                f"Error: experiment file does not comply - please check template! {self.experiment_file_path}."
-            )
-
-        parent = self.globals.get("parent", {})
-        # parent must be in same directory or defined with absolute path
-        if parent != {}:
-            if parent[0] == "/":
-                self.parent_file_path = parent
-            else:
-                self.parent_file_path = os.path.abspath(
-                    os.path.join(os.path.split(self.experiment_file_path)[0], parent)
-                )
-
-            if not os.path.exists(self.parent_file_path):
-                raise FileNotFoundError(
-                    f"Error: File {self.parent_file_path} not found."
-                )
-
-            with open(self.parent_file_path, encoding="utf8") as fp:
-                try:
-                    parent_expfile = json.load(fp)
-                except Exception as exc:
-                    raise ValueError(
-                        f"Error loading experiment file {self.parent_file_path} (check syntax?)."
-                    ) from exc
-
-            self.exp_file = recursive_dict_update(
-                d_parent=parent_expfile, d_child=self.exp_file
-            )
-
-        else:
-            self.parent_file_path = None
-        replace_tilde_with_abs_path(self.exp_file)
-        self.exp_def = DictToObj(self.exp_file)
-
     def init_distributed_mode(self):
         # if "SLURM_PROCID" not in os.environ or os.environ["SLURM_JOB_NAME"] == "bash":
         #     return
+
+        if not self.is_distributed():
+            return
 
         os.environ["MASTER_ADDR"] = "localhost"
         # os.environ["MASTER_PORT"] = str(self.master_port)
@@ -319,7 +282,6 @@ class fdqExperiment:
 
     def store_experiment_git_hash(self):
         """Check if the experiment directory is a git repository and store the current git hash."""
-
         exp_path = os.path.abspath(self.experiment_file_path)
         try:
             exp_git = git.Repo(exp_path, search_parent_directories=True)
@@ -473,6 +435,7 @@ class fdqExperiment:
 
     def load_trained_models(self) -> None:
         """Load trained models, defined by user path or previous trainings.
+
         This function is only used in model dumping or testing mode, therefore world_size != 1,
         and map_location is not required.
         """
@@ -608,9 +571,8 @@ class fdqExperiment:
             self.load_checkpoint(self.inargs.resume_path)
 
         self.cp_to_res_dir(file_path=self.experiment_file_path)
-
-        if self.parent_file_path is not None:
-            self.cp_to_res_dir(file_path=self.parent_file_path)
+        for p in self.exp_def.globals.parent_hierarchy:
+            self.cp_to_res_dir(file_path=p)
 
         store_processing_infos(self)
         self.dist_barrier()
@@ -988,7 +950,6 @@ class fdqExperiment:
                 dargs = data_source.args
 
                 if dargs.base_path is not None:
-
                     # cleanup old data first -> in case this is a debug run with dirty data
                     dst_path = os.path.join(self.scratch_data_path, data_name)
                     if os.path.exists(dst_path):
@@ -1004,9 +965,11 @@ class fdqExperiment:
                                 ["rsync", "-au", dargs.base_path, dst_path],
                                 capture_output=True,
                                 text=True,
-                                check=True
+                                check=True,
                             )
-                            iprint(f"Successfully copied {dargs.base_path} to {dst_path}")
+                            iprint(
+                                f"Successfully copied {dargs.base_path} to {dst_path}"
+                            )
 
                         except Exception as exc:
                             raise ValueError(
@@ -1056,7 +1019,7 @@ class fdqExperiment:
         """Prepare transformers for the experiment."""
         if self.exp_def.transforms is None:
             return
-        if not isinstance(self.exp_file["transforms"], dict):
+        if not isinstance(self.exp_def.to_dict().get("transforms"), dict):
             raise ValueError(
                 "Error, transforms must be a dictionary with transform names as keys."
             )

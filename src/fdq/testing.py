@@ -32,7 +32,7 @@ def find_experiment_result_dirs(experiment: Any) -> tuple[str, list[str]]:
         wprint(
             "WARNING: This is a slurm INFERENCE session - looking for results in regular path!"
         )
-        outbasepath = experiment.exp_file.get("store", {}).get("results_path")
+        outbasepath = experiment.exp_def.get("store", {}).get("results_path")
 
         if outbasepath[0] == "~":
             outbasepath = os.path.expanduser(outbasepath)
@@ -42,7 +42,7 @@ def find_experiment_result_dirs(experiment: Any) -> tuple[str, list[str]]:
 
     else:
         # regular local use
-        outbasepath = experiment.exp_file.get("store", {}).get("results_path")
+        outbasepath = experiment.exp_def.get("store", {}).get("results_path")
         outbasepath = os.path.expanduser(outbasepath)
 
     if outbasepath is None:
@@ -256,8 +256,8 @@ def run_test(experiment: Any) -> None:
         experiment.load_trained_models()
 
     experiment.copy_files_to_test_dir(experiment.experiment_file_path)
-    if experiment.parent_file_path is not None:
-        experiment.copy_files_to_test_dir(experiment.parent_file_path)
+    for p in experiment.exp_def.globals.parent_hierarchy:
+        experiment.copy_files_to_test_dir(file_path=p)
 
     save_test_info(
         experiment,
