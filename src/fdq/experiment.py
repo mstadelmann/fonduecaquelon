@@ -30,12 +30,11 @@ from fdq.misc import (
     remove_file,
     store_processing_infos,
     FCQmode,
-    recursive_dict_update,
     DictToObj,
-    replace_tilde_with_abs_path,
     save_train_history,
     save_tensorboard,
     save_wandb,
+    load_conf_file,
 )
 
 
@@ -45,15 +44,16 @@ class fdqExperiment:
     It manages the setup, training, evaluation, and management of machine learning experiments.
     """
 
-    def __init__(self, inargs: argparse.Namespace, exp_conf: dict, rank: int) -> None:
+    def __init__(self, inargs: argparse.Namespace, rank: int) -> None:
         """Initialize the fdqExperiment class with the provided arguments.
 
         Args:
             inargs (argparse.Namespace): The input arguments containing experiment configurations.
+            rank (int): The rank of the current process in distributed training.
         """
         self.inargs: argparse.Namespace = inargs
         self.experiment_file_path = self.inargs.experimentfile
-        self.exp_def = exp_conf
+        self.exp_def = load_conf_file(self.experiment_file_path)
         self.globals = self.exp_def.globals
         self.project: str = self.exp_def.globals.project.replace(" ", "_")
         self.experimentName: str = self.experiment_file_path.split("/")[-1].split(

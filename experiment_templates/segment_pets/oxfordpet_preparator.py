@@ -160,13 +160,25 @@ def create_datasets(experiment, args=None):
     n_val = len(val_set)
     n_test = len(test_set)
 
-    train_sampler = DistributedSampler(train_set, shuffle=args.shuffle_train)
-    val_sampler = DistributedSampler(val_set, shuffle=args.shuffle_val)
-    test_sampler = DistributedSampler(test_set, shuffle=args.shuffle_test)
+    if experiment.is_distributed():
+        train_sampler = DistributedSampler(train_set, shuffle=args.shuffle_train)
+        val_sampler = DistributedSampler(val_set, shuffle=args.shuffle_val)
+        test_sampler = DistributedSampler(test_set, shuffle=args.shuffle_test)
+        train_loader_shuffle = False
+        val_loader_shuffle = False
+        test_loader_shuffle = False
+    else:
+        train_sampler = None
+        val_sampler = None
+        test_sampler = None
+        train_loader_shuffle = args.shuffle_train
+        val_loader_shuffle = args.shuffle_val
+        test_loader_shuffle = args.shuffle_test
 
     train_loader = DataLoader(
         train_set,
         batch_size=args.train_batch_size,
+        shuffle=train_loader_shuffle,
         num_workers=args.num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,
@@ -176,6 +188,7 @@ def create_datasets(experiment, args=None):
     test_loader = DataLoader(
         test_set,
         batch_size=args.test_batch_size,
+        shuffle=test_loader_shuffle,
         num_workers=args.num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,
@@ -185,6 +198,7 @@ def create_datasets(experiment, args=None):
     val_loader = DataLoader(
         val_set,
         batch_size=args.val_batch_size,
+        shuffle=val_loader_shuffle,
         num_workers=args.num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,

@@ -62,9 +62,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def start(rank: int, args: argparse.Namespace, conf: dict) -> None:
+def start(rank: int, args: argparse.Namespace) -> None:
     """Main entry point for running an FDQ experiment based on command-line arguments."""
-    experiment: fdqExperiment = fdqExperiment(args, exp_conf=conf, rank=rank)
+    experiment: fdqExperiment = fdqExperiment(args, rank=rank)
 
     random_seed: Any = experiment.exp_def.globals.set_random_seed
     if random_seed is not None:
@@ -106,10 +106,14 @@ def start(rank: int, args: argparse.Namespace, conf: dict) -> None:
 def main():
     """Main function to parse arguments, load configuration, and run the FDQ experiment."""
     inargs = parse_args()
-    exp_config = load_conf_file(inargs.experimentfile)
-    world_size = exp_config.get("slurm_cluster", {}).get("world_size", 1)
 
     if not inargs.train_model:
+        world_size = (
+            load_conf_file(inargs.experimentfile)
+            .get("slurm_cluster", {})
+            .get("world_size", 1)
+        )
+    else:
         world_size = 1
 
     if world_size > torch.cuda.device_count():
@@ -119,9 +123,9 @@ def main():
 
     if world_size == 1:
         # No need for multiprocessing
-        start(0, inargs, exp_config)
+        start(0, inargs)
     else:
-        mp.spawn(start, args=(inargs, exp_config), nprocs=world_size, join=True)
+        mp.spawn(start, args=(inargs), nprocs=world_size, join=True)
 
 
 if __name__ == "__main__":
