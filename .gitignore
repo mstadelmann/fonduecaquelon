@@ -9,7 +9,6 @@
 test_old/
 wandb
 slurm_log/
-submit.sh
 /experiment_templates/dummy
 
 # Distribution / packaging
