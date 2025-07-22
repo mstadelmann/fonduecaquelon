@@ -216,8 +216,7 @@ def compile_model(
         )
 
     except (RuntimeError, TypeError, ValueError) as e:
-        wprint("Failed to JIT Trace model!")
-        print(e)
+        raise RuntimeError(f"Failed to JIT Trace model: {e}")
 
     inputs = [
         Input(
@@ -287,24 +286,59 @@ def compile_model(
             iprint(f"Optimized model saved to {save_path}")
 
 
+def export_onnx_model(
+    config: dict[str, Any],
+    experiment: Any,
+    example: torch.Tensor,
+    model: torch.nn.Module,
+    model_name: str,
+) -> None:
+    iprint("\n-----------------------------------------------------------")
+    iprint("Export ONNX Model")
+    iprint("-----------------------------------------------------------\n")
+
+    use_dynamo = getYesNoInput("Use dynamo for ONNX export? (y/n), default = n\n")
+
+    save_path = os.path.join(experiment.results_dir, f"{model_name}.onnx")
+
+    torch.onnx.export(
+        model,
+        example,
+        save_path,
+        export_params=True,
+        # opset_version=12,
+        input_names=["input"],
+        output_names=["output"],
+        dynamo=use_dynamo,
+    )
+
+    iprint(f"ONNX model exported to {save_path}")
+    iprint("You can use 'https://netron.app/' to visualize the exported model.")
+
+    # onnx_program = torch.onnx.export(model, example, dynamo=True)
+    # onnx_program.save(save_path)
+
+
 def dump_model(experiment: Any) -> None:
     """Interactively dumps, traces, scripts, compiles, tests, and saves a model from the given experiment."""
     iprint("\n-----------------------------------------------------------")
     iprint("Dump model")
     iprint("-----------------------------------------------------------\n")
+
     if experiment.is_distributed():
         raise ValueError(
             "ERROR: Cannot dump with world size > 1; please run in single process mode."
         )
     # dumping requires a sample input to trace the model
-    # -> set exp t train mode so that train loader is created.
+    # -> set exp to train mode so that train loader is created.
     experiment.mode.train()
     experiment.setupData()
     experiment.init_models(instantiate=False)
 
     select_experiment(experiment)
     model_name, model = select_model(experiment)
-    iprint(f"Compiling {model_name}...")
+
+    iprint(f"Processing {model_name}...")
 
     while True:
         example = get_example_tensor(experiment)
@@ -316,15 +350,19 @@ def dump_model(experiment: Any) -> None:
             "input dtype": example.dtype,
         }
 
-        try:
-            compile_model(config, experiment, example, model, model_name)
+        if getYesNoInput("Compile model? (y/n)"):
+            try:
+                compile_model(config, experiment, example, model, model_name)
+            except (RuntimeError, TypeError, ValueError) as e:
+                wprint("Failed to compile model!")
+                print(e)
 
-        except (RuntimeError, TypeError, ValueError) as e:
-            wprint("Failed to compile model!")
-            print(e)
-            if getYesNoInput("Try again? (y/n)"):
-                continue
-            break
+        if getYesNoInput("ONNX export? (y/n)"):
+            try:
+                export_onnx_model(config, experiment, example, model, model_name)
+            except (RuntimeError, TypeError, ValueError) as e:
+                wprint("Failed to export ONNX model!")
+                print(e)
 
         if not getYesNoInput("Dump another model? (y/n)"):
             break

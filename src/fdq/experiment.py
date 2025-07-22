@@ -410,27 +410,28 @@ class fdqExperiment:
                     distributed=True,
                 )
 
-            if self.is_distributed():
-                self.dist_barrier()
+            if model_name in self.models:
+                if self.is_distributed():
+                    self.dist_barrier()
 
-                self.models[model_name] = DDP(
-                    self.models[model_name].cuda(self.rank),
-                    device_ids=[self.rank],
-                    # find_unused_parameters=True,
-                )
-                iprint(
-                    f"Model {model_name} wrapped in DDP on rank {self.rank}. ",
-                    distributed=True,
-                )
-                self.models_no_ddp[model_name] = self.models[model_name].module
-            else:
-                self.models_no_ddp[model_name] = self.models[model_name]
+                    self.models[model_name] = DDP(
+                        self.models[model_name].cuda(self.rank),
+                        device_ids=[self.rank],
+                        # find_unused_parameters=True,
+                    )
+                    iprint(
+                        f"Model {model_name} wrapped in DDP on rank {self.rank}. ",
+                        distributed=True,
+                    )
+                    self.models_no_ddp[model_name] = self.models[model_name].module
+                else:
+                    self.models_no_ddp[model_name] = self.models[model_name]
 
-            # frozen model? disable gradient tracking
-            if model_def.freeze:
-                iprint(f"Freezing model {model_name} parameters.")
-                for param in self.models[model_name].parameters():
-                    param.requires_grad = False
+                # frozen model? disable gradient tracking
+                if model_def.freeze:
+                    iprint(f"Freezing model {model_name} parameters.")
+                    for param in self.models[model_name].parameters():
+                        param.requires_grad = False
 
     def load_trained_models(self) -> None:
         """Load trained models, defined by user path or previous trainings.
