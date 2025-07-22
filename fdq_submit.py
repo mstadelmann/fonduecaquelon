@@ -281,8 +281,7 @@ def get_parent_path(path: str, exp_file_path: str) -> str:
     """
     if path[0] == "/":
         return path
-    else:
-        return os.path.abspath(os.path.join(os.path.split(exp_file_path)[0], path))
+    return os.path.abspath(os.path.join(os.path.split(exp_file_path)[0], path))
 
 
 def load_conf_file(path) -> dict:

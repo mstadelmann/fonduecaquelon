@@ -209,6 +209,7 @@ def compile_model(
     """Compile, optionally JIT trace/script, and optimize a model using Torch-TensorRT, with interactive configuration and testing."""
     import torch_tensorrt
     from torch_tensorrt import Input
+
     try:
         jit_model, config = jit_trace_model(
             experiment, config, model, model_name, example
