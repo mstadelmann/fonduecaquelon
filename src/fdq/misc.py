@@ -273,7 +273,7 @@ def collect_processing_infos(experiment: Any | None = None) -> dict:
     }
 
     if experiment.early_stop_detected:
-        data["early_stop_reason"] = experiment.early_stop_detected
+        data["early_stop_reason"] = experiment.early_stop_reason
 
     if experiment.is_slurm:
         data["slurm_job_id"] = experiment.slurm_job_id

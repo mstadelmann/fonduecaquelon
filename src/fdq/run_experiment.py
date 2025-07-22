@@ -85,22 +85,23 @@ def start(rank: int, args: argparse.Namespace, conf: dict) -> None:
     if experiment.inargs.train_model:
         experiment.prepareTraining()
         experiment.trainer.fdq_train(experiment)
-        experiment.clean_up()
+        experiment.clean_up_train()
 
     if experiment.inargs.test_model_auto or experiment.inargs.test_model_ia:
         run_test(experiment)
-        experiment.clean_up()
 
     if experiment.inargs.dump_model:
         experiment.dump_model()
 
+    experiment.clean_up_distributed()
+
     iprint("done")
 
-    # non zero exit code to prevent launch of test job
+    # Return non-zero exit code to prevent automated launch of test job
     # if NaN or very early stop detected
-    if experiment.early_stop_detected == "NaN detected":
+    if experiment.early_stop_reason == "NaN_train_Loss":
         sys.exit(1)
-    elif experiment.early_stop_detected is not False and experiment.current_epoch < int(
+    elif experiment.early_stop_detected and experiment.current_epoch < int(
         0.1 * experiment.nb_epochs
     ):
         sys.exit(1)
@@ -121,7 +122,7 @@ def main():
         )
 
     if world_size == 1:
-        # Single process, no need for multiprocessing
+        # No need for multiprocessing
         start(0, inargs, exp_config)
     else:
         mp.spawn(start, args=(inargs, exp_config), nprocs=world_size, join=True)

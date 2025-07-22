@@ -98,7 +98,8 @@ class fdqExperiment:
         self.new_best_train_loss_ep_id: int | None = None
         self.new_best_val_loss: bool = False
         self.new_best_val_loss_ep_id: int | None = None
-        self.early_stop_detected: Any = False
+        self.early_stop_detected: bool = False
+        self.early_stop_reason: str = ""
         self.processing_log_dict: dict[str, Any] = {}
         self.useTensorboard: bool = self.exp_def.store.use_tensorboard
         self.tb_writer: Any | None = None
@@ -806,7 +807,7 @@ class fdqExperiment:
             iprint(f"Nb samples test: {self.data[data_name].n_test_samples}")
         iprint("-----------------------------------------------------------")
 
-    def clean_up(self) -> None:
+    def clean_up_train(self) -> None:
         iprint("-----------------------------------------------------------")
         iprint("Training done!\nCleaning up..")
         iprint("-----------------------------------------------------------")
@@ -819,7 +820,9 @@ class fdqExperiment:
 
             store_processing_infos(self)
 
-        torch.distributed.destroy_process_group()
+    def clean_up_distributed(self) -> None:
+        if self.is_distributed():
+            torch.distributed.destroy_process_group()
 
     def check_early_stop(self) -> bool:
         """Check if training should be stopped.
@@ -837,7 +840,8 @@ class fdqExperiment:
         # early stop NaN ?
         if e_stop_nan is not None:
             if all(math.isnan(x) for x in self.trainLoss_per_ep[-e_stop_nan:]):
-                self.early_stop_detected = "NaN detected"
+                self.early_stop_detected = True
+                self.early_stop_reason = "NaN_train_Loss"
                 wprint(
                     "\n###############################\n"
                     f"!! Early Stop NaN EP {self.current_epoch} !!\n"
@@ -851,7 +855,8 @@ class fdqExperiment:
         if e_stop_val is not None and len(self.valLoss_per_ep) >= e_stop_val:
             # was there a new best val loss within the last N epochs?
             if min(self.valLoss_per_ep[-e_stop_val:]) != self.bestValLoss:
-                self.early_stop_detected = "ValLoss_stagnated"
+                self.early_stop_detected = True
+                self.early_stop_reason = "ValLoss_stagnated"
                 wprint(
                     "\n###############################\n"
                     f"!! Early Stop Val Loss EP {self.current_epoch} !!\n"
@@ -867,7 +872,8 @@ class fdqExperiment:
                     f"!! Early Stop Train Loss EP {self.current_epoch} !!\n"
                     "###############################\n"
                 )
-                self.early_stop_detected = "TrainLoss_stagnated"
+                self.early_stop_detected = True
+                self.early_stop_reason = "TrainLoss_stagnated"
                 return True
 
         return False
