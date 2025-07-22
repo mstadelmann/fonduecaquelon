@@ -8,9 +8,8 @@ from termcolor import colored
 
 
 GLOB_COLORAMA_INITIALIZED: bool | None = None
-GLOBAL_RANK: int = (
-    0  # Global variable to track the rank of the process in distributed training
-)
+GLOBAL_RANK: int = 0
+GNUPLOT_WARNING_SHOWN: bool = False
 
 
 def set_global_rank(rank: int) -> None:
@@ -119,7 +118,8 @@ def show_train_progress(experiment: Any) -> None:
 
     This function requires GNUplot to be installed.
     """
-    print(
+    global GNUPLOT_WARNING_SHOWN
+    iprint(
         f"\nProject: {experiment.project} | Experiment name: {experiment.experimentName}"
     )
 
@@ -138,7 +138,9 @@ def show_train_progress(experiment: Any) -> None:
         fig.show()
 
     except Exception:
-        print("GNUplot is not available, loss is not plotted.")
+        if not GNUPLOT_WARNING_SHOWN:
+            wprint("GNUplot is not available, loss is not plotted.")
+            GNUPLOT_WARNING_SHOWN = True
 
     iprint(
         f"Training Loss: {experiment.trainLoss:.4f}, Validation Loss: {experiment.valLoss:.4f}"
