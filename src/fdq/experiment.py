@@ -5,6 +5,7 @@ import math
 import shutil
 import argparse
 import importlib
+import subprocess
 from datetime import datetime, timedelta
 from typing import Any
 import git
@@ -985,17 +986,33 @@ class fdqExperiment:
 
             for data_name, data_source in self.exp_def.data.items():
                 dargs = data_source.args
+
                 if dargs.base_path is not None:
-                    try:
-                        # cleanup old data first -> in case this is a debugging run with dirty data
-                        dst_path = os.path.join(self.scratch_data_path, data_name)
-                        if os.path.exists(dst_path):
-                            shutil.rmtree(dst_path)
-                        os.system(f"rsync -au {dargs.base_path} {dst_path}")
-                    except Exception as exc:
-                        raise ValueError(
-                            f"Unable to copy {dargs.base_path} to  to scratch location at {self.scratch_data_path}!"
-                        ) from exc
+
+                    # cleanup old data first -> in case this is a debug run with dirty data
+                    dst_path = os.path.join(self.scratch_data_path, data_name)
+                    if os.path.exists(dst_path):
+                        shutil.rmtree(dst_path)
+
+                    if not os.path.exists(dargs.base_path):
+                        wprint(
+                            f"Warning: Base path {dargs.base_path} for dataset {data_name} does not exist - nothing to copy!"
+                        )
+                    else:
+                        try:
+                            subprocess.run(
+                                ["rsync", "-au", dargs.base_path, dst_path],
+                                capture_output=True,
+                                text=True,
+                                check=True
+                            )
+                            iprint(f"Successfully copied {dargs.base_path} to {dst_path}")
+
+                        except Exception as exc:
+                            raise ValueError(
+                                f"Unable to copy {dargs.base_path} to scratch location at {self.scratch_data_path}!"
+                                f"Return code: {exc.returncode}, Error: {exc.stderr}"
+                            ) from exc
 
                     dargs.base_path = dst_path
                 else:

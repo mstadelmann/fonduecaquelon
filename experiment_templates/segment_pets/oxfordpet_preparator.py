@@ -5,7 +5,7 @@ from urllib.request import urlretrieve
 import torch
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import DataLoader
-from torchvision import transforms
+from torchvision.transforms import v2 as transforms
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
