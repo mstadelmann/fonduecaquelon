@@ -37,7 +37,7 @@ def fdq_train(experiment: fdqExperiment) -> None:
             with torch.autocast(device_type=device_type, enabled=experiment.useAMP):
                 output = model(inputs)
                 loss_tensor = (
-                    experiment.losses["cp"](output, targets) / experiment.gradacc_iter
+                    experiment.losses["cross_ent"](output, targets) / experiment.gradacc_iter
                 )
                 if experiment.useAMP and experiment.scaler is not None:
                     experiment.scaler.scale(loss_tensor).backward()
@@ -65,7 +65,7 @@ def fdq_train(experiment: fdqExperiment) -> None:
                 inputs = inputs.to(experiment.device)
                 output = model(inputs)
                 targets = targets.to(experiment.device)
-                loss_tensor = experiment.losses["cp"](output, targets)
+                loss_tensor = experiment.losses["cross_ent"](output, targets)
 
             val_loss_sum += loss_tensor.detach().item()
         experiment.valLoss = val_loss_sum / len(data.val_data_loader.dataset)
