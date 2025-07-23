@@ -199,7 +199,7 @@ def jit_trace_model(
     return jit_model, config
 
 
-def compile_model(
+def optimize_model(
     config: dict[str, Any],
     experiment: Any,
     example: torch.Tensor,
@@ -207,6 +207,9 @@ def compile_model(
     model_name: str,
 ) -> None:
     """Compile, optionally JIT trace/script, and optimize a model using Torch-TensorRT, with interactive configuration and testing."""
+    iprint("\n-----------------------------------------------------------")
+    iprint("Optimize model")
+    iprint("-----------------------------------------------------------\n")
     import torch_tensorrt
     from torch_tensorrt import Input
 
@@ -214,7 +217,6 @@ def compile_model(
         jit_model, config = jit_trace_model(
             experiment, config, model, model_name, example
         )
-
     except (RuntimeError, TypeError, ValueError) as e:
         raise RuntimeError(f"Failed to JIT Trace model: {e}")
 
@@ -226,8 +228,9 @@ def compile_model(
         )
     ]
 
-    if getYesNoInput("Compile model? (y/n)\n"):
+    if getYesNoInput("Torch.compile() model? (y/n)\n"):
         if config["jit_traced"] or config["jit_scripted"]:
+            iprint("Using JIT model for torch.compile()")
             inter_rep = "torchscript"
         else:
             inter_rep_choice = getIntInput(
@@ -293,30 +296,74 @@ def export_onnx_model(
     model: torch.nn.Module,
     model_name: str,
 ) -> None:
+    """Export the given model to ONNX format, optionally using Dynamo, optimizing, and saving the exported model.
+
+    Parameters
+    ----------
+    config : dict[str, Any]
+        Configuration dictionary for export options.
+    experiment : Any
+        Experiment object containing model and data information.
+    example : torch.Tensor
+        Example input tensor for tracing the model.
+    model : torch.nn.Module
+        The PyTorch model to export.
+    model_name : str
+        Name of the model for saving the exported file.
+
+    Returns:
+    -------
+    None
+    """
     iprint("\n-----------------------------------------------------------")
     iprint("Export ONNX Model")
     iprint("-----------------------------------------------------------\n")
 
-    use_dynamo = getYesNoInput("Use dynamo for ONNX export? (y/n), default = n\n")
-
     save_path = os.path.join(experiment.results_dir, f"{model_name}.onnx")
+    model_saved = False
 
-    torch.onnx.export(
-        model,
-        example,
-        save_path,
-        export_params=True,
-        # opset_version=12,
-        input_names=["input"],
-        output_names=["output"],
-        dynamo=use_dynamo,
-    )
+    use_dynamo = getYesNoInput("Use dynamo for ONNX export? (y/n), default = n\n")
+    if use_dynamo:
+        save_path = save_path.replace(".onnx", "_dynamo.onnx")
+        onnx_program = torch.onnx.export(
+            model,
+            example,
+            # save_path,
+            export_params=True,
+            # opset_version=12,
+            input_names=["input"],
+            output_names=["output"],
+            dynamo=use_dynamo,
+        )
+    else:
+        save_path = save_path.replace(".onnx", "_torchscript.onnx")
+        torch.onnx.export(
+            model,
+            example,
+            save_path,
+            export_params=True,
+            opset_version=12,
+            input_names=["input"],
+            output_names=["output"],
+        )
+        model_saved = True
 
-    iprint(f"ONNX model exported to {save_path}")
-    iprint("You can use 'https://netron.app/' to visualize the exported model.")
+    iprint("ONNX model created!")
 
-    # onnx_program = torch.onnx.export(model, example, dynamo=True)
-    # onnx_program.save(save_path)
+    if use_dynamo:
+        if getYesNoInput("Optimize model (y/n)"):
+            onnx_program.optimize()
+            save_path = save_path.replace(".onnx", "_optimized.onnx")
+
+        if getYesNoInput("Save ONNX model? (y/n)"):
+            onnx_program.save(save_path)
+            model_saved = True
+
+    if model_saved:
+        file_size_mb = os.path.getsize(save_path) / (1024 * 1024)
+        iprint(f"ONNX model exported to {save_path}")
+        iprint(f"File size: {file_size_mb:.2f} MB")
+        iprint("You can use 'https://netron.app/' to visualize the exported model.")
 
 
 def dump_model(experiment: Any) -> None:
@@ -341,8 +388,14 @@ def dump_model(experiment: Any) -> None:
     iprint(f"Processing {model_name}...")
 
     while True:
-        example = get_example_tensor(experiment)
+        dump_mode = getIntInput(
+            "Select Operation:\n"
+            "  1) Optimize model (JIT trace / Script, and torch.compile)\n"
+            "  2) ONNX export\n",
+            drange=[1, 2],
+        )
 
+        example = get_example_tensor(experiment)
         config: dict[str, Any] = {
             "jit_traced": False,
             "jit_scripted": False,
@@ -350,19 +403,19 @@ def dump_model(experiment: Any) -> None:
             "input dtype": example.dtype,
         }
 
-        if getYesNoInput("Compile model? (y/n)"):
+        if dump_mode == 1:
             try:
-                compile_model(config, experiment, example, model, model_name)
+                optimize_model(config, experiment, example, model, model_name)
             except (RuntimeError, TypeError, ValueError) as e:
-                wprint("Failed to compile model!")
+                wprint("Failed to optimize model!")
                 print(e)
 
-        if getYesNoInput("ONNX export? (y/n)"):
+        elif dump_mode == 2:
             try:
                 export_onnx_model(config, experiment, example, model, model_name)
             except (RuntimeError, TypeError, ValueError) as e:
                 wprint("Failed to export ONNX model!")
                 print(e)
 
-        if not getYesNoInput("Dump another model? (y/n)"):
+        if not getYesNoInput("Process another model? (y/n)"):
             break
