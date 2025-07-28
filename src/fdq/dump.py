@@ -43,7 +43,7 @@ def user_set_dtype(example: torch.Tensor) -> torch.Tensor:
     print("Example data type:", example.dtype)
     print("Example shape:", example.shape)
     sel_mode: int = getIntInput(
-        "Define model tracing input dtype:\n  1) float32\n  2) float16\n  3) int8\n  4) float64\n",
+        "Define example input dtype:\n  1) float32\n  2) float16\n  3) int8\n  4) float64\n",
         drange=[1, 4],
     )
     if sel_mode == 1:
@@ -62,7 +62,7 @@ def get_example_tensor(experiment: Any) -> torch.Tensor:
     sources = list(experiment.data.keys())
     idx: int = (
         getIntInput(
-            f"Select data source for tracing sample shape: {[f'{i + 1}) {src}' for i, src in enumerate(sources)]}",
+            f"\nSelect data sample source: {[f'{i + 1}) {src}' for i, src in enumerate(sources)]}",
             drange=[1, len(sources)],
         )
         - 1
@@ -376,9 +376,7 @@ def dump_model(experiment: Any) -> None:
         raise ValueError(
             "ERROR: Cannot dump with world size > 1; please run in single process mode."
         )
-    # dumping requires a sample input to trace the model
-    # -> set exp to train mode so that train loader is created.
-    experiment.mode.train()
+
     experiment.setupData()
     experiment.init_models(instantiate=False)
 

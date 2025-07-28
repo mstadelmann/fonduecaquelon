@@ -52,9 +52,9 @@ RETVALUE=1 # will become zero if training is successful, which will launch an op
 cp $SUBMIT_FILE_PATH /scratch/
 SCRATCH_SUBMIT_FILE_PATH="/scratch/$(basename "$SUBMIT_FILE_PATH")"
 
-echo ------------------------------------------------------------
+echo -----------------------------------------------------------
 echo "FONDUE-CAQUELON - EXPERIMENT CONFIGURATION"
-echo ------------------------------------------------------------
+echo -----------------------------------------------------------
 echo "START TIME: $(date)"
 echo "SLURM JOB ID: $SLURM_JOB_ID"
 echo "SOURCE SUBMIT FILE PATH: $SUBMIT_FILE_PATH"
@@ -72,9 +72,9 @@ echo "PYTHON MODULE: $PY_MODULE"
 echo "UV MODULE: $UV_MODULE"
 echo "FDQ VERSION: $FDQ_VERSION"
 
-echo ------------------------------------------------------------
+echo -----------------------------------------------------------
 echo "PREPARING ENVIRONMENT"
-echo ------------------------------------------------------------
+echo -----------------------------------------------------------
 cd /scratch/
 module load $PY_MODULE
 VENV="fdqenv" module load $UV_MODULE
@@ -90,9 +90,9 @@ mkdir -p $SCRATCH_RESULTS_PATH
 mkdir -p $SCRATCH_DATA_PATH
 mkdir -p $RESULTS_PATH
 
-# ----------------------------------------------------------------------------------
+# -----------------------------------------------------------
 # Stop signal handler
-# ----------------------------------------------------------------------------------
+# -----------------------------------------------------------
 sig_handler_USR1()
 {
     echo "++++++++++++++++++++++++++++++++++++++"
@@ -145,9 +145,9 @@ trap 'sig_handler_USR1' USR1
 trap 'sig_handler_USR2' USR2
 
 if [ "$RUN_TRAIN" == True ]; then
-    echo ------------------------------------------------------------
+    echo -----------------------------------------------------------
     echo "RUNNING TRAINING"
-    echo ------------------------------------------------------------
+    echo -----------------------------------------------------------
 
     train_start=$(date +%s.%N)
 
@@ -165,30 +165,30 @@ if [ "$RUN_TRAIN" == True ]; then
     RETVALUE=$?
     train_stop=$(date +%s.%N)
 
-    echo ------------------------------------------------------------
+    echo -----------------------------------------------------------
     echo "TRAINING DONE - Copying results back to storage cluster"
-    echo ------------------------------------------------------------
+    echo -----------------------------------------------------------
     sleep 1
     copy_start=$(date +%s.%N)
     rsync -a $SCRATCH_RESULTS_PATH* $RESULTS_PATH
     copy_end=$(date +%s.%N)
-    echo ------------------------------------------------------------
+    echo -----------------------------------------------------------
     echo "Copying results back to storage cluster - DONE"
-    echo ------------------------------------------------------------
+    echo -----------------------------------------------------------
     train_time=$(echo "$train_stop - $train_start" | bc)
     copy_time=$(echo "$copy_end - $copy_start" | bc)
     script_time=$(echo "$copy_end - $script_start" | bc)
-    echo ------------------------------------------------------------
+    echo -----------------------------------------------------------
     echo "Script execution time: $script_time s"
     echo "Train time: $train_time s"
     echo "Data copy time: $copy_time s"
-    echo ------------------------------------------------------------
+    echo -----------------------------------------------------------
 fi
 
 if [ "$IS_TEST" == True ]; then
-    echo ------------------------------------------------------------
+    echo -----------------------------------------------------------
     echo "RUNNING TEST"
-    echo ------------------------------------------------------------
+    echo -----------------------------------------------------------
     RUN_TEST=False # dont launch test in new job
     test_start=$(date +%s.%N)
     fdq $EXP_FILE_PATH -nt -ta
@@ -197,20 +197,20 @@ if [ "$IS_TEST" == True ]; then
     RETVALUE=$?
     test_stop=$(date +%s.%N)
     test_time=$(echo "$test_stop - $test_start" | bc)
-    echo ------------------------------------------------------------
+    echo -----------------------------------------------------------
     echo "Test time: $test_time s"
-    echo ------------------------------------------------------------
+    echo -----------------------------------------------------------
 fi
 
 
-# --------------------------------------------------------------
+# -----------------------------------------------------------
 # Submit new job for test
-# --------------------------------------------------------------
+# -----------------------------------------------------------
 if [ "$RUN_TEST" == True ]; then
     if [ $RETVALUE -eq 0 ]; then
-        echo ------------------------------------------------------------
+        echo -----------------------------------------------------------
         echo "Launching test job.."
-        echo ------------------------------------------------------------
+        echo -----------------------------------------------------------
         GRES_TEST=$(awk -F= '/^GRES_TEST=/{print $2}' "$SUBMIT_FILE_PATH")
         MEM_TEST=$(awk -F= '/^MEM_TEST=/{print $2}' "$SUBMIT_FILE_PATH")
         CPUS_TEST=$(awk -F= '/^CPUS_TEST=/{print $2}' "$SUBMIT_FILE_PATH")
@@ -231,9 +231,9 @@ if [ "$RUN_TEST" == True ]; then
         sleep 1
         exit 0
     else
-        echo ----------------------------------------------------------------------
+        echo -----------------------------------------------------------
         echo "Automatic test not started due to non-zero fdq ret value: $retvalue"
-        echo ----------------------------------------------------------------------
+        echo -----------------------------------------------------------
     fi
 fi
 """

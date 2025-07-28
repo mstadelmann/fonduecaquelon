@@ -24,7 +24,6 @@ from fdq.ui_functions import (
 )
 from fdq.testing import find_model_path
 from fdq.transformers import get_transformers
-from fdq.dump import dump_model
 from fdq.misc import (
     remove_file,
     store_processing_infos,
@@ -563,9 +562,7 @@ class fdqExperiment:
             self.scaler = torch.amp.GradScaler(device=self.device, enabled=True)
 
         if self.inargs.resume_path is not None:
-            iprint(
-                "--------------------------------------------------------------------------"
-            )
+            iprint("-----------------------------------------------------------")
             iprint(f"Loading checkpoint: {self.inargs.resume_path}")
 
             self.load_checkpoint(self.inargs.resume_path)
@@ -942,9 +939,9 @@ class fdqExperiment:
             if not os.path.exists(self.scratch_data_path):
                 os.makedirs(self.scratch_data_path)
 
-            iprint("----------------------------------------------------")
+            iprint("-----------------------------------------------------------")
             iprint("Copy datasets to temporary scratch location...")
-            iprint("----------------------------------------------------")
+            iprint("-----------------------------------------------------------")
 
             for data_name, data_source in self.exp_def.data.items():
                 dargs = data_source.args
@@ -1005,9 +1002,9 @@ class fdqExperiment:
                         dargs.set(file_cat, new_paths)
                         pbar.finish()
 
-            iprint("----------------------------------------------------")
+            iprint("-----------------------------------------------------------")
             iprint("Copy datasets to temporary scratch location... Done!")
-            iprint("----------------------------------------------------")
+            iprint("-----------------------------------------------------------")
         self.dist_barrier()
 
     def dist_barrier(self) -> None:
@@ -1028,9 +1025,6 @@ class fdqExperiment:
             self.transformers[transformer_name] = get_transformers(
                 t_defs=transformer_def
             )
-
-    def dump_model(self) -> None:
-        dump_model(self)
 
     def print_model(self) -> None:
         if not self.is_main_process():

@@ -10,6 +10,8 @@ from fdq.experiment import fdqExperiment
 from fdq.testing import run_test
 from fdq.ui_functions import iprint
 from fdq.misc import load_conf_file
+from fdq.dump import dump_model
+from fdq.inference import inference_model
 
 
 def parse_args() -> argparse.Namespace:
@@ -43,9 +45,11 @@ def parse_args() -> argparse.Namespace:
         default=False,
         action="store_true",
     )
-
     parser.add_argument(
         "-d", "-dump", dest="dump_model", default=False, action="store_true"
+    )
+    parser.add_argument(
+        "-i", "-inference", dest="inference_model", default=False, action="store_true"
     )
     parser.add_argument(
         "-p", "-printmodel", dest="print_model", default=False, action="store_true"
@@ -87,7 +91,10 @@ def start(rank: int, args: argparse.Namespace) -> None:
         run_test(experiment)
 
     if experiment.inargs.dump_model:
-        experiment.dump_model()
+        dump_model(experiment)
+
+    if experiment.inargs.inference_model:
+        inference_model(experiment)
 
     experiment.clean_up_distributed()
 
