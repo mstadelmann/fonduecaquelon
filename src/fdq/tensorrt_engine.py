@@ -6,6 +6,15 @@ from typing import Any
 import pycuda.driver as cuda
 import pycuda.autoinit
 
+# try:
+#     import pycuda.driver as cuda
+#     import pycuda.autoinit
+
+#     PYCUDA_AVAILABLE = True
+# except ImportError:
+#     print("Warning: PyCUDA not available. GPU memory management will be limited.")
+#     PYCUDA_AVAILABLE = False
+
 
 class TensorRTInference:
     """TensorRT inference class for ONNX models."""

@@ -2,7 +2,7 @@ import os
 import traceback
 import onnxruntime as ort
 import numpy as np
-from fdq.ui_functions import getIntInput
+from fdq.ui_functions import getIntInput, save_images
 from typing import Any
 from fdq.misc import iprint, wprint
 from fdq.testing import find_model_path
@@ -137,6 +137,13 @@ def run_tensorrt_inference(
         iprint("RUNNING SINGLE TRT INFERENCE")
         iprint("-----------------------------------------------------------\n")
         trt_result = trt_inference.infer(sample_input)
+
+        save_images(
+            images=[sample_input, trt_result],
+            save_path=experiment.get_next_export_fn(),
+            figsize=(12, 5),
+            titles=["Input", "TensorRT Output"],
+        )
 
         print(f"Output shape: {trt_result.shape}")
         print(f"Output dtype: {trt_result.dtype}")
