@@ -218,7 +218,7 @@ def optimize_model(
             experiment, config, model, model_name, example
         )
     except (RuntimeError, TypeError, ValueError) as e:
-        raise RuntimeError(f"Failed to JIT Trace model: {e}")
+        raise RuntimeError(f"Failed to JIT Trace model: {e}") from e
 
     inputs = [
         Input(
@@ -415,5 +415,5 @@ def dump_model(experiment: Any) -> None:
                 wprint("Failed to export ONNX model!")
                 print(e)
 
-        if not getYesNoInput("Process another model? (y/n)"):
+        if not getYesNoInput("\nProcess another model? (y/n)"):
             break

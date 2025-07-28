@@ -1,22 +1,10 @@
 import os
-
-# import sys
 import numpy as np
-
-import os
 import time
-import numpy as np
 import tensorrt as trt
 from typing import Any
-
-try:
-    import pycuda.driver as cuda
-    import pycuda.autoinit
-
-    PYCUDA_AVAILABLE = True
-except ImportError:
-    print("Warning: PyCUDA not available. GPU memory management will be limited.")
-    PYCUDA_AVAILABLE = False
+import pycuda.driver as cuda
+import pycuda.autoinit
 
 
 class TensorRTInference:

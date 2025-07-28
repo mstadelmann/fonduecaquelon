@@ -66,7 +66,7 @@ def compare_with_pytorch(
     onnx_path: str, sample_input: np.ndarray, trt_output: np.ndarray
 ):
     """
-    Compare TensorRT output with PyTorch ONNX runtime (if available).
+    Compare TensorRT trt_result with PyTorch ONNX runtime (if available).
     """
     try:
 
@@ -82,7 +82,7 @@ def compare_with_pytorch(
 
         input_name = ort_session.get_inputs()[0].name
 
-        # Run ONNX Runtime inference
+        # OnnxRunTime inference
         ort_inputs = {input_name: sample_input}
         ort_outputs = ort_session.run(None, ort_inputs)
         ort_output = ort_outputs[0]
@@ -97,13 +97,6 @@ def compare_with_pytorch(
             print(f"  Mean Absolute Error: {mae:.6f}")
             print(f"  Mean Squared Error:  {mse:.6f}")
             print(f"  Max Absolute Diff:   {max_diff:.6f}")
-
-            if mae < 1e-3:
-                print("  ✓ Outputs match well!")
-            elif mae < 1e-2:
-                print("  ⚠ Small differences detected")
-            else:
-                print("  ⚠ Significant differences detected")
 
     except ImportError:
         print("ONNX Runtime not available for comparison")
@@ -133,29 +126,25 @@ def run_tensorrt_inference(
         iprint("\n-----------------------------------------------------------")
         iprint("MODEL INFORMATION")
         iprint("-----------------------------------------------------------\n")
-
         for key, value in info.items():
             print(f"{key:20s}: {value}")
 
-        # Load sample data
         sample_input = get_example_tensor(experiment).detach().cpu().numpy()
         print(f"\nSample input shape: {sample_input.shape}")
         print(f"Sample input dtype: {sample_input.dtype}")
 
         iprint("\n-----------------------------------------------------------")
-        iprint("RUNNING SINGLE INFERENCE")
+        iprint("RUNNING SINGLE TRT INFERENCE")
         iprint("-----------------------------------------------------------\n")
+        trt_result = trt_inference.infer(sample_input)
 
-        output = trt_inference.infer(sample_input)
-
-        print(f"Output shape: {output.shape}")
-        print(f"Output dtype: {output.dtype}")
-        print(f"Output min/max: {output.min():.6f} / {output.max():.6f}")
+        print(f"Output shape: {trt_result.shape}")
+        print(f"Output dtype: {trt_result.dtype}")
+        print(f"Output min/max: {trt_result.min():.6f} / {trt_result.max():.6f}")
 
         iprint("\n-----------------------------------------------------------")
-        iprint("BENCHMARKING PERFORMANCE")
+        iprint("BENCHMARKING TRT PERFORMANCE")
         iprint("-----------------------------------------------------------\n")
-
         results = trt_inference.benchmark(sample_input, num_runs=100, warmup_runs=10)
 
         print("\nPerformance Summary:")
@@ -166,7 +155,7 @@ def run_tensorrt_inference(
         print(f"  Std Deviation:   {results['std_latency_ms']:.2f} ms")
 
         try:
-            compare_with_pytorch(onnx_model_path, sample_input, output)
+            compare_with_pytorch(onnx_model_path, sample_input, trt_result)
         except Exception as e:
             print(f"\nPyTorch comparison failed: {e}")
 
