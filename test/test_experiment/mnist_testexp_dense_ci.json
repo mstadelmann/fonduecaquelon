@@ -17,7 +17,7 @@
     },
     "data": {
         "MNIST": {
-            "processor": "experiment_templates/mnist/mnist_preparator.py",
+            "processor": "../../experiment_templates/mnist/mnist_preparator.py",
             "args": {
                 "base_path": "test/test_data",
                 "subset_train": 0.1,
@@ -44,7 +44,7 @@
     },
     "models": {
         "simpleNet": {
-            "path": "src/networks/simpleNet.py",
+            "path": "../../src/networks/simpleNet.py",
             "class_name": "simpleNet",
             "args": {
                 "nb_in_channels": 1,
@@ -70,7 +70,7 @@
         }
     },
     "train": {
-        "path": "experiment_templates/mnist/train_mnist.py",
+        "path": "../../experiment_templates/mnist/train_mnist.py",
         "args": {
             "epochs": 2,
             "use_GPU": false,
@@ -90,7 +90,7 @@
         }
     },
     "test": {
-        "processor": "experiment_templates/mnist/mnist_test.py",
+        "processor": "../../experiment_templates/mnist/mnist_test.py",
         "test_model": "best",
         "args": {
             "metrics": {
