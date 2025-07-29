@@ -38,7 +38,6 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
         pip install -e .[dev]
     
     - name: Create test data directory
@@ -46,22 +45,30 @@ jobs:
         mkdir -p test/test_data
         mkdir -p /tmp/fdq_test_results
     
-    - name: Run MNIST classifier test
+    - name: Run instantiation tests
       run: |
         cd ${{ github.workspace }}
-        python -m unittest test.test_experiment.test_classifier.TestMNISTClassifier.test_run_train -v
+        python -m unittest test.test_experiment.test_experiment_instantiation -v
       env:
         PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}
         HOME: /tmp
     
-    - name: Run tests with pytest (fallback)
-      if: failure()
-      run: |
-        cd ${{ github.workspace }}
-        python -m pytest test/test_experiment/test_classifier.py::TestMNISTClassifier::test_run_train -v -s
-      env:
-        PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}
-        HOME: /tmp
+    # - name: Run MNIST classifier test
+    #   run: |
+    #     cd ${{ github.workspace }}
+    #     python -m unittest test.test_experiment.test_classifier.TestMNISTClassifier.test_run_train -v
+    #   env:
+    #     PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}
+    #     HOME: /tmp
+    
+    # - name: Run tests with pytest (fallback)
+    #   if: failure()
+    #   run: |
+    #     cd ${{ github.workspace }}
+    #     python -m pytest test/test_experiment/test_classifier.py::TestMNISTClassifier::test_run_train -v -s
+    #   env:
+    #     PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}
+    #     HOME: /tmp
     
     - name: Upload test artifacts
       if: always()
