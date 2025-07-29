@@ -1,0 +1,76 @@
+name: Run Tests
+
+on:
+  push:
+    branches: [ main, master, develop, ddp_fix ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgl1-mesa-glx libglib2.0-0 gnuplot
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+        pip install pytest pytest-cov
+        pip install -e .
+    
+    - name: Create test data directory
+      run: |
+        mkdir -p test/test_data
+        mkdir -p /tmp/fdq_test_results
+    
+    - name: Run MNIST classifier test
+      run: |
+        cd ${{ github.workspace }}
+        python -m unittest test.test_experiment.test_classifier.TestMNISTClassifier.test_run_train -v
+      env:
+        PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}
+        HOME: /tmp
+    
+    - name: Run tests with pytest (fallback)
+      if: failure()
+      run: |
+        cd ${{ github.workspace }}
+        python -m pytest test/test_experiment/test_classifier.py::TestMNISTClassifier::test_run_train -v -s
+      env:
+        PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}
+        HOME: /tmp
+    
+    - name: Upload test artifacts
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results-python-${{ matrix.python-version }}
+        path: |
+          /tmp/fdq_test_results/
+          test_results/
+          *.log
+        retention-days: 30
