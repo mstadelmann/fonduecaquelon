@@ -62,15 +62,6 @@ jobs:
         GITHUB_WORKSPACE: ${{ github.workspace }}
         HOME: /tmp
     
-    - name: Run tests with pytest (fallback)
-      if: failure()
-      run: |
-        cd ${{ github.workspace }}
-        python -m pytest test/test_experiment/test_classifier.py::TestMNISTClassifier::test_run_train -v -s
-      env:
-        PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}
-        HOME: /tmp
-    
     - name: Upload test artifacts
       if: always()
       uses: actions/upload-artifact@v4
