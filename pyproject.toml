@@ -36,10 +36,24 @@ dependencies = [
   "ruff==0.11.8",
 ]
 [project.optional-dependencies]
-dev = ["ruff==0.11.8", "pre-commit==3.7.0", "pytest==8.3.5"]
+dev = [
+  "ruff==0.11.8",
+  "pre-commit==3.7.0",
+  "pytest==8.3.5",
+  "tensorrt==10.13.0.35",
+  "pycuda==2025.1.1",
+  "onnxruntime-gpu==1.22.0",
+]
 
 [dependency-groups]
-dev = ["ruff==0.11.8", "pre-commit==3.7.0", "pytest==8.3.5"]
+dev = [
+  "ruff==0.11.8",
+  "pre-commit==3.7.0",
+  "pytest==8.3.5",
+  "tensorrt==10.13.0.35",
+  "pycuda==2025.1.1",
+  "onnxruntime-gpu==1.22.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/mstadelmann/fonduecaquelon"
