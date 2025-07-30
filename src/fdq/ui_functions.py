@@ -292,7 +292,7 @@ def save_images(
     batch_sizes = []
     batch_detected = False
 
-    if isinstance(images, (list, tuple)):
+    if isinstance(images, list | tuple):
         for img in images:
             img_np = to_numpy(img)
             if img_np.ndim == 4:
@@ -320,7 +320,7 @@ def save_images(
 
     max_batch_size = max(batch_sizes) if batch_sizes else 1
 
-    if isinstance(images, (list, tuple)):
+    if isinstance(images, list | tuple):
         for img in images:
             img_np = to_numpy(img)
             if img_np.ndim == 4 and img_np.shape[0] > 1:

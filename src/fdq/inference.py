@@ -4,7 +4,7 @@ import onnxruntime as ort
 import numpy as np
 from fdq.ui_functions import getIntInput, save_images
 from typing import Any
-from fdq.misc import iprint, wprint
+from fdq.misc import iprint
 from fdq.testing import find_model_path
 from fdq.tensorrt_engine import TensorRTInference
 from fdq.dump import get_example_tensor
@@ -12,7 +12,6 @@ from fdq.dump import get_example_tensor
 
 def find_onnx_models(experiment: Any) -> str:
     """Find all ONNX model files in the given directory and let user select one."""
-
     # set mode to custom to trigger experiment selection. (the "last" part is irrelevant)
     experiment.mode.custom_last()
     path, _ = find_model_path(experiment)
@@ -65,11 +64,8 @@ def get_precision_choice() -> str:
 def compare_with_pytorch(
     onnx_path: str, sample_input: np.ndarray, trt_output: np.ndarray
 ):
-    """
-    Compare TensorRT trt_result with PyTorch ONNX runtime (if available).
-    """
+    """Compare TensorRT trt_result with PyTorch ONNX runtime (if available)."""
     try:
-
         iprint("\n-----------------------------------------------------------")
         iprint("COMPARING WITH PyTorch ONNX RUNTIME")
         iprint("-----------------------------------------------------------\n")
@@ -107,12 +103,12 @@ def compare_with_pytorch(
 def run_tensorrt_inference(
     onnx_model_path: str, precision: str = "fp32", experiment: Any = None
 ) -> None:
-    """
-    Run TensorRT inference on an ONNX model.
+    """Run TensorRT inference on an ONNX model.
 
     Args:
         onnx_model_path: Path to the ONNX model file
         precision: Precision mode - "fp32", "fp16", or "int8"
+        experiment: Experiment object providing context and data for inference
     """
     print(f"Loading ONNX model: {onnx_model_path}")
     print(f"Using precision: {precision}")
