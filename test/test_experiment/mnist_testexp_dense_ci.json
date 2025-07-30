@@ -2,11 +2,12 @@
     "globals": {
         "project": "Testexperiment MNIST classifier",
         "author": "Marc",
-        "parent": "mnist_testexp_dense.json"
+        "parent": "/home/runner/work/fonduecaquelon/fonduecaquelon/test/test_experiment/mnist_testexp_dense.json",
+        "ci path": "/home/runner/work/fonduecaquelon/fonduecaquelon/test/test_experiment/test_experiment_instantiation.py"
     },
     "data": {
         "MNIST": {
-            "processor": "../../experiment_templates/mnist/mnist_preparator.py",
+            "processor": "/home/runner/work/fonduecaquelon/fonduecaquelon/experiment_templates/mnist/mnist_preparator.py",
             "args": {
                 "base_path": "test/test_data"
             }
@@ -17,14 +18,14 @@
     },
     "models": {
         "simpleNet": {
-            "path": "../../src/networks/simpleNet.py"
+            "path": "/home/runner/work/fonduecaquelon/fonduecaquelon/src/networks/simpleNet.py"
         }
     },
     "train": {
-        "path": "../../experiment_templates/mnist/train_mnist.py"
+        "path": "/home/runner/work/fonduecaquelon/fonduecaquelon/experiment_templates/mnist/train_mnist.py"
     },
     "test": {
-        "processor": "../../experiment_templates/mnist/mnist_test.py"
+        "processor": "/home/runner/work/fonduecaquelon/fonduecaquelon/experiment_templates/mnist/mnist_test.py"
     },
     "slurm_cluster": {
         "scratch_results_path": "/tmp/fdq_results/",

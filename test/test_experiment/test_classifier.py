@@ -64,7 +64,7 @@ class TestMNISTClassifier(unittest.TestCase):
             print(f"Using workspace root: {workspace_root}")
             print(f"current file path: {os.path.abspath(__file__)}")
             print("--------------------------------------------")
-            config_file = self._create_ci_config(workspace_root)
+            # config_file = self._create_ci_config(workspace_root)
         else:
             config_file = os.path.join(
                 os.path.split(os.path.abspath(__file__))[0],
