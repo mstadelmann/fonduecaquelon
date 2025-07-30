@@ -172,6 +172,14 @@ def run_tensorrt_inference(
 
 
 def inference_model(experiment: Any) -> None:
+    """Run model inference using ONNX and TensorRT optimization.
+    
+    Args:
+        experiment: The experiment object containing model and configuration.
+        
+    Raises:
+        ValueError: If distributed training is enabled (not supported for inference).
+    """
     iprint("\n-----------------------------------------------------------")
     iprint("Run model inference with ONNX - TensorRT")
     iprint("-----------------------------------------------------------\n")
