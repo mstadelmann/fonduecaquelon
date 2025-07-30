@@ -9,12 +9,14 @@
         "MNIST": {
             "processor": "/home/runner/work/fonduecaquelon/fonduecaquelon/experiment_templates/mnist/mnist_preparator.py",
             "args": {
-                "base_path": "test/test_data"
+                "_base_path": "test/test_data",
+                "base_path": "/tmp/fdq_test_data"
             }
         }
     },
     "store": {
-        "results_path": "test/test_data/results"
+        "_results_path": "test/test_data/results",
+        "results_path": "/tmp/fdq_test_results"
     },
     "models": {
         "simpleNet": {
@@ -26,9 +28,5 @@
     },
     "test": {
         "processor": "/home/runner/work/fonduecaquelon/fonduecaquelon/experiment_templates/mnist/mnist_test.py"
-    },
-    "slurm_cluster": {
-        "scratch_results_path": "/tmp/fdq_results/",
-        "scratch_data_path": "/tmp/fdq_data/"
     }
 }

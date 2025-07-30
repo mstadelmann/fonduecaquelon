@@ -43,7 +43,7 @@ jobs:
     
     - name: Create test data directory
       run: |
-        mkdir -p test/test_data
+        mkdir -p /tmp/fdq_test_data
         mkdir -p /tmp/fdq_test_results
     
     - name: Run instantiation tests

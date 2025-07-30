@@ -74,6 +74,9 @@ class TestMNISTClassifier(unittest.TestCase):
 
         # check if test results file exists
         res_paths = glob.glob(res_d + "/test/*/00_test_results_*")
+        print("----------------------------------------")
+        print("Found test results files:\n" + "\n".join(res_paths))
+        print("----------------------------------------")
         self.assertTrue(len(res_paths) > 0)
 
         with open(res_paths[0], encoding="utf8") as json_file:
