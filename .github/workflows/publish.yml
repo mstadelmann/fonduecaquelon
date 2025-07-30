@@ -2,7 +2,11 @@ name: Build and Publish to PyPI
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+    # Only run when a PR is merged (not for direct pushes)
+    types:
+      - merged
   workflow_dispatch:  # Allow manual triggering
 
 jobs:
