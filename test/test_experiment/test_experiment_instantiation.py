@@ -25,6 +25,12 @@ class TestFdqExperimentInstantiation(unittest.TestCase):
             f"Config file {self.config_file} not found",
         )
 
+        workspace_root = os.getenv("GITHUB_WORKSPACE", os.getcwd())
+        print("--------------------------------------------")
+        print(f"Using workspace root: {workspace_root}")
+        print(f"current file path: {os.path.abspath(__file__)}")
+        print("--------------------------------------------")
+
     def test_experiment_instantiation(self):
         """Test that fdqExperiment can be instantiated without error."""
         # Create minimal arguments needed for instantiation
