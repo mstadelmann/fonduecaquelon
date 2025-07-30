@@ -1,17 +1,16 @@
 name: Build and Publish to PyPI
 
 on:
-  push:
-    branches:
-      - main
-    # Only run when a PR is merged (not for direct pushes)
-    types:
-      - merged
+  pull_request:
+    branches: [ main ]
+    types: [ closed ]  # Only run when PR is closed
   workflow_dispatch:  # Allow manual triggering
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # Only run if PR was merged (not just closed)
+    if: github.event.pull_request.merged == true
     permissions:
       contents: write  # Required for creating tags and releases
       
@@ -50,16 +49,24 @@ jobs:
         echo "New version: $new_version"
         echo "NEW_VERSION=$new_version" >> $GITHUB_ENV
 
-    - name: Commit version bump
+    - name: Create version tag
       run: |
-        git add src/fdq/__about__.py
-        git commit -m "Bump version to ${{ env.NEW_VERSION }}"
-        git push origin main
-
-    - name: Create git tag
-      run: |
+        # Create tag with the new version
         git tag "v${{ env.NEW_VERSION }}"
         git push origin "v${{ env.NEW_VERSION }}"
+
+    - name: Create version bump PR
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "Bump version to ${{ env.NEW_VERSION }}"
+        title: "🚀 Bump version to ${{ env.NEW_VERSION }}"
+        body: |
+          Automated version bump to ${{ env.NEW_VERSION }}
+          
+          This PR was created automatically after a successful release.
+        branch: version-bump-${{ env.NEW_VERSION }}
+        delete-branch: true
 
     - name: Build package
       run: |
