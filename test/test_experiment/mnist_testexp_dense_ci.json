@@ -1,0 +1,32 @@
+{
+    "globals": {
+        "project": "Testexperiment MNIST classifier",
+        "author": "Marc",
+        "parent": "/home/runner/work/fonduecaquelon/fonduecaquelon/test/test_experiment/mnist_testexp_dense.json",
+        "ci path": "/home/runner/work/fonduecaquelon/fonduecaquelon/test/test_experiment/test_experiment_instantiation.py"
+    },
+    "data": {
+        "MNIST": {
+            "processor": "/home/runner/work/fonduecaquelon/fonduecaquelon/experiment_templates/mnist/mnist_preparator.py",
+            "args": {
+                "_base_path": "test/test_data",
+                "base_path": "/tmp/fdq_test_data"
+            }
+        }
+    },
+    "store": {
+        "_results_path": "test/test_data/results",
+        "results_path": "/tmp/fdq_test_results"
+    },
+    "models": {
+        "simpleNet": {
+            "path": "/home/runner/work/fonduecaquelon/fonduecaquelon/src/networks/simpleNet.py"
+        }
+    },
+    "train": {
+        "path": "/home/runner/work/fonduecaquelon/fonduecaquelon/experiment_templates/mnist/train_mnist.py"
+    },
+    "test": {
+        "processor": "/home/runner/work/fonduecaquelon/fonduecaquelon/experiment_templates/mnist/mnist_test.py"
+    }
+}

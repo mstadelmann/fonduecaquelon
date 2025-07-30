@@ -1,6 +1,6 @@
 [project]
 name = "fdq"
-version = "0.0.48"
+version = "0.0.51"
 license = { file = "LICENSE" }
 authors = [
   { name = "Marc Stadelmann", email = "stdma@pm.me" },
@@ -36,10 +36,18 @@ dependencies = [
   "ruff==0.11.8",
 ]
 [project.optional-dependencies]
-dev = ["ruff==0.11.8", "pre-commit==3.7.0", "pytest==8.3.5"]
+dev = [
+  "ruff==0.11.8",
+  "pre-commit==3.7.0",
+  "pytest==8.3.5",
+]
 
 [dependency-groups]
-dev = ["ruff==0.11.8", "pre-commit==3.7.0", "pytest==8.3.5"]
+dev = [
+  "ruff==0.11.8",
+  "pre-commit==3.7.0",
+  "pytest==8.3.5",
+]
 
 [project.urls]
 Homepage = "https://github.com/mstadelmann/fonduecaquelon"
@@ -49,6 +57,9 @@ Issues = "https://github.com/mstadelmann/fonduecaquelon/issues"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/fdq/__about__.py"
 
 [tool.hatch.build]
 exclude = [

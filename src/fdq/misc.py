@@ -105,18 +105,16 @@ class FCQmode:
 
 
 def recursive_dict_update(d_parent: dict, d_child: dict) -> dict:
-    """Recursively update the parent dictionary with values from the child dictionary, merging nested dictionaries."""
-    for key, value in d_child.items():
-        if (
-            isinstance(value, dict)
-            and key in d_parent
-            and isinstance(d_parent[key], dict)
-        ):
-            recursive_dict_update(d_parent[key], value)
-        else:
-            d_parent[key] = value
+    """Merges two dictionaries recursively. The values of d_child will overwrite those in d_parent."""
+    result = copy.deepcopy(d_parent)
 
-    return copy.deepcopy(d_parent)
+    for key, value in d_child.items():
+        if isinstance(value, dict) and key in result and isinstance(result[key], dict):
+            result[key] = recursive_dict_update(result[key], value)
+        else:
+            result[key] = value
+
+    return result
 
 
 class DictToObj:
@@ -273,7 +271,7 @@ def collect_processing_infos(experiment: Any | None = None) -> dict:
     }
 
     if experiment.early_stop_detected:
-        data["early_stop_reason"] = experiment.early_stop_detected
+        data["early_stop_reason"] = experiment.early_stop_reason
 
     if experiment.is_slurm:
         data["slurm_job_id"] = experiment.slurm_job_id
@@ -562,7 +560,7 @@ def init_wandb(experiment: Any) -> bool:
             project=experiment.exp_def.store.wandb_project,
             entity=experiment.exp_def.store.wandb_entity,
             name=wandb_name,
-            config=experiment.exp_file,
+            config=experiment.exp_def.to_dict(),
         )
         experiment.wandb_initialized = True
         iprint(f"Init Wandb -  log path: {wandb.run.dir}")
@@ -641,3 +639,74 @@ def save_wandb(
         wandb.log(scalars)
 
     _log_wandb_images(images)
+
+
+def load_json(path: str) -> dict:
+    """Load a JSON file and return its content as a dictionary."""
+    with open(path, encoding="utf8") as fp:
+        try:
+            data = json.load(fp)
+        except Exception as exc:
+            raise ValueError(
+                f"Error loading JSON file {path} (check syntax?)."
+            ) from exc
+
+    if data.get("globals") is None:
+        raise ValueError(
+            f"Error: experiment {path} does not contain 'globals' section. Check template!"
+        )
+    return data
+
+
+def get_parent_path(path: str, exp_file_path: str) -> str:
+    """Resolve the absolute path of a parent configuration file.
+
+    Parameters
+    ----------
+    path : str
+        Relative or absolute path to the parent configuration file.
+    exp_file_path : str
+        Path to the current experiment configuration file.
+
+    Returns:
+    -------
+    str
+        Absolute path to the parent configuration file.
+    """
+    if path[0] == "/":
+        return path
+    return os.path.abspath(os.path.join(os.path.split(exp_file_path)[0], path))
+
+
+def load_conf_file(path) -> dict:
+    """Load an experiment configuration file, recursively merging parent configurations.
+
+    Parameters
+    ----------
+    path : str
+        Path to the experiment configuration JSON file.
+
+    Returns:
+    -------
+    dict
+        The merged configuration as a dictionary-like object.
+    """
+    reached_leaf = False
+    conf = load_json(path)
+    parent_conf = conf.copy()
+    parent = conf.get("globals").get("parent", {})
+    conf["globals"]["parent_hierarchy"] = []
+
+    while not reached_leaf:
+        parent = parent_conf.get("globals").get("parent", {})
+        if parent == {}:
+            reached_leaf = True
+        else:
+            parent_path = get_parent_path(parent, path)
+            conf["globals"]["parent_hierarchy"].append(parent_path)
+            parent_conf = load_json(parent_path)
+            conf = recursive_dict_update(d_parent=parent_conf, d_child=conf)
+
+    replace_tilde_with_abs_path(conf)
+
+    return DictToObj(conf)

@@ -9,6 +9,11 @@ class AddValueTransform:
     """A transform that adds a specified value to the input tensor."""
 
     def __init__(self, value):
+        """Initialize the AddValueTransform.
+
+        Args:
+            value: The value to add to the input tensor.
+        """
         self.value = value
 
     def __call__(self, t):
@@ -19,6 +24,11 @@ class MultValueTransform:
     """A transform that multiplies the input tensor by a specified value."""
 
     def __init__(self, value):
+        """Initialize the MultValueTransform.
+
+        Args:
+            value: The value to multiply the input tensor by.
+        """
         self.value = value
 
     def __call__(self, t):
@@ -29,6 +39,11 @@ class DivValueTransform:
     """A transform that divides the input tensor by a specified value."""
 
     def __init__(self, value):
+        """Initialize the DivValueTransform.
+
+        Args:
+            value: The value to divide the input tensor by.
+        """
         self.value = value
 
     def __call__(self, t):
@@ -39,6 +54,12 @@ class ClampAbsTransform:
     """A transform that clamps the input tensor to the specified lower and upper bounds."""
 
     def __init__(self, lower, upper):
+        """Initialize the ClampAbsTransform.
+
+        Args:
+            lower: The lower bound for clamping.
+            upper: The upper bound for clamping.
+        """
         self.lower = lower
         self.upper = upper
 
@@ -55,6 +76,12 @@ class ClampPercTransform:
     """
 
     def __init__(self, lower_perc, upper_perc):
+        """Initialize the ClampPercTransform.
+
+        Args:
+            lower_perc (float): The lower percentile for clamping.
+            upper_perc (float): The upper percentile for clamping.
+        """
         self.lower_perc = lower_perc
         self.upper_perc = upper_perc
 
@@ -80,6 +107,14 @@ class ReRangeTransform:
     """Re-ranges the input tensor from [in_min, in_max] to [out_min, out_max]."""
 
     def __init__(self, in_min, in_max, out_min, out_max):
+        """Initialize the ReRangeTransform.
+
+        Args:
+            in_min: Minimum value of the input range.
+            in_max: Maximum value of the input range.
+            out_min: Minimum value of the output range.
+            out_max: Maximum value of the output range.
+        """
         self.in_min = in_min
         self.in_max = in_max
         self.out_min = out_min
@@ -95,6 +130,12 @@ class ReRangeMinMaxTransform:
     """Re-ranges the input tensor so that its minimum and maximum values are mapped to out_min and out_max, respectively."""
 
     def __init__(self, out_min, out_max):
+        """Initialize the ReRangeMinMaxTransform.
+
+        Args:
+            out_min: Minimum value of the output range.
+            out_max: Maximum value of the output range.
+        """
         self.out_min = out_min
         self.out_max = out_max
 
@@ -114,6 +155,11 @@ class Stack3DTransform:
     """
 
     def __init__(self, stack_n):
+        """Initialize the Stack3DTransform.
+
+        Args:
+            stack_n (int): The number of times to stack the input tensor along the new dimension.
+        """
         self.stack_n = stack_n
 
     def __call__(self, t):
@@ -143,6 +189,14 @@ class ResizeMaxDimPadTransform:
     """
 
     def __init__(self, max_dim, interpol_mode="bilinear", mode="constant", value=0):
+        """Initialize the ResizeMaxDimPadTransform.
+
+        Args:
+            max_dim (int): The maximum dimension for resizing.
+            interpol_mode (str): Interpolation mode for resizing (e.g., 'bilinear').
+            mode (str): Padding mode ('constant', 'edge', 'replicate', or 'circular').
+            value (int or float): Fill value for 'constant' padding.
+        """
         self.max_dim = max_dim
         self.interpol_mode = interpol_mode
         self.mode = mode
@@ -193,6 +247,13 @@ class PaddingTransform:
     """
 
     def __init__(self, padding_size, padding_mode="constant", padding_value=0):
+        """Initialize the PaddingTransform.
+
+        Args:
+            padding_size: Padding values (tuple).
+            padding_mode (str): Padding mode ('constant', 'edge', 'replicate', or 'circular').
+            padding_value: Fill value for 'constant' padding.
+        """
         if padding_mode not in ["constant", "edge", "replicate", "circular"]:
             raise ValueError(f"Padding mode {padding_mode} not supported!")
 
@@ -217,6 +278,11 @@ class UnPaddingTransform:
     """
 
     def __init__(self, padding_size):
+        """Initialize the UnPaddingTransform.
+
+        Args:
+            padding_size: Padding values (tuple) - same format as used in PaddingTransform.
+        """
         self.padding_size = padding_size
 
     def __call__(self, t):
@@ -278,6 +344,12 @@ class Get2DFrom3DTransform:
     """
 
     def __init__(self, axis, index):
+        """Initialize the Get2DFrom3DTransform.
+
+        Args:
+            axis (int): The axis along which to select the slice.
+            index (int): The index of the slice to select.
+        """
         self.axis = axis
         self.index = index
 

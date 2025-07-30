@@ -16,6 +16,10 @@ Fonduecaquelon (FDQ) is designed for researchers and practitioners who want to f
 - **Extensible:** Easily integrate custom models, data loaders, and training/testing loops.
 - **Automatic Dependency Management:** Install additional pip packages per experiment.
 - **Distributed Training:** Out-of-the-box support for distributed training using PyTorch DDP.
+- **Model Export & Optimization:** Export trained models to ONNX format with optimization options.
+- **High-Performance Inference:** TensorRT integration for GPU-accelerated inference with up to 10x speedup.
+- **Model Compilation:** JIT tracing/scripting and torch.compile support for optimized model execution.
+- **Interactive Model Dumping:** Easy-to-use interface for exporting and optimizing trained models.
 
 ---
 
@@ -58,6 +62,79 @@ Submit your experiment to the cluster:
 ```bash
 python <path_to>/fdq_submit.py <path_to_config_file.json>
 ```
+
+### Model Export and Optimization
+
+After training, export and optimize your models for deployment:
+
+```bash
+# Interactive model dumping with export options
+fdq <path_to_config_file.json> -nt -d
+```
+
+This launches an interactive interface where you can:
+- **Export to ONNX:** Convert PyTorch models to ONNX format with Dynamo or TorchScript
+- **JIT Compilation:** Trace or script models using PyTorch JIT
+- **TensorRT Optimization:** Compile models for GPU inference with precision options (FP32, FP16, INT8)
+- **Performance Benchmarking:** Compare optimized vs. original model performance
+
+### Additional CLI Options
+
+FDQ supports several command-line options for different workflows:
+
+```bash
+# Run only training (default)
+fdq <config_file.json>
+
+# Skip training to run other tasks
+fdq <config_file.json> -nt
+
+# Run training and automatic testing
+fdq <config_file.json> -ta
+
+# Interactive testing
+fdq <config_file.json> -nt -ti
+
+# Export and optimize models
+fdq <config_file.json> -nt -d
+
+# Run inference tests on trained models
+fdq <config_file.json> -nt -i
+
+# Print model architecture before training
+fdq <config_file.json> -p
+
+# Resume training from checkpoint
+fdq <config_file.json> -rp /path/to/checkpoint
+```
+
+---
+
+## 🚄 Model Export & Deployment
+
+FDQ provides comprehensive model export and optimization capabilities for deployment:
+
+### Export Options
+
+- **ONNX Export:** Convert models to ONNX format for cross-platform deployment
+  - Dynamo-based export for latest PyTorch features
+  - TorchScript export for broader compatibility
+  - Automatic model optimization and file size reporting
+
+- **JIT Compilation:** PyTorch JIT tracing and scripting for optimized execution
+  - Trace models for static computation graphs
+  - Script models to preserve control flow
+  - Automatic performance comparison with original models
+
+- **TensorRT Integration:** GPU-accelerated inference with NVIDIA TensorRT
+  - FP32, FP16, and INT8 precision modes
+  - Automatic engine building and caching
+
+### Performance Features
+
+- **Automatic Benchmarking:** Built-in performance testing with statistical analysis
+- **Memory Optimization:** Dynamic batch sizing and memory-efficient engine building
+- **Cross-Platform:** Works on various GPU architectures and CUDA versions
 
 ---
 
@@ -129,7 +206,7 @@ See [oxpets_test.py](experiment_templates/segment_pets/oxpets_test.py) for an ex
 
 ---
 
-## 📦 Installing Additional Python Packages
+## 📦 Installing Additional Python Packages in your managed SLURM Environment
 
 If your experiment requires extra Python packages, specify them in your config under `additional_pip_packages`. FDQ will install them automatically before running your experiment.
 
@@ -137,7 +214,7 @@ Example:
 
 ```json
 "slurm_cluster": {
-    "fdq_version": "0.0.48",
+    "fdq_version": "0.0.51",
     "...": "...",
     "additional_pip_packages": [
         "monai==1.4.0",
@@ -153,6 +230,7 @@ Example:
 - **Config Inheritance:** Use the `parent` key in your config to inherit settings from another file, reducing duplication.
 - **Multiple Models/Losses:** FDQ supports multiple models and losses per experiment — just add them to the config dictionaries.
 - **Cluster Submission:** The `fdq_submit.py` utility handles SLURM job script generation and submission, including environment setup and result copying.
+- **Model Export:** Use `-d` or `--dump` to interactively export and optimize trained models for deployment.
 
 ---
 

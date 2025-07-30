@@ -19,9 +19,22 @@ class TestMNISTClassifier(unittest.TestCase):
 
     def test_run_train(self):
         """Test the training process and result validation for the MNIST classifier experiment."""
+        # Use different config file for CI vs local testing
+        if os.getenv("GITHUB_ACTIONS"):
+            workspace_root = os.getenv("GITHUB_WORKSPACE", os.getcwd())
+            print("--------------------------------------------")
+            print(f"Using workspace root: {workspace_root}")
+            print(f"current file path: {os.path.abspath(__file__)}")
+            print("--------------------------------------------")
+            conf_file = "mnist_testexp_dense_ci.json"
+
+        else:
+            conf_file = "mnist_testexp_dense.json"
+
         exp_path = os.path.join(
             os.path.split(os.path.abspath(__file__))[0],
-            "mnist_testexp_dense.json",
+            "test_experiment",
+            conf_file,
         )
 
         args = argparse.Namespace(
@@ -34,8 +47,12 @@ class TestMNISTClassifier(unittest.TestCase):
             resume_path=None,
         )
 
-        experiment = fdqExperiment(args)
-        experiment.mode.unittest()
+        experiment = fdqExperiment(args, rank=0)
+        # Set to unittest mode (suppress lint error for dynamic method)
+        getattr(experiment.mode, "unittest")()  # Set to unittest mode
+
+        # Store temp config path for cleanup if created
+        temp_config_path = exp_path if os.getenv("GITHUB_ACTIONS") else None
         experiment.prepareTraining()
         experiment.trainer.fdq_train(experiment)
 
@@ -57,8 +74,22 @@ class TestMNISTClassifier(unittest.TestCase):
 
         # check if test results file exists
         res_paths = glob.glob(res_d + "/test/*/00_test_results_*")
+        print("----------------------------------------")
+        print("Found test results files:\n" + "\n".join(res_paths))
+        print("----------------------------------------")
         self.assertTrue(len(res_paths) > 0)
 
         with open(res_paths[0], encoding="utf8") as json_file:
             testres = json.load(json_file)
             self.assertTrue(testres["test results"] > 0.2)
+
+        # Cleanup temporary config file if created for CI
+        if temp_config_path and os.path.exists(temp_config_path):
+            try:
+                os.unlink(temp_config_path)
+            except OSError:
+                pass  # Ignore cleanup errors
+
+
+if __name__ == "__main__":
+    unittest.main()

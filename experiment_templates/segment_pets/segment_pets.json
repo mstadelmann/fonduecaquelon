@@ -1,7 +1,8 @@
 {
     "globals": {
         "project": "Segment OXPET segmentation",
-        "author": "Marc"
+        "author": "Marc",
+        "parent": "segment_pets_keys.json"
     },
     "transforms": {
         "resize_and_pad_bilinear": [
@@ -31,8 +32,8 @@
                 "subset_test": 0.8,
                 "pin_memory": true,
                 "num_workers": 4,
-                "train_batch_size": 32,
-                "val_batch_size": 16,
+                "train_batch_size": 48,
+                "val_batch_size": 48,
                 "test_batch_size": 1,
                 "shuffle_train": true,
                 "shuffle_val": false,
@@ -89,7 +90,7 @@
         }
     },
     "losses": {
-        "cp": {
+        "cross_ent": {
             "class_name": "torch.nn.CrossEntropyLoss",
             "args": {
                 "reduction": "mean"
@@ -106,8 +107,7 @@
         "use_tensorboard": true,
         "use_wandb": true,
         "wandb_project": "ox_pet_test",
-        "wandb_entity": "stmd",
-        "wandb_key": "126aea51c74a8e5533f79411f171a1a2860a2e4b"
+        "wandb_entity": "stmd"
     },
     "test": {
         "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxpets_test.py",
@@ -119,13 +119,13 @@
         }
     },
     "slurm_cluster": {
-        "fdq_version": "0.0.48",
+        "fdq_version": "0.0.51",
         "python_env_module": "python/3.12.4",
         "uv_env_module": "uv/0.6.12",
         "scratch_results_path": "/scratch/fdq_results/",
         "scratch_data_path": "/scratch/fdq_data/",
         "log_path": "~/dev/fonduecaquelon/slurm_log",
-        "job_time": 90,
+        "job_time": 10,
         "stop_grace_time": 3,
         "cpus_per_task": 8,
         "cpus_per_task_test": 8,

@@ -9,8 +9,9 @@
 test_old/
 wandb
 slurm_log/
-submit.sh
 /experiment_templates/dummy
+**/*_keys.json
+test/test_data
 
 # Distribution / packaging
 dist/

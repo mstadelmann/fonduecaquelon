@@ -58,12 +58,6 @@ class simpleNet(nn.Module):
         return torch.rand(1, self.nb_in_channels, 165, 270)
 
 
-# def create(experiment):
-#     nodes_per_layer = experiment.exp_file.get("net_conf", {}).get("fc_Layers", [84, 50])
-
-#     return simpleNet(experiment, nodes_per_layer)
-
-
 ###########
 
 # import torch

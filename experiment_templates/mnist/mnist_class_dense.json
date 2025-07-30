@@ -54,7 +54,7 @@
                 "reduction": "mean"
             }
         },
-        "cp": {
+        "cross_ent": {
             "class_name": "torch.nn.CrossEntropyLoss",
             "args": {
                 "reduction": "mean"

@@ -1,10 +1,10 @@
 import os
 import sys
-import json
 import math
 import shutil
 import argparse
 import importlib
+import subprocess
 from datetime import datetime, timedelta
 from typing import Any
 import git
@@ -24,17 +24,15 @@ from fdq.ui_functions import (
 )
 from fdq.testing import find_model_path
 from fdq.transformers import get_transformers
-from fdq.dump import dump_model
 from fdq.misc import (
     remove_file,
     store_processing_infos,
     FCQmode,
-    recursive_dict_update,
     DictToObj,
-    replace_tilde_with_abs_path,
     save_train_history,
     save_tensorboard,
     save_wandb,
+    load_conf_file,
 )
 
 
@@ -44,14 +42,17 @@ class fdqExperiment:
     It manages the setup, training, evaluation, and management of machine learning experiments.
     """
 
-    def __init__(self, inargs: argparse.Namespace, exp_conf: dict, rank: int) -> None:
+    def __init__(self, inargs: argparse.Namespace, rank: int) -> None:
         """Initialize the fdqExperiment class with the provided arguments.
 
         Args:
             inargs (argparse.Namespace): The input arguments containing experiment configurations.
+            rank (int): The rank of the current process in distributed training.
         """
         self.inargs: argparse.Namespace = inargs
-        self.parse_and_clean_config(exp_conf)
+        self.experiment_file_path = self.inargs.experimentfile
+        self.exp_def = load_conf_file(self.experiment_file_path)
+        self.globals = self.exp_def.globals
         self.project: str = self.exp_def.globals.project.replace(" ", "_")
         self.experimentName: str = self.experiment_file_path.split("/")[-1].split(
             ".json"
@@ -98,7 +99,8 @@ class fdqExperiment:
         self.new_best_train_loss_ep_id: int | None = None
         self.new_best_val_loss: bool = False
         self.new_best_val_loss_ep_id: int | None = None
-        self.early_stop_detected: Any = False
+        self.early_stop_detected: bool = False
+        self.early_stop_reason: str = ""
         self.processing_log_dict: dict[str, Any] = {}
         self.useTensorboard: bool = self.exp_def.store.use_tensorboard
         self.tb_writer: Any | None = None
@@ -166,7 +168,7 @@ class fdqExperiment:
                     raise ValueError("Error, scratch_results_path was not defined.")
 
             else:
-                res_base_path = self.exp_file.get("store", {}).get("results_path", None)
+                res_base_path = self.exp_def.get("store", {}).get("results_path", None)
                 if res_base_path is None:
                     raise ValueError("Error, result path was not defined.")
 
@@ -244,51 +246,12 @@ class fdqExperiment:
         """Check if the current setup is distributed."""
         return self.world_size > 1
 
-    def parse_and_clean_config(self, exp_conf) -> None:
-        self.experiment_file_path = self.inargs.experimentfile
-        self.exp_file = exp_conf
-
-        self.globals = self.exp_file.get("globals")
-        if self.globals is None:
-            raise ValueError(
-                f"Error: experiment file does not comply - please check template! {self.experiment_file_path}."
-            )
-
-        parent = self.globals.get("parent", {})
-        # parent must be in same directory or defined with absolute path
-        if parent != {}:
-            if parent[0] == "/":
-                self.parent_file_path = parent
-            else:
-                self.parent_file_path = os.path.abspath(
-                    os.path.join(os.path.split(self.experiment_file_path)[0], parent)
-                )
-
-            if not os.path.exists(self.parent_file_path):
-                raise FileNotFoundError(
-                    f"Error: File {self.parent_file_path} not found."
-                )
-
-            with open(self.parent_file_path, encoding="utf8") as fp:
-                try:
-                    parent_expfile = json.load(fp)
-                except Exception as exc:
-                    raise ValueError(
-                        f"Error loading experiment file {self.parent_file_path} (check syntax?)."
-                    ) from exc
-
-            self.exp_file = recursive_dict_update(
-                d_parent=parent_expfile, d_child=self.exp_file
-            )
-
-        else:
-            self.parent_file_path = None
-        replace_tilde_with_abs_path(self.exp_file)
-        self.exp_def = DictToObj(self.exp_file)
-
     def init_distributed_mode(self):
         # if "SLURM_PROCID" not in os.environ or os.environ["SLURM_JOB_NAME"] == "bash":
         #     return
+
+        if not self.is_distributed():
+            return
 
         os.environ["MASTER_ADDR"] = "localhost"
         # os.environ["MASTER_PORT"] = str(self.master_port)
@@ -317,7 +280,6 @@ class fdqExperiment:
 
     def store_experiment_git_hash(self):
         """Check if the experiment directory is a git repository and store the current git hash."""
-
         exp_path = os.path.abspath(self.experiment_file_path)
         try:
             exp_git = git.Repo(exp_path, search_parent_directories=True)
@@ -447,30 +409,32 @@ class fdqExperiment:
                     distributed=True,
                 )
 
-            if self.is_distributed():
-                self.dist_barrier()
+            if model_name in self.models:
+                if self.is_distributed():
+                    self.dist_barrier()
 
-                self.models[model_name] = DDP(
-                    self.models[model_name].cuda(self.rank),
-                    device_ids=[self.rank],
-                    # find_unused_parameters=True,
-                )
-                iprint(
-                    f"Model {model_name} wrapped in DDP on rank {self.rank}. ",
-                    distributed=True,
-                )
-                self.models_no_ddp[model_name] = self.models[model_name].module
-            else:
-                self.models_no_ddp[model_name] = self.models[model_name]
+                    self.models[model_name] = DDP(
+                        self.models[model_name].cuda(self.rank),
+                        device_ids=[self.rank],
+                        # find_unused_parameters=True,
+                    )
+                    iprint(
+                        f"Model {model_name} wrapped in DDP on rank {self.rank}. ",
+                        distributed=True,
+                    )
+                    self.models_no_ddp[model_name] = self.models[model_name].module
+                else:
+                    self.models_no_ddp[model_name] = self.models[model_name]
 
-            # frozen model? disable gradient tracking
-            if model_def.freeze:
-                iprint(f"Freezing model {model_name} parameters.")
-                for param in self.models[model_name].parameters():
-                    param.requires_grad = False
+                # frozen model? disable gradient tracking
+                if model_def.freeze:
+                    iprint(f"Freezing model {model_name} parameters.")
+                    for param in self.models[model_name].parameters():
+                        param.requires_grad = False
 
     def load_trained_models(self) -> None:
         """Load trained models, defined by user path or previous trainings.
+
         This function is only used in model dumping or testing mode, therefore world_size != 1,
         and map_location is not required.
         """
@@ -598,17 +562,14 @@ class fdqExperiment:
             self.scaler = torch.amp.GradScaler(device=self.device, enabled=True)
 
         if self.inargs.resume_path is not None:
-            iprint(
-                "--------------------------------------------------------------------------"
-            )
+            iprint("-----------------------------------------------------------")
             iprint(f"Loading checkpoint: {self.inargs.resume_path}")
 
             self.load_checkpoint(self.inargs.resume_path)
 
         self.cp_to_res_dir(file_path=self.experiment_file_path)
-
-        if self.parent_file_path is not None:
-            self.cp_to_res_dir(file_path=self.parent_file_path)
+        for p in self.exp_def.globals.parent_hierarchy:
+            self.cp_to_res_dir(file_path=p)
 
         store_processing_infos(self)
         self.dist_barrier()
@@ -806,7 +767,7 @@ class fdqExperiment:
             iprint(f"Nb samples test: {self.data[data_name].n_test_samples}")
         iprint("-----------------------------------------------------------")
 
-    def clean_up(self) -> None:
+    def clean_up_train(self) -> None:
         iprint("-----------------------------------------------------------")
         iprint("Training done!\nCleaning up..")
         iprint("-----------------------------------------------------------")
@@ -819,7 +780,9 @@ class fdqExperiment:
 
             store_processing_infos(self)
 
-        torch.distributed.destroy_process_group()
+    def clean_up_distributed(self) -> None:
+        if self.is_distributed():
+            torch.distributed.destroy_process_group()
 
     def check_early_stop(self) -> bool:
         """Check if training should be stopped.
@@ -837,7 +800,8 @@ class fdqExperiment:
         # early stop NaN ?
         if e_stop_nan is not None:
             if all(math.isnan(x) for x in self.trainLoss_per_ep[-e_stop_nan:]):
-                self.early_stop_detected = "NaN detected"
+                self.early_stop_detected = True
+                self.early_stop_reason = "NaN_train_Loss"
                 wprint(
                     "\n###############################\n"
                     f"!! Early Stop NaN EP {self.current_epoch} !!\n"
@@ -851,7 +815,8 @@ class fdqExperiment:
         if e_stop_val is not None and len(self.valLoss_per_ep) >= e_stop_val:
             # was there a new best val loss within the last N epochs?
             if min(self.valLoss_per_ep[-e_stop_val:]) != self.bestValLoss:
-                self.early_stop_detected = "ValLoss_stagnated"
+                self.early_stop_detected = True
+                self.early_stop_reason = "ValLoss_stagnated"
                 wprint(
                     "\n###############################\n"
                     f"!! Early Stop Val Loss EP {self.current_epoch} !!\n"
@@ -867,7 +832,8 @@ class fdqExperiment:
                     f"!! Early Stop Train Loss EP {self.current_epoch} !!\n"
                     "###############################\n"
                 )
-                self.early_stop_detected = "TrainLoss_stagnated"
+                self.early_stop_detected = True
+                self.early_stop_reason = "TrainLoss_stagnated"
                 return True
 
         return False
@@ -973,23 +939,40 @@ class fdqExperiment:
             if not os.path.exists(self.scratch_data_path):
                 os.makedirs(self.scratch_data_path)
 
-            iprint("----------------------------------------------------")
+            iprint("-----------------------------------------------------------")
             iprint("Copy datasets to temporary scratch location...")
-            iprint("----------------------------------------------------")
+            iprint("-----------------------------------------------------------")
 
             for data_name, data_source in self.exp_def.data.items():
                 dargs = data_source.args
+
                 if dargs.base_path is not None:
-                    try:
-                        # cleanup old data first -> in case this is a debugging run with dirty data
-                        dst_path = os.path.join(self.scratch_data_path, data_name)
-                        if os.path.exists(dst_path):
-                            shutil.rmtree(dst_path)
-                        os.system(f"rsync -au {dargs.base_path} {dst_path}")
-                    except Exception as exc:
-                        raise ValueError(
-                            f"Unable to copy {dargs.base_path} to  to scratch location at {self.scratch_data_path}!"
-                        ) from exc
+                    # cleanup old data first -> in case this is a debug run with dirty data
+                    dst_path = os.path.join(self.scratch_data_path, data_name)
+                    if os.path.exists(dst_path):
+                        shutil.rmtree(dst_path)
+
+                    if not os.path.exists(dargs.base_path):
+                        wprint(
+                            f"Warning: Base path {dargs.base_path} for dataset {data_name} does not exist - nothing to copy!"
+                        )
+                    else:
+                        try:
+                            subprocess.run(
+                                ["rsync", "-au", dargs.base_path, dst_path],
+                                capture_output=True,
+                                text=True,
+                                check=True,
+                            )
+                            iprint(
+                                f"Successfully copied {dargs.base_path} to {dst_path}"
+                            )
+
+                        except Exception as exc:
+                            raise ValueError(
+                                f"Unable to copy {dargs.base_path} to scratch location at {self.scratch_data_path}!"
+                                f"Return code: {exc.returncode}, Error: {exc.stderr}"
+                            ) from exc
 
                     dargs.base_path = dst_path
                 else:
@@ -1019,9 +1002,9 @@ class fdqExperiment:
                         dargs.set(file_cat, new_paths)
                         pbar.finish()
 
-            iprint("----------------------------------------------------")
+            iprint("-----------------------------------------------------------")
             iprint("Copy datasets to temporary scratch location... Done!")
-            iprint("----------------------------------------------------")
+            iprint("-----------------------------------------------------------")
         self.dist_barrier()
 
     def dist_barrier(self) -> None:
@@ -1033,7 +1016,7 @@ class fdqExperiment:
         """Prepare transformers for the experiment."""
         if self.exp_def.transforms is None:
             return
-        if not isinstance(self.exp_file["transforms"], dict):
+        if not isinstance(self.exp_def.to_dict().get("transforms"), dict):
             raise ValueError(
                 "Error, transforms must be a dictionary with transform names as keys."
             )
@@ -1042,9 +1025,6 @@ class fdqExperiment:
             self.transformers[transformer_name] = get_transformers(
                 t_defs=transformer_def
             )
-
-    def dump_model(self) -> None:
-        dump_model(self)
 
     def print_model(self) -> None:
         if not self.is_main_process():

@@ -1,7 +1,6 @@
 import argparse
 import random
 import sys
-import json
 from typing import Any
 
 import numpy as np
@@ -10,20 +9,19 @@ import torch.multiprocessing as mp
 from fdq.experiment import fdqExperiment
 from fdq.testing import run_test
 from fdq.ui_functions import iprint
-
-
-def load_conf_file(path) -> dict:
-    with open(path, encoding="utf8") as fp:
-        try:
-            conf = json.load(fp)
-        except Exception as exc:
-            raise ValueError(
-                f"Error loading experiment file {path} (check syntax?)."
-            ) from exc
-    return conf
+from fdq.misc import load_conf_file
+from fdq.dump import dump_model
+from fdq.inference import inference_model
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for configuring and running an FDQ experiment.
+
+    Returns:
+    -------
+    argparse.Namespace
+        Parsed command-line arguments.
+    """
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         description="FCQ deep learning framework."
     )
@@ -47,9 +45,11 @@ def parse_args() -> argparse.Namespace:
         default=False,
         action="store_true",
     )
-
     parser.add_argument(
         "-d", "-dump", dest="dump_model", default=False, action="store_true"
+    )
+    parser.add_argument(
+        "-i", "-inference", dest="inference_model", default=False, action="store_true"
     )
     parser.add_argument(
         "-p", "-printmodel", dest="print_model", default=False, action="store_true"
@@ -66,9 +66,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def start(rank: int, args: argparse.Namespace, conf: dict) -> None:
+def start(rank: int, args: argparse.Namespace) -> None:
     """Main entry point for running an FDQ experiment based on command-line arguments."""
-    experiment: fdqExperiment = fdqExperiment(args, exp_conf=conf, rank=rank)
+    experiment: fdqExperiment = fdqExperiment(args, rank=rank)
 
     random_seed: Any = experiment.exp_def.globals.set_random_seed
     if random_seed is not None:
@@ -85,21 +85,26 @@ def start(rank: int, args: argparse.Namespace, conf: dict) -> None:
     if experiment.inargs.train_model:
         experiment.prepareTraining()
         experiment.trainer.fdq_train(experiment)
-        experiment.clean_up()
+        experiment.clean_up_train()
 
     if experiment.inargs.test_model_auto or experiment.inargs.test_model_ia:
         run_test(experiment)
 
     if experiment.inargs.dump_model:
-        experiment.dump_model()
+        dump_model(experiment)
+
+    if experiment.inargs.inference_model:
+        inference_model(experiment)
+
+    experiment.clean_up_distributed()
 
     iprint("done")
 
-    # non zero exit code to prevent launch of test job
+    # Return non-zero exit code to prevent automated launch of test job
     # if NaN or very early stop detected
-    if experiment.early_stop_detected == "NaN detected":
+    if experiment.early_stop_reason == "NaN_train_Loss":
         sys.exit(1)
-    elif experiment.early_stop_detected is not False and experiment.current_epoch < int(
+    elif experiment.early_stop_detected and experiment.current_epoch < int(
         0.1 * experiment.nb_epochs
     ):
         sys.exit(1)
@@ -108,10 +113,14 @@ def start(rank: int, args: argparse.Namespace, conf: dict) -> None:
 def main():
     """Main function to parse arguments, load configuration, and run the FDQ experiment."""
     inargs = parse_args()
-    exp_config = load_conf_file(inargs.experimentfile)
-    world_size = exp_config.get("slurm_cluster", {}).get("world_size", 1)
 
-    if not inargs.train_model:
+    if inargs.train_model:
+        world_size = (
+            load_conf_file(inargs.experimentfile)
+            .get("slurm_cluster", {})
+            .get("world_size", 1)
+        )
+    else:
         world_size = 1
 
     if world_size > torch.cuda.device_count():
@@ -120,10 +129,10 @@ def main():
         )
 
     if world_size == 1:
-        # Single process, no need for multiprocessing
-        start(0, inargs, exp_config)
+        # No need for multiprocessing
+        start(0, inargs)
     else:
-        mp.spawn(start, args=(inargs, exp_config), nprocs=world_size, join=True)
+        mp.spawn(start, args=(inargs,), nprocs=world_size, join=True)
 
 
 if __name__ == "__main__":
