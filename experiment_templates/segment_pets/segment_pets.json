@@ -125,7 +125,7 @@
         "scratch_results_path": "/scratch/fdq_results/",
         "scratch_data_path": "/scratch/fdq_data/",
         "log_path": "~/dev/fonduecaquelon/slurm_log",
-        "job_time": 90,
+        "job_time": 10,
         "stop_grace_time": 3,
         "cpus_per_task": 8,
         "cpus_per_task_test": 8,
