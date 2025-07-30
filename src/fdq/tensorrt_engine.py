@@ -6,15 +6,6 @@ from typing import Any
 import pycuda.driver as cuda
 import pycuda.autoinit
 
-# try:
-#     import pycuda.driver as cuda
-#     import pycuda.autoinit
-
-#     PYCUDA_AVAILABLE = True
-# except ImportError:
-#     print("Warning: PyCUDA not available. GPU memory management will be limited.")
-#     PYCUDA_AVAILABLE = False
-
 
 class TensorRTInference:
     """TensorRT inference class for ONNX models."""
@@ -22,8 +13,7 @@ class TensorRTInference:
     def __init__(
         self, onnx_path: str, engine_path: str = None, precision: str = "fp32"
     ):
-        """
-        Initialize TensorRT inference.
+        """Initialize TensorRT inference.
 
         Args:
             onnx_path: Path to the ONNX model
@@ -204,8 +194,7 @@ class TensorRTInference:
             self.bindings.append(int(device_mem))
 
     def preprocess_input(self, data: np.ndarray) -> np.ndarray:
-        """
-        Preprocess input data. Override this method for custom preprocessing.
+        """Preprocess input data. Override this method for custom preprocessing.
 
         Args:
             data: Input data as numpy array
@@ -224,8 +213,7 @@ class TensorRTInference:
         return data.astype(np.float32)
 
     def postprocess_output(self, outputs: list[np.ndarray]) -> Any:
-        """
-        Postprocess output data. Override this method for custom postprocessing.
+        """Postprocess output data. Override this method for custom postprocessing.
 
         Args:
             outputs: List of output arrays
@@ -239,8 +227,7 @@ class TensorRTInference:
         return outputs
 
     def infer(self, input_data: np.ndarray) -> Any:
-        """
-        Run inference on input data.
+        """Run inference on input data.
 
         Args:
             input_data: Input data as numpy array
@@ -279,8 +266,7 @@ class TensorRTInference:
     def benchmark(
         self, input_data: np.ndarray, num_runs: int = 100, warmup_runs: int = 10
     ) -> dict[str, float]:
-        """
-        Benchmark inference performance.
+        """Benchmark inference performance.
 
         Args:
             input_data: Sample input data
