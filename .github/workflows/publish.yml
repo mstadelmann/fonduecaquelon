@@ -13,6 +13,8 @@ jobs:
     if: github.event.pull_request.merged == true
     permissions:
       contents: write  # Required for creating tags and releases
+      pull-requests: write  # Required for creating pull requests
+      issues: write  # Required for PR creation
       
     steps:
     - uses: actions/checkout@v4
@@ -65,8 +67,15 @@ jobs:
           Automated version bump to ${{ env.NEW_VERSION }}
           
           This PR was created automatically after a successful release.
+          
+          **Changes:**
+          - Updated version in `src/fdq/__about__.py` to ${{ env.NEW_VERSION }}
+          
+          **Auto-merge:** This PR can be safely merged as it only contains the version update.
         branch: version-bump-${{ env.NEW_VERSION }}
         delete-branch: true
+        add-paths: |
+          src/fdq/__about__.py
 
     - name: Build package
       run: |
