@@ -218,7 +218,7 @@ def optimize_model(
             experiment, config, model, model_name, example
         )
     except (RuntimeError, TypeError, ValueError) as e:
-        raise RuntimeError(f"Failed to JIT Trace model: {e}") from e
+        raise RuntimeError(f"Failed to JIT process model (trace/script): {e}") from e
 
     inputs = [
         Input(
