@@ -17,63 +17,25 @@ from fdq.testing import run_test, find_model_path
 class TestMNISTClassifier(unittest.TestCase):
     """Unit tests for the MNIST classifier experiment."""
 
-    def _create_ci_config(self, workspace_root):
-        """Create a CI-specific config file with absolute paths."""
-        import tempfile
-
-        # Load the base CI config
-        base_config_path = os.path.join(
-            os.path.split(os.path.abspath(__file__))[0], "mnist_testexp_dense_ci.json"
-        )
-
-        return base_config_path
-
-        with open(base_config_path, "r", encoding="utf-8") as f:
-            config = json.load(f)
-
-        # Update paths to be absolute
-        config["data"]["MNIST"]["processor"] = os.path.join(
-            workspace_root, "experiment_templates/mnist/mnist_preparator.py"
-        )
-        config["models"]["simpleNet"]["path"] = os.path.join(
-            workspace_root, "src/networks/simpleNet.py"
-        )
-        config["train"]["path"] = os.path.join(
-            workspace_root, "experiment_templates/mnist/train_mnist.py"
-        )
-        config["test"]["processor"] = os.path.join(
-            workspace_root, "experiment_templates/mnist/mnist_test.py"
-        )
-
-        # Create temporary config file
-        fd, temp_config_path = tempfile.mkstemp(suffix=".json", prefix="mnist_test_ci_")
-        try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=2)
-            return temp_config_path
-        except Exception:
-            if fd:
-                os.close(fd)
-            raise
-
     def test_run_train(self):
         """Test the training process and result validation for the MNIST classifier experiment."""
         # Use different config file for CI vs local testing
         if os.getenv("GITHUB_ACTIONS"):
-            # For CI, create config with absolute paths
             workspace_root = os.getenv("GITHUB_WORKSPACE", os.getcwd())
             print("--------------------------------------------")
             print(f"Using workspace root: {workspace_root}")
             print(f"current file path: {os.path.abspath(__file__)}")
             print("--------------------------------------------")
-            config_file = self._create_ci_config(workspace_root)
-        else:
-            config_file = os.path.join(
-                os.path.split(os.path.abspath(__file__))[0],
-                "mnist_testexp_dense.json",
-            )
+            conf_file = "mnist_testexp_dense_ci.json"
 
-        exp_path = config_file
+        else:
+            conf_file = "mnist_testexp_dense.json"
+
+        exp_path = os.path.join(
+            os.path.split(os.path.abspath(__file__))[0],
+            "test_experiment",
+            conf_file,
+        )
 
         args = argparse.Namespace(
             experimentfile=exp_path,

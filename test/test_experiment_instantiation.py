@@ -18,7 +18,7 @@ class TestFdqExperimentInstantiation(unittest.TestCase):
         """Set up test fixtures before each test method."""
         # Use the CI config file which should have relative paths
         self.config_file = os.path.join(
-            os.path.dirname(__file__), "mnist_testexp_dense.json"
+            os.path.dirname(__file__), "test_experiment", "mnist_testexp_dense.json"
         )
         self.assertTrue(
             os.path.exists(self.config_file),

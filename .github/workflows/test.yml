@@ -49,7 +49,7 @@ jobs:
     - name: Run instantiation tests
       run: |
         cd ${{ github.workspace }}
-        python -m unittest test.test_experiment.test_experiment_instantiation -v
+        python -m unittest test.test_experiment_instantiation -v
       env:
         PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}
         HOME: /tmp
@@ -57,7 +57,7 @@ jobs:
     - name: Run MNIST classifier test
       run: |
         cd ${{ github.workspace }}
-        python -m unittest test.test_experiment.test_classifier.TestMNISTClassifier.test_run_train -v
+        python -m unittest test.test_classifier.TestMNISTClassifier.test_run_train -v
       env:
         PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}
         GITHUB_WORKSPACE: ${{ github.workspace }}
