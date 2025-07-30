@@ -40,7 +40,7 @@ dev = [
   "ruff==0.11.8",
   "pre-commit==3.7.0",
   "pytest==8.3.5",
-  "tensorrt==10.13.0.35",
+  "tensorrt",
   "pycuda==2025.1.1",
   "onnxruntime-gpu==1.22.0",
 ]
