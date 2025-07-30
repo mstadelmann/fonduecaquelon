@@ -26,6 +26,8 @@ class TestMNISTClassifier(unittest.TestCase):
             os.path.split(os.path.abspath(__file__))[0], "mnist_testexp_dense_ci.json"
         )
 
+        return base_config_path
+
         with open(base_config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
 
@@ -64,7 +66,7 @@ class TestMNISTClassifier(unittest.TestCase):
             print(f"Using workspace root: {workspace_root}")
             print(f"current file path: {os.path.abspath(__file__)}")
             print("--------------------------------------------")
-            # config_file = self._create_ci_config(workspace_root)
+            config_file = self._create_ci_config(workspace_root)
         else:
             config_file = os.path.join(
                 os.path.split(os.path.abspath(__file__))[0],
