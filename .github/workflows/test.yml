@@ -2,9 +2,10 @@ name: Run Tests
 
 on:
   push:
-    branches: [ main, master, develop, ddp_fix ]
+    branches: [ "**" ]
   pull_request:
-    branches: [ main, master, develop ]
+    branches: [ "**" ]
+    # branches: [ main, master ]
 
 jobs:
   test:
@@ -26,7 +27,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/pyproject.toml') }}
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
         restore-keys: |
           ${{ runner.os }}-pip-
     
