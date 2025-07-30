@@ -134,11 +134,6 @@ class TestFdqExperimentInstantiation(unittest.TestCase):
                     f"Experiment missing essential attribute: {attr}",
                 )
 
-    def tearDown(self):
-        """Clean up after each test method."""
-        # Clean up any temporary files or resources if needed
-        return
-
-
+# Removed the unnecessary tearDown method.
 if __name__ == "__main__":
     unittest.main()
