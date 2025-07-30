@@ -225,6 +225,46 @@ Example:
 
 ---
 
+## 🐛 Debugging
+
+To debug an FDQ experiment, you'll need to install FDQ in development mode on your local or remote machine.
+
+### Setup for Debugging
+
+```bash
+git clone https://github.com/mstadelmann/fonduecaquelon.git
+cd fonduecaquelon
+pip install -e .
+```
+
+### VS Code Debugging Configuration
+
+1. Open your project in VS Code
+2. Create or update your debugger configuration (`.vscode/launch.json`) to launch `run_experiment.py` with the corresponding parameters:
+
+```json
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "FDQ Experiment Debug",
+            "type": "debugpy",
+            "request": "launch",
+            "debugJustMyCode": false,
+            "program": "${workspaceFolder}/src/fdq/run_experiment.py",
+            "console": "integratedTerminal",
+            "args": ["PATH_TO/experiment.json"],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
+```
+
+3. Debug/test your code.
+
+
+---
+
 ## 📝 Tips
 
 - **Config Inheritance:** Use the `parent` key in your config to inherit settings from another file, reducing duplication.

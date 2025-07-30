@@ -2,7 +2,11 @@ name: Build and Publish to PyPI
 
 on:
   push:
-    branches: [ master ]
+    branches:
+      - main
+    # Only run when a PR is merged (not for direct pushes)
+    types:
+      - merged
   workflow_dispatch:  # Allow manual triggering
 
 jobs:
@@ -50,7 +54,7 @@ jobs:
       run: |
         git add src/fdq/__about__.py
         git commit -m "Bump version to ${{ env.NEW_VERSION }}"
-        git push origin master
+        git push origin main
 
     - name: Create git tag
       run: |
