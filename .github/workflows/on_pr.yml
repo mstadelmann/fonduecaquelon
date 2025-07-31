@@ -22,7 +22,7 @@ jobs:
     name: Run Unittests
     # needs: in-pr-check
     # if: ${{ needs.in-pr-check.outputs.result == 'false' }}
-    uses: ./.github/workflows/test.yml
+    uses: ./.github/workflows/unittest.yml
 
   build-package:
     name: Build distribution 📦
