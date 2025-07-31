@@ -35,18 +35,15 @@ dependencies = [
   "opencv-python==4.11.0.86",
   "ruff==0.11.8",
 ]
+
 [project.optional-dependencies]
 dev = [
   "ruff==0.11.8",
-  "pre-commit==3.7.0",
-  "pytest==8.3.5",
 ]
 
 [dependency-groups]
 dev = [
   "ruff==0.11.8",
-  "pre-commit==3.7.0",
-  "pytest==8.3.5",
 ]
 
 [project.urls]
@@ -74,11 +71,18 @@ dependencies = ["pytest", "pytest-cov"]
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
 
+[tool.ruff]
+line-length = 120
+
 [tool.ruff.lint]
-extend-select = [
-  "UP", # pyupgrade
-  "D",  # pydocstyle
-]
+select = ["E9", "F63", "F7", "F82", "UP", "D"]
+# E9 = pycodestyle syntax errors
+# F63 = pyflakes duplicate arguments
+# F7 = pyflakes syntax errors in type annotations
+# F82 = pyflakes undefined name errors
+# UP = pyupgrade
+# D = pydocstyle
+
 ignore = ["D100","D102"]
 
 [tool.ruff.lint.pydocstyle]

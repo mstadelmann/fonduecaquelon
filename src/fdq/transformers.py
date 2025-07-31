@@ -121,9 +121,7 @@ class ReRangeTransform:
         self.out_max = out_max
 
     def __call__(self, t):
-        return (t - self.in_min) / (self.in_max - self.in_min) * (
-            self.out_max - self.out_min
-        ) + self.out_min
+        return (t - self.in_min) / (self.in_max - self.in_min) * (self.out_max - self.out_min) + self.out_min
 
 
 class ReRangeMinMaxTransform:
@@ -142,9 +140,7 @@ class ReRangeMinMaxTransform:
     def __call__(self, t):
         t_min = t.min()
         t_max = t.max()
-        return (t - t_min) / (t_max - t_min) * (
-            self.out_max - self.out_min
-        ) + self.out_min
+        return (t - t_min) / (t_max - t_min) * (self.out_max - self.out_min) + self.out_min
 
 
 class Stack3DTransform:
@@ -225,9 +221,7 @@ class ResizeMaxDimPadTransform:
         pad_left = pad_w // 2
         pad_right = pad_w - pad_left
 
-        return F.pad(
-            t, (pad_left, pad_right, pad_top, pad_bottom), self.mode, self.value
-        )
+        return F.pad(t, (pad_left, pad_right, pad_top, pad_bottom), self.mode, self.value)
 
 
 class PaddingTransform:
@@ -357,9 +351,7 @@ class Get2DFrom3DTransform:
         if self.index is None:
             self.index = t.shape[self.axis] // 2  # Default to the middle slice
         if self.axis < 0 or self.axis >= t.dim():
-            raise ValueError(
-                f"Axis {self.axis} is out of bounds for the tensor with {t.dim()} dimensions."
-            )
+            raise ValueError(f"Axis {self.axis} is out of bounds for the tensor with {t.dim()} dimensions.")
         return t.select(dim=self.axis, index=self.index)
 
 
@@ -375,9 +367,7 @@ def get_transformers(t_defs: Any) -> transforms.Compose:
     return transforms.Compose([get_transformer(t) for t in t_defs])
 
 
-def get_transformer_by_names(
-    transformer_name: str, parameters: dict[str, Any] | None, t_defs: Any
-) -> Callable:
+def get_transformer_by_names(transformer_name: str, parameters: dict[str, Any] | None, t_defs: Any) -> Callable:
     """Returns a torchvision transformer instance based on the given transformer name and parameters.
 
     Args:
@@ -392,9 +382,7 @@ def get_transformer_by_names(
         transformer = Stack3DTransform(parameters["stack_n"])
 
     elif transformer_name == "Resize_HW":
-        transformer = transforms.Resize(
-            (parameters.get("h"), parameters.get("w")), antialias=True
-        )
+        transformer = transforms.Resize((parameters.get("h"), parameters.get("w")), antialias=True)
 
     elif transformer_name == "ResizeMaxDimPad":
         transformer = ResizeMaxDimPadTransform(
@@ -408,9 +396,7 @@ def get_transformer_by_names(
         transformer = ClampAbsTransform(parameters["lower"], parameters["upper"])
 
     elif transformer_name == "CLAMP_perc":
-        transformer = ClampPercTransform(
-            parameters["lower_perc"], parameters["upper_perc"]
-        )
+        transformer = ClampPercTransform(parameters["lower_perc"], parameters["upper_perc"])
 
     elif transformer_name == "ReRange":
         transformer = ReRangeTransform(
@@ -421,9 +407,7 @@ def get_transformer_by_names(
         )
 
     elif transformer_name == "ReRange_minmax":
-        transformer = ReRangeMinMaxTransform(
-            parameters["out_min"], parameters["out_max"]
-        )
+        transformer = ReRangeMinMaxTransform(parameters["out_min"], parameters["out_max"])
 
     elif transformer_name == "Gaussian_Blur":
         transformer = transforms.GaussianBlur(
@@ -442,9 +426,7 @@ def get_transformer_by_names(
         transformer = UnPaddingTransform(parameters["padding_size"])
 
     elif transformer_name == "Get2DFrom3D":
-        transformer = Get2DFrom3DTransform(
-            parameters.get("axis", 0), parameters.get("index")
-        )
+        transformer = Get2DFrom3DTransform(parameters.get("axis", 0), parameters.get("index"))
 
     elif transformer_name == "ADD":
         transformer = AddValueTransform(parameters["value"])
@@ -453,9 +435,7 @@ def get_transformer_by_names(
         transformer = DivValueTransform(parameters["value"])
 
     elif transformer_name == "NORM":
-        transformer = transforms.Normalize(
-            mean=(parameters.get("mean"),), std=(parameters.get("stdev"),)
-        )
+        transformer = transforms.Normalize(mean=(parameters.get("mean"),), std=(parameters.get("stdev"),))
 
     elif transformer_name == "MULT":
         transformer = MultValueTransform(parameters["value"])
@@ -478,14 +458,10 @@ def get_transformer_by_names(
         )
 
     elif transformer_name == "RandomHorizontalFlip":
-        transformer = transforms.RandomHorizontalFlip(
-            p=0.5 if parameters is None else parameters.get("p", 0.5)
-        )
+        transformer = transforms.RandomHorizontalFlip(p=0.5 if parameters is None else parameters.get("p", 0.5))
 
     elif transformer_name == "RandomVerticalFlip":
-        transformer = transforms.RandomVerticalFlip(
-            p=0.5 if parameters is None else parameters.get("p", 0.5)
-        )
+        transformer = transforms.RandomVerticalFlip(p=0.5 if parameters is None else parameters.get("p", 0.5))
 
     elif transformer_name == "ToTensor":
         transformer = transforms.ToTensor()
@@ -497,9 +473,7 @@ def get_transformer_by_names(
         transformer = Uint8Transform()
 
     elif transformer_name == "RGB_Normalize":
-        transformer = transforms.Normalize(
-            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-        )
+        transformer = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
     elif transformer_name == "RGB2GRAY":
         transformer = transforms.Grayscale(num_output_channels=1)
@@ -676,29 +650,21 @@ def get_transformer(t_defs: Any) -> Callable:
     if isinstance(t_defs, dict):
         keys = list(t_defs.keys())
         if len(keys) != 1:
-            raise ValueError(
-                f"Transformation {t_defs} does not correspond to the expected format!"
-            )
+            raise ValueError(f"Transformation {t_defs} does not correspond to the expected format!")
         transformer_name = keys[0]
         parameters = t_defs[transformer_name]
     elif isinstance(t_defs, str):
         transformer_name = t_defs
         parameters = None
     else:
-        raise ValueError(
-            f"Transformation {t_defs} does not correspond to the expected format!"
-        )
+        raise ValueError(f"Transformation {t_defs} does not correspond to the expected format!")
 
     # check if all required parameters are present and datatypes are correct
     for req_param, req_type in all_required_params.get(transformer_name, {}).items():
         if req_param not in parameters:
-            raise ValueError(
-                f"Parameter {req_param} is missing for transformation {transformer_name}."
-            )
+            raise ValueError(f"Parameter {req_param} is missing for transformation {transformer_name}.")
         if type(parameters[req_param]) not in req_type:
-            raise ValueError(
-                f"Parameter {req_param} for transformation {transformer_name} is not correct."
-            )
+            raise ValueError(f"Parameter {req_param} for transformation {transformer_name} is not correct.")
 
     transformer = get_transformer_by_names(transformer_name, parameters, t_defs)
 

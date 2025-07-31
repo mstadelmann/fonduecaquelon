@@ -435,9 +435,7 @@ def add_graph(experiment: Any) -> None:
             dummy_input = next(iter(sample.values()))
 
         for model_name, _ in experiment.exp_def.models:
-            experiment.tb_writer.add_graph(
-                experiment.models[model_name], dummy_input.to(experiment.device)
-            )
+            experiment.tb_writer.add_graph(experiment.models[model_name], dummy_input.to(experiment.device))
             experiment.tb_graph_stored = True
     except (StopIteration, AttributeError, KeyError, TypeError):
         wprint("Unable to add graph to Tensorboard.")
@@ -450,9 +448,7 @@ def _log_tb_images(experiment: Any, images: list | dict | None) -> None:
             if isinstance(images, dict):
                 images = [images]
             else:
-                raise ValueError(
-                    "Images must be a dictionary or a list of dictionaries."
-                )
+                raise ValueError("Images must be a dictionary or a list of dictionaries.")
 
         for image in images:
             img = image["data"]
@@ -497,17 +493,13 @@ def save_tensorboard(
     scalars["val_loss"] = experiment.valLoss
 
     for scalar_name, scalar_value in scalars.items():
-        experiment.tb_writer.add_scalar(
-            scalar_name, scalar_value, experiment.current_epoch
-        )
+        experiment.tb_writer.add_scalar(scalar_name, scalar_value, experiment.current_epoch)
 
     if text is not None:
         if not isinstance(text, dict):
             raise ValueError("Text must be a dictionary.")
         for text_name, text_value in text.items():
-            experiment.tb_writer.add_text(
-                text_name, text_value, experiment.current_epoch
-            )
+            experiment.tb_writer.add_text(text_name, text_value, experiment.current_epoch)
 
     _log_tb_images(experiment, images)
 
@@ -515,24 +507,16 @@ def save_tensorboard(
 def init_wandb(experiment: Any) -> bool:
     """Initialize weights and biases."""
     if experiment.exp_def.store.wandb_project is None:
-        raise ValueError(
-            "Wandb project name is not set. Please set it in the experiment definition."
-        )
+        raise ValueError("Wandb project name is not set. Please set it in the experiment definition.")
     if experiment.exp_def.store.wandb_entity is None:
-        raise ValueError(
-            "Wandb entity name is not set. Please set it in the experiment definition."
-        )
+        raise ValueError("Wandb entity name is not set. Please set it in the experiment definition.")
     if experiment.exp_def.store.wandb_key is None:
-        raise ValueError(
-            "Wandb key is not set. Please set it in the experiment definition."
-        )
+        raise ValueError("Wandb key is not set. Please set it in the experiment definition.")
 
     slurm_str = ""
     if experiment.is_slurm:
         if experiment.previous_slurm_job_id is not None:
-            slurm_str = (
-                f"__{experiment.previous_slurm_job_id}->{experiment.slurm_job_id}"
-            )
+            slurm_str = f"__{experiment.previous_slurm_job_id}->{experiment.slurm_job_id}"
         else:
             slurm_str = f"__{experiment.slurm_job_id}"
 
@@ -550,9 +534,7 @@ def init_wandb(experiment: Any) -> bool:
                 f"__test{slurm_str}"
             )
         except (IndexError, AttributeError):
-            wandb_name = (
-                f"test__{dt_string}__{experiment.experimentName[:30]}{slurm_str}"
-            )
+            wandb_name = f"test__{dt_string}__{experiment.experimentName[:30]}{slurm_str}"
 
     try:
         wandb.login(key=experiment.exp_def.store.wandb_key)
@@ -585,9 +567,7 @@ def _log_wandb_images(images: list | dict | None) -> None:
             if isinstance(images, dict):
                 images = [images]
             else:
-                raise ValueError(
-                    "Images must be a dictionary or a list of dictionaries."
-                )
+                raise ValueError("Images must be a dictionary or a list of dictionaries.")
 
         for image in images:
             captions = image.get("captions", None)
@@ -647,14 +627,10 @@ def load_json(path: str) -> dict:
         try:
             data = json.load(fp)
         except Exception as exc:
-            raise ValueError(
-                f"Error loading JSON file {path} (check syntax?)."
-            ) from exc
+            raise ValueError(f"Error loading JSON file {path} (check syntax?).") from exc
 
     if data.get("globals") is None:
-        raise ValueError(
-            f"Error: experiment {path} does not contain 'globals' section. Check template!"
-        )
+        raise ValueError(f"Error: experiment {path} does not contain 'globals' section. Check template!")
     return data
 
 

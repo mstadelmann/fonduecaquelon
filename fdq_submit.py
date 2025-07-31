@@ -383,14 +383,10 @@ def load_json(path: str) -> dict:
         raise FDQSubmitError(f"Cannot read file {path}: {exc}") from exc
 
     if not isinstance(data, dict):
-        raise FDQSubmitError(
-            f"JSON file {path} must contain a dictionary at root level"
-        )
+        raise FDQSubmitError(f"JSON file {path} must contain a dictionary at root level")
 
     if data.get("globals") is None:
-        raise FDQSubmitError(
-            f"Experiment config {path} missing required 'globals' section"
-        )
+        raise FDQSubmitError(f"Experiment config {path} missing required 'globals' section")
 
     return data
 
@@ -451,9 +447,7 @@ def load_conf_file(path: str) -> "DictToObj":
             # Check for circular references
             abs_parent_path = os.path.abspath(parent_path)
             if abs_parent_path in processed_files:
-                raise FDQSubmitError(
-                    f"Circular reference detected in parent hierarchy: {parent_path}"
-                )
+                raise FDQSubmitError(f"Circular reference detected in parent hierarchy: {parent_path}")
             processed_files.add(abs_parent_path)
 
             log_info(f"Loading parent configuration: {parent_path}")
@@ -463,18 +457,14 @@ def load_conf_file(path: str) -> "DictToObj":
             parent = parent_conf.get("globals", {}).get("parent", {})
 
         if depth >= max_depth:
-            raise FDQSubmitError(
-                f"Maximum parent hierarchy depth ({max_depth}) exceeded"
-            )
+            raise FDQSubmitError(f"Maximum parent hierarchy depth ({max_depth}) exceeded")
 
         return DictToObj(conf)
 
     except FDQSubmitError:
         raise
     except Exception as exc:
-        raise FDQSubmitError(
-            f"Failed to load configuration from {path}: {exc}"
-        ) from exc
+        raise FDQSubmitError(f"Failed to load configuration from {path}: {exc}") from exc
 
 
 class DictToObj:
@@ -614,8 +604,7 @@ def check_config(job_config: dict[str, Any]) -> dict[str, Any]:
 
     if missing_fields:
         raise FDQSubmitError(
-            f"Missing mandatory configuration fields: {', '.join(missing_fields)}. "
-            "Please update your config file!"
+            f"Missing mandatory configuration fields: {', '.join(missing_fields)}. Please update your config file!"
         )
 
     # Validate and normalize values
@@ -636,22 +625,16 @@ def check_config(job_config: dict[str, Any]) -> dict[str, Any]:
             os.makedirs(job_config["results_path"], exist_ok=True)
             log_info(f"Created results directory: {job_config['results_path']}")
         except OSError as exc:
-            raise FDQSubmitError(
-                f"Cannot create results directory {job_config['results_path']}: {exc}"
-            ) from exc
+            raise FDQSubmitError(f"Cannot create results directory {job_config['results_path']}: {exc}") from exc
 
     # Validate resource specifications
     if job_config.get("mem") and not re.match(r"^\d+[GMK]?$", str(job_config["mem"])):
-        log_warning(
-            f"Memory specification '{job_config['mem']}' may be invalid. Expected format: number + G/M/K"
-        )
+        log_warning(f"Memory specification '{job_config['mem']}' may be invalid. Expected format: number + G/M/K")
 
     return job_config
 
 
-def create_submit_file(
-    job_config: dict[str, Any], slurm_conf: Any, submit_path: str
-) -> None:
+def create_submit_file(job_config: dict[str, Any], slurm_conf: Any, submit_path: str) -> None:
     """Create a SLURM submit file from the job configuration.
 
     Args:
@@ -686,20 +669,11 @@ def create_submit_file(
             template_content = template_content.replace("#additional_pip_packages#", "")
         elif isinstance(slurm_conf.additional_pip_packages, list):
             if slurm_conf.additional_pip_packages:  # Only if list is not empty
-                packages_cmd = "\n".join(
-                    f"uv pip install '{pkg}'"
-                    for pkg in slurm_conf.additional_pip_packages
-                )
-                log_info(
-                    f"Adding {len(slurm_conf.additional_pip_packages)} additional pip packages"
-                )
-                template_content = template_content.replace(
-                    "#additional_pip_packages#", packages_cmd
-                )
+                packages_cmd = "\n".join(f"uv pip install '{pkg}'" for pkg in slurm_conf.additional_pip_packages)
+                log_info(f"Adding {len(slurm_conf.additional_pip_packages)} additional pip packages")
+                template_content = template_content.replace("#additional_pip_packages#", packages_cmd)
             else:
-                template_content = template_content.replace(
-                    "#additional_pip_packages#", ""
-                )
+                template_content = template_content.replace("#additional_pip_packages#", "")
         else:
             raise FDQSubmitError(
                 f"additional_pip_packages must be a list of strings, got {type(slurm_conf.additional_pip_packages)}"
@@ -772,9 +746,7 @@ def submit_slurm_job(submit_path: str) -> str:
         )
 
         if result.returncode != 0:
-            raise FDQSubmitError(
-                f"SLURM job submission failed (exit code {result.returncode}): {result.stderr}"
-            )
+            raise FDQSubmitError(f"SLURM job submission failed (exit code {result.returncode}): {result.stderr}")
 
         # Extract job ID from output
         match = re.search(r"Submitted batch job (\d+)", result.stdout)
@@ -790,9 +762,7 @@ def submit_slurm_job(submit_path: str) -> str:
                 log_info(f"Successfully submitted batch job {job_id}")
                 return job_id
             else:
-                raise FDQSubmitError(
-                    f"Could not extract job ID from SLURM output: {result.stdout}"
-                )
+                raise FDQSubmitError(f"Could not extract job ID from SLURM output: {result.stdout}")
 
     except subprocess.TimeoutExpired as exc:
         raise FDQSubmitError("SLURM submission timed out after 30 seconds") from exc
@@ -827,9 +797,7 @@ def main() -> None:
         job_config["user"] = getpass.getuser()
 
         # Validate required paths
-        if not hasattr(exp_config, "store") or not hasattr(
-            exp_config.store, "results_path"
-        ):
+        if not hasattr(exp_config, "store") or not hasattr(exp_config.store, "results_path"):
             raise FDQSubmitError("Configuration missing 'store.results_path' setting")
 
         job_config["results_path"] = exp_config.store.results_path

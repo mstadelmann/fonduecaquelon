@@ -33,10 +33,7 @@ class simpleNet(nn.Module):
 
         # make a cleaner version of this with nn.Sequential(...)
         self.fcvar: nn.ModuleList = nn.ModuleList(
-            [
-                nn.Linear(nodes_per_layer[i], nodes_per_layer[i + 1])
-                for i in range(len(nodes_per_layer) - 1)
-            ]
+            [nn.Linear(nodes_per_layer[i], nodes_per_layer[i + 1]) for i in range(len(nodes_per_layer) - 1)]
         )
 
         self.fc_end: nn.Linear = nn.Linear(nodes_per_layer[-1], self.nb_out_channels)

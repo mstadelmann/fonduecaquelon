@@ -1,10 +1,9 @@
-# This worflow publishes the 🐍 Python package 📦 distribution to PyPI or TestPyPI
-# For more information see:
+# Publishes the Python package distribution to PyPI or TestPyPI
+# based on https://github.com/CAIIVS/chuchichaestli
 # https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/
-# Note:
 # This workflow requires a token from PyPI/TestPyPI. It should be stored as 'pypi_token' secret.
 
-name: Publish 🐍📦 to PyPI
+name: Publish to PyPI
 
 on:
   workflow_call:
@@ -38,13 +37,13 @@ jobs:
     #   id-token: write
 
     steps:
-      - name: Download 🗃️
+      - name: Download distribution artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.artifact-name }}
           path: dist/
 
-      - name: Publish 🐍📦 to ${{ inputs.test && 'TestPyPI' || 'PyPI' }}
+      - name: Publish to ${{ inputs.test && 'TestPyPI' || 'PyPI' }}
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: ${{ inputs.test && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}

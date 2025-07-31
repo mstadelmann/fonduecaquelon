@@ -214,9 +214,7 @@ def optimize_model(
     from torch_tensorrt import Input
 
     try:
-        jit_model, config = jit_trace_model(
-            experiment, config, model, model_name, example
-        )
+        jit_model, config = jit_trace_model(experiment, config, model, model_name, example)
     except (RuntimeError, TypeError, ValueError) as e:
         raise RuntimeError(f"Failed to JIT process model (trace/script): {e}") from e
 
@@ -234,16 +232,12 @@ def optimize_model(
             inter_rep = "torchscript"
         else:
             inter_rep_choice = getIntInput(
-                "Select intermediate representation:\n"
-                "  1) default: Let Torch-TensorRT decide\n"
-                "  2) ts: TorchScript\n",
+                "Select intermediate representation:\n  1) default: Let Torch-TensorRT decide\n  2) ts: TorchScript\n",
                 drange=[1, 2],
             )
             inter_rep = "default" if inter_rep_choice == 1 else "ts"
 
-        truncate_double = getYesNoInput(
-            "Truncate long and double? (y/n), default = y\n"
-        )
+        truncate_double = getYesNoInput("Truncate long and double? (y/n), default = y\n")
 
         enabled_precisions = set()
         if getYesNoInput("Enable float32 precision? (y/n)"):
@@ -282,9 +276,7 @@ def optimize_model(
             run_test(experiment, example, model, optimized_model, config)
 
         if getYesNoInput("Save optimized model? (y/n)"):
-            save_path = os.path.join(
-                experiment.results_dir, f"{model_name}_optimized.ts"
-            )
+            save_path = os.path.join(experiment.results_dir, f"{model_name}_optimized.ts")
             torch.save(optimized_model, save_path)
             iprint(f"Optimized model saved to {save_path}")
 
@@ -373,9 +365,7 @@ def dump_model(experiment: Any) -> None:
     iprint("-----------------------------------------------------------\n")
 
     if experiment.is_distributed():
-        raise ValueError(
-            "ERROR: Cannot dump with world size > 1; please run in single process mode."
-        )
+        raise ValueError("ERROR: Cannot dump with world size > 1; please run in single process mode.")
 
     experiment.setupData()
     experiment.init_models(instantiate=False)
@@ -387,9 +377,7 @@ def dump_model(experiment: Any) -> None:
 
     while True:
         dump_mode = getIntInput(
-            "Select Operation:\n"
-            "  1) Optimize model (JIT trace / Script, and torch.compile)\n"
-            "  2) ONNX export\n",
+            "Select Operation:\n  1) Optimize model (JIT trace / Script, and torch.compile)\n  2) ONNX export\n",
             drange=[1, 2],
         )
 

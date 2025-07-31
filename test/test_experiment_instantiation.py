@@ -17,9 +17,7 @@ class TestFdqExperimentInstantiation(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures before each test method."""
         # Use the CI config file which should have relative paths
-        self.config_file = os.path.join(
-            os.path.dirname(__file__), "test_experiment", "mnist_testexp_dense.json"
-        )
+        self.config_file = os.path.join(os.path.dirname(__file__), "test_experiment", "mnist_testexp_dense.json")
         self.assertTrue(
             os.path.exists(self.config_file),
             f"Config file {self.config_file} not found",
@@ -93,9 +91,7 @@ class TestFdqExperimentInstantiation(unittest.TestCase):
                     FileNotFoundError,
                     AttributeError,
                 ) as e:
-                    self.fail(
-                        f"Failed to instantiate fdqExperiment with rank {rank}: {e}"
-                    )
+                    self.fail(f"Failed to instantiate fdqExperiment with rank {rank}: {e}")
 
     def test_experiment_attributes_after_instantiation(self):
         """Test that key attributes are properly set after instantiation."""

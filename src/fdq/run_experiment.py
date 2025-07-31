@@ -22,15 +22,9 @@ def parse_args() -> argparse.Namespace:
     argparse.Namespace
         Parsed command-line arguments.
     """
-    parser: argparse.ArgumentParser = argparse.ArgumentParser(
-        description="FCQ deep learning framework."
-    )
-    parser.add_argument(
-        "experimentfile", type=str, help="Path to experiment definition file."
-    )
-    parser.add_argument(
-        "-nt", "-notrain", dest="train_model", default=True, action="store_false"
-    )
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(description="FCQ deep learning framework.")
+    parser.add_argument("experimentfile", type=str, help="Path to experiment definition file.")
+    parser.add_argument("-nt", "-notrain", dest="train_model", default=True, action="store_false")
     parser.add_argument(
         "-ti",
         "-test_interactive",
@@ -45,15 +39,9 @@ def parse_args() -> argparse.Namespace:
         default=False,
         action="store_true",
     )
-    parser.add_argument(
-        "-d", "-dump", dest="dump_model", default=False, action="store_true"
-    )
-    parser.add_argument(
-        "-i", "-inference", dest="inference_model", default=False, action="store_true"
-    )
-    parser.add_argument(
-        "-p", "-printmodel", dest="print_model", default=False, action="store_true"
-    )
+    parser.add_argument("-d", "-dump", dest="dump_model", default=False, action="store_true")
+    parser.add_argument("-i", "-inference", dest="inference_model", default=False, action="store_true")
+    parser.add_argument("-p", "-printmodel", dest="print_model", default=False, action="store_true")
     parser.add_argument(
         "-rp",
         "-resume_path",
@@ -104,9 +92,7 @@ def start(rank: int, args: argparse.Namespace) -> None:
     # if NaN or very early stop detected
     if experiment.early_stop_reason == "NaN_train_Loss":
         sys.exit(1)
-    elif experiment.early_stop_detected and experiment.current_epoch < int(
-        0.1 * experiment.nb_epochs
-    ):
+    elif experiment.early_stop_detected and experiment.current_epoch < int(0.1 * experiment.nb_epochs):
         sys.exit(1)
 
 
@@ -115,18 +101,12 @@ def main():
     inargs = parse_args()
 
     if inargs.train_model:
-        world_size = (
-            load_conf_file(inargs.experimentfile)
-            .get("slurm_cluster", {})
-            .get("world_size", 1)
-        )
+        world_size = load_conf_file(inargs.experimentfile).get("slurm_cluster", {}).get("world_size", 1)
     else:
         world_size = 1
 
     if world_size > torch.cuda.device_count():
-        raise ValueError(
-            f"ERROR, world size {world_size} is larger than available GPUs: {torch.cuda.device_count()}"
-        )
+        raise ValueError(f"ERROR, world size {world_size} is larger than available GPUs: {torch.cuda.device_count()}")
 
     if world_size == 1:
         # No need for multiprocessing

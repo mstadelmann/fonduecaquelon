@@ -39,18 +39,13 @@ def fdq_train(experiment: fdqExperiment) -> None:
 
             with torch.autocast(device_type=device_type, enabled=experiment.useAMP):
                 output = model(inputs)
-                train_loss_tensor = (
-                    experiment.losses["cross_ent"](output, targets)
-                    / experiment.gradacc_iter
-                )
+                train_loss_tensor = experiment.losses["cross_ent"](output, targets) / experiment.gradacc_iter
                 if experiment.useAMP and experiment.scaler is not None:
                     experiment.scaler.scale(train_loss_tensor).backward()
                 else:
                     train_loss_tensor.backward()
 
-            experiment.update_gradients(
-                b_idx=nb_tbatch, loader_name="OXPET", model_name="ccUNET"
-            )
+            experiment.update_gradients(b_idx=nb_tbatch, loader_name="OXPET", model_name="ccUNET")
 
             train_loss_sum += train_loss_tensor.detach().item()
 

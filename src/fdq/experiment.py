@@ -54,9 +54,7 @@ class fdqExperiment:
         self.exp_def = load_conf_file(self.experiment_file_path)
         self.globals = self.exp_def.globals
         self.project: str = self.exp_def.globals.project.replace(" ", "_")
-        self.experimentName: str = self.experiment_file_path.split("/")[-1].split(
-            ".json"
-        )[0]
+        self.experimentName: str = self.experiment_file_path.split("/")[-1].split(".json")[0]
         self.funky_name: str | None = None
         self.checkpoint_frequency: int = self.exp_def.store.checkpoint_frequency
         self.mode: FCQmode = FCQmode()
@@ -64,9 +62,7 @@ class fdqExperiment:
         self.finish_time: datetime | None = None
         self.run_time: timedelta | None = None
         self.run_info: dict[str, Any] = {}
-        self.gradacc_iter: int = self.exp_def.train.args.get(
-            "accumulate_grad_batches", default=1
-        )
+        self.gradacc_iter: int = self.exp_def.train.args.get("accumulate_grad_batches", default=1)
         self.useAMP: bool = bool(self.exp_def.train.args.use_AMP)
         self.nb_epochs: int = self.exp_def.train.args.epochs
         self.current_epoch: int = 0
@@ -110,9 +106,7 @@ class fdqExperiment:
         if isinstance(slurm_job_id, str) and slurm_job_id.isdigit():
             self.is_slurm: bool = True
             self.slurm_job_id: str = slurm_job_id
-            self.scratch_data_path: str | None = self.exp_def.get(
-                "slurm_cluster", {}
-            ).get("scratch_data_path")
+            self.scratch_data_path: str | None = self.exp_def.get("slurm_cluster", {}).get("scratch_data_path")
         else:
             self.is_slurm = False
             self.slurm_job_id = None
@@ -123,13 +117,9 @@ class fdqExperiment:
         if not self.inargs.train_model:
             self.world_size = 1
         else:
-            self.world_size: int = self.exp_def.get("slurm_cluster", {}).get(
-                "world_size", 1
-            )
+            self.world_size: int = self.exp_def.get("slurm_cluster", {}).get("world_size", 1)
         self.master_port: int = self.exp_def.get("slurm_cluster", {}).get("master_port")
-        self.ddp_rdvz_path: int = self.exp_def.get("slurm_cluster", {}).get(
-            "ddp_rdvz_path", "/scratch/"
-        )
+        self.ddp_rdvz_path: int = self.exp_def.get("slurm_cluster", {}).get("ddp_rdvz_path", "/scratch/")
         self.init_distributed_mode()
 
         self.previous_slurm_job_id: str | None = None
@@ -137,9 +127,7 @@ class fdqExperiment:
             torch.cuda.empty_cache()
             self.device: torch.device = torch.device("cuda", self.rank)
             self.is_cuda: bool = True
-            iprint(
-                f"CUDA available: {torch.cuda.is_available()}. NB devices: {torch.cuda.device_count()}"
-            )
+            iprint(f"CUDA available: {torch.cuda.is_available()}. NB devices: {torch.cuda.device_count()}")
         else:
             wprint("NO CUDA available - CPU mode")
             self.device = torch.device("cpu")
@@ -161,9 +149,7 @@ class fdqExperiment:
 
             if self.is_slurm:
                 folder_name += f"__{self.slurm_job_id}"
-                res_base_path = self.exp_def.get("slurm_cluster", {}).get(
-                    "scratch_results_path"
-                )
+                res_base_path = self.exp_def.get("slurm_cluster", {}).get("scratch_results_path")
                 if res_base_path is None:
                     raise ValueError("Error, scratch_results_path was not defined.")
 
@@ -172,9 +158,7 @@ class fdqExperiment:
                 if res_base_path is None:
                     raise ValueError("Error, result path was not defined.")
 
-            self._results_dir = os.path.join(
-                res_base_path, self.project, self.experimentName, folder_name
-            )
+            self._results_dir = os.path.join(res_base_path, self.project, self.experimentName, folder_name)
 
             if not os.path.exists(self._results_dir):
                 os.makedirs(self._results_dir)
@@ -187,9 +171,7 @@ class fdqExperiment:
             return None
 
         if self._results_output_dir is None:
-            self._results_output_dir = os.path.join(
-                self.results_dir, "training_outputs"
-            )
+            self._results_output_dir = os.path.join(self.results_dir, "training_outputs")
             if not os.path.exists(self._results_output_dir):
                 os.makedirs(self._results_output_dir)
         return self._results_output_dir
@@ -259,9 +241,7 @@ class fdqExperiment:
 
         dist_backend = "nccl"
         # dist_url = "env://"
-        rdvz_location = (
-            f"file://{self.ddp_rdvz_path}ddp_rendezvous_{self.experimentName}"
-        )
+        rdvz_location = f"file://{self.ddp_rdvz_path}ddp_rendezvous_{self.experimentName}"
 
         iprint("Initializing distributed mode.")
         iprint(f"world size {self.world_size}, rank: {self.rank}")
@@ -302,9 +282,7 @@ class fdqExperiment:
         if parent_dir not in sys.path:
             sys.path.append(parent_dir)
 
-    def import_class(
-        self, file_path: str | None = None, module_name: str | None = None
-    ) -> Any:
+    def import_class(self, file_path: str | None = None, module_name: str | None = None) -> Any:
         if module_name is None:
             if file_path is None or not file_path.endswith(".py"):
                 raise ValueError(
@@ -321,9 +299,7 @@ class fdqExperiment:
         class_name: str | None = None,
     ) -> Any:
         if class_path is None and file_path is None:
-            raise ValueError(
-                f"Error, class_path or file_path must be defined. Got: {class_path}, {file_path}"
-            )
+            raise ValueError(f"Error, class_path or file_path must be defined. Got: {class_path}, {file_path}")
 
         if class_path is not None:
             if "." not in class_path:
@@ -339,16 +315,12 @@ class fdqExperiment:
                     f"Error, path must be a string with the module name and class name separated by a dot. Got: {file_path}"
                 )
             if class_name is None:
-                raise ValueError(
-                    f"Error, class_name must be defined if file_path is used. Got: {class_name}"
-                )
+                raise ValueError(f"Error, class_name must be defined if file_path is used. Got: {class_name}")
             self.add_module_to_syspath(file_path)
             module_name = os.path.basename(file_path).split(".")[0]
             module = importlib.import_module(module_name)
         else:
-            raise ValueError(
-                f"Error, class_path or file_path must be defined. Got: {class_path}, {file_path}"
-            )
+            raise ValueError(f"Error, class_path or file_path must be defined. Got: {class_path}, {file_path}")
 
         return getattr(module, class_name)
 
@@ -364,46 +336,32 @@ class fdqExperiment:
         for model_name, model_def in self.exp_def.models:
             if model_def.path is not None:
                 if os.path.exists(model_def.path):
-                    cls = self.instantiate_class(
-                        file_path=model_def.path, class_name=model_def.class_name
-                    )
+                    cls = self.instantiate_class(file_path=model_def.path, class_name=model_def.class_name)
                 else:
                     # if path does not exist, it might be a a fdq model specified by the file name only.
                     current_file_path = os.path.abspath(__file__)
-                    networks_dir = os.path.abspath(
-                        os.path.join(os.path.dirname(current_file_path), "../networks/")
-                    )
+                    networks_dir = os.path.abspath(os.path.join(os.path.dirname(current_file_path), "../networks/"))
                     model_path = os.path.join(networks_dir, model_def.path)
-                    cls = self.instantiate_class(
-                        file_path=model_path, class_name=model_def.class_name
-                    )
+                    cls = self.instantiate_class(file_path=model_path, class_name=model_def.class_name)
 
             elif model_def.class_name is not None:
                 # model is an installed pip package
                 cls = self.instantiate_class(class_path=model_def.class_name)
             else:
-                raise ValueError(
-                    f"Error, model {model_name} must have a path or module defined."
-                )
+                raise ValueError(f"Error, model {model_name} must have a path or module defined.")
 
             # load trained model from automatically detected path
             # -> only used for testing or dumping - highest priority
             if self.trained_model_paths.get(model_name) is not None:
-                self.models[model_name] = self.load_model_from_path(
-                    self.trained_model_paths[model_name]
-                )
+                self.models[model_name] = self.load_model_from_path(self.trained_model_paths[model_name])
 
             # load trained model from path defined in exp file
             elif model_def.trained_model_path is not None:
-                self.models[model_name] = self.load_model_from_path(
-                    model_def.trained_model_path
-                )
+                self.models[model_name] = self.load_model_from_path(model_def.trained_model_path)
 
             # or instantiate new model with random weights
             elif instantiate:
-                self.models[model_name] = cls(**model_def.args.to_dict()).to(
-                    self.device
-                )
+                self.models[model_name] = cls(**model_def.args.to_dict()).to(self.device)
                 iprint(
                     f"Model {model_name} instantiated on rank {self.rank}.",
                     distributed=True,
@@ -443,9 +401,7 @@ class fdqExperiment:
         for model_name, _ in self.exp_def.models:
             if self.mode.test_mode.custom_path:
                 while True:
-                    model_path = input(
-                        f"Enter path to model for '{model_name}' (or 'q' to quit)."
-                    )
+                    model_path = input(f"Enter path to model for '{model_name}' (or 'q' to quit).")
                     if model_path == "q":
                         sys.exit()
                     elif os.path.exists(model_path):
@@ -501,10 +457,7 @@ class fdqExperiment:
                 torch.save(model, self.last_model_path[model_name])
 
             # new best val loss (default!)
-            if (
-                self.exp_def.store.get("save_best_val_model", False)
-                and self.new_best_val_loss
-            ):
+            if self.exp_def.store.get("save_best_val_model", False) and self.new_best_val_loss:
                 best_model_path = os.path.join(
                     self.results_dir,
                     f"best_val_{model_name}_e{self.current_epoch}.fdqm",
@@ -534,9 +487,7 @@ class fdqExperiment:
             iprint(f"Model: {model_name}")
             nbp = sum(p.numel() for p in model.parameters())
             iprint(f"nb parameters: {nbp / 1e6:.2f}M")
-            iprint(
-                f"Using Float32, This will require {nbp * 4 / 1e9:.3f} GB of memory."
-            )
+            iprint(f"Using Float32, This will require {nbp * 4 / 1e9:.3f} GB of memory.")
             iprint("-----------------------------------------------------------")
             self.processing_log_dict[model_name] = {
                 "nb_parameters": f"{nbp / 1e6:.2f}M",
@@ -615,27 +566,19 @@ class fdqExperiment:
 
             cls = self.instantiate_class(lr_scheduler_module)
 
-            self.lr_schedulers[model_name] = cls(
-                self.optimizers[model_name], **margs.lr_scheduler.args.to_dict()
-            )
+            self.lr_schedulers[model_name] = cls(self.optimizers[model_name], **margs.lr_scheduler.args.to_dict())
 
     def createLosses(self) -> None:
         if self.exp_def.losses is None:
-            wprint(
-                "No losses defined in the experiment file. Losses must be defined in the training loop."
-            )
+            wprint("No losses defined in the experiment file. Losses must be defined in the training loop.")
             return
         for loss_name, largs in self.exp_def.losses:
             if largs.path is not None:
-                cls = self.instantiate_class(
-                    file_path=largs.path, class_name=largs.class_name
-                )
+                cls = self.instantiate_class(file_path=largs.path, class_name=largs.class_name)
             elif largs.class_name is not None:
                 cls = self.instantiate_class(class_path=largs.class_name)
             else:
-                raise ValueError(
-                    f"Error, loss {loss_name} must have a path or class name defined."
-                )
+                raise ValueError(f"Error, loss {loss_name} must have a path or class name defined.")
             if largs.args is not None:
                 self.losses[loss_name] = cls(**largs.args.to_dict())
             else:
@@ -649,9 +592,7 @@ class fdqExperiment:
         try:
             # checkpoint was saved on rank 0
             # so we need to map to the current rank
-            map_location = (
-                {f"cuda:{0}": f"cuda:{self.rank}"} if self.is_distributed() else None
-            )
+            map_location = {f"cuda:{0}": f"cuda:{self.rank}"} if self.is_distributed() else None
             checkpoint = torch.load(path, map_location=map_location)
             self.start_epoch = checkpoint["epoch"]
             self.trainLoss = checkpoint["train_loss"]
@@ -661,9 +602,7 @@ class fdqExperiment:
         except Exception as exc:
             raise ValueError(f"Error loading checkpoint {path}.") from exc
 
-        iprint(
-            f"Loaded checkpoint {self.start_epoch}. Train loss: {self.trainLoss:.4f}, val loss: {self.valLoss:.4f}"
-        )
+        iprint(f"Loaded checkpoint {self.start_epoch}. Train loss: {self.trainLoss:.4f}, val loss: {self.valLoss:.4f}")
 
         if self.start_epoch >= self.nb_epochs - 1:
             raise ValueError(
@@ -674,16 +613,12 @@ class fdqExperiment:
             if model_def.freeze:
                 iprint(f"Skipping loading of frozen model {model_name}.")
                 continue
-            self.models_no_ddp[model_name].load_state_dict(
-                checkpoint["model_state_dict"][model_name]
-            )
+            self.models_no_ddp[model_name].load_state_dict(checkpoint["model_state_dict"][model_name])
 
             if checkpoint["optimizer"] is None:
                 self.optimizers[model_name] = None
             else:
-                self.optimizers[model_name].load_state_dict(
-                    checkpoint["optimizer"][model_name]
-                )
+                self.optimizers[model_name].load_state_dict(checkpoint["optimizer"][model_name])
 
     def save_checkpoint(self) -> None:
         if not self.is_main_process():
@@ -697,9 +632,7 @@ class fdqExperiment:
             return
 
         remove_file(self.checkpoint_path)
-        self.checkpoint_path = os.path.join(
-            self.results_dir, f"checkpoint_e{self.current_epoch}.fdqcpt"
-        )
+        self.checkpoint_path = os.path.join(self.results_dir, f"checkpoint_e{self.current_epoch}.fdqcpt")
 
         iprint(f"Saving checkpoint to {self.checkpoint_path}")
 
@@ -733,9 +666,7 @@ class fdqExperiment:
 
         torch.save(checkpoint, self.checkpoint_path)
 
-    def get_next_export_fn(
-        self, name: str | None = None, file_ending: str = "jpg"
-    ) -> str:
+    def get_next_export_fn(self, name: str | None = None, file_ending: str = "jpg") -> str:
         if not self.is_main_process():
             return None
 
@@ -747,9 +678,7 @@ class fdqExperiment:
             dest_dir = self.results_output_dir
 
         name_str = "" if name is None else f"__{name}"
-        path = os.path.join(
-            dest_dir, f"{start_str}_{self.file_store_cnt:02}{name_str}.{file_ending}"
-        )
+        path = os.path.join(dest_dir, f"{start_str}_{self.file_store_cnt:02}{name_str}.{file_ending}")
 
         self.file_store_cnt += 1
 
@@ -964,9 +893,7 @@ class fdqExperiment:
                                 text=True,
                                 check=True,
                             )
-                            iprint(
-                                f"Successfully copied {dargs.base_path} to {dst_path}"
-                            )
+                            iprint(f"Successfully copied {dargs.base_path} to {dst_path}")
 
                         except Exception as exc:
                             raise ValueError(
@@ -989,9 +916,7 @@ class fdqExperiment:
                                 f"Error, {data_name} dataset files must be a list of file paths. Got: {fps}"
                             )
                         new_paths = []
-                        pbar = startProgBar(
-                            len(fps), f"Copy {file_cat} files to scratch"
-                        )
+                        pbar = startProgBar(len(fps), f"Copy {file_cat} files to scratch")
                         for i, src_file in enumerate(fps):
                             pbar.update(i)
                             rel_path = os.path.relpath(src_file, "/")
@@ -1017,14 +942,10 @@ class fdqExperiment:
         if self.exp_def.transforms is None:
             return
         if not isinstance(self.exp_def.to_dict().get("transforms"), dict):
-            raise ValueError(
-                "Error, transforms must be a dictionary with transform names as keys."
-            )
+            raise ValueError("Error, transforms must be a dictionary with transform names as keys.")
 
         for transformer_name, transformer_def in self.exp_def.transforms.items():
-            self.transformers[transformer_name] = get_transformers(
-                t_defs=transformer_def
-            )
+            self.transformers[transformer_name] = get_transformers(t_defs=transformer_def)
 
     def print_model(self) -> None:
         if not self.is_main_process():
@@ -1043,9 +964,7 @@ class fdqExperiment:
             iprint("-----------------------------------------------------------\n")
 
             try:
-                iprint(
-                    f"Saving model graph to: {self.results_dir}/{model_name}_graph.png"
-                )
+                iprint(f"Saving model graph to: {self.results_dir}/{model_name}_graph.png")
 
                 sample = next(iter(self.data[next(iter(self.data))].train_data_loader))
                 if isinstance(sample, tuple):

@@ -36,18 +36,13 @@ def fdq_train(experiment: fdqExperiment) -> None:
 
             with torch.autocast(device_type=device_type, enabled=experiment.useAMP):
                 output = model(inputs)
-                loss_tensor = (
-                    experiment.losses["cross_ent"](output, targets)
-                    / experiment.gradacc_iter
-                )
+                loss_tensor = experiment.losses["cross_ent"](output, targets) / experiment.gradacc_iter
                 if experiment.useAMP and experiment.scaler is not None:
                     experiment.scaler.scale(loss_tensor).backward()
                 else:
                     loss_tensor.backward()
 
-            experiment.update_gradients(
-                b_idx=nb_batch, loader_name="MNIST", model_name="simpleNet"
-            )
+            experiment.update_gradients(b_idx=nb_batch, loader_name="MNIST", model_name="simpleNet")
 
             train_loss_sum += loss_tensor.detach().item()
 
@@ -91,10 +86,7 @@ def fdq_train(experiment: fdqExperiment) -> None:
             "dataformats": "CHW",
         }
 
-        captions = [
-            f"Predicted: {preds[idx].item()}, True: {targets[idx].item()}"
-            for idx in range(len(preds))
-        ]
+        captions = [f"Predicted: {preds[idx].item()}, True: {targets[idx].item()}" for idx in range(len(preds))]
         imgs_wandb = {
             "name": "inputs",
             "data": inputs[:max_log_size],
