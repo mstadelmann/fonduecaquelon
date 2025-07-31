@@ -1,4 +1,4 @@
-name: Run Unittests
+name: Run Ruff
 
 on:
   workflow_call:
@@ -11,7 +11,7 @@ on:
         required: false
 
 jobs:
-  run-unittests:
+  run-ruff:
     runs-on: ubuntu-latest
     
     strategy:
@@ -42,37 +42,20 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e .[dev]
-    
-    - name: Create test data directory
+        python -m pip install .[dev]
+
+    - name: Check formatting with ruff
       run: |
-        mkdir -p /tmp/fdq_test_data
-        mkdir -p /tmp/fdq_test_results
-    
-    - name: Run instantiation tests
+        # Check if code is properly formatted (will fail if formatting is needed)
+        ruff format --check --diff .
+
+    - name: Lint with ruff
       run: |
-        cd ${{ github.workspace }}
-        python -m unittest test.test_experiment_instantiation -v
-      env:
-        PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}
-        HOME: /tmp
+        # stop the build if there are Python syntax errors or undefined names
+        ruff check . --select=E9,F63,F7,F82 --output-format=github
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        ruff check . --extend-select=D,UP --line-length=127 --output-format=github --exit-zero
+
+
     
-    - name: Run MNIST classifier test
-      run: |
-        cd ${{ github.workspace }}
-        python -m unittest test.test_classifier.TestMNISTClassifier.test_run_train -v
-      env:
-        PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}
-        GITHUB_WORKSPACE: ${{ github.workspace }}
-        HOME: /tmp
     
-    - name: Upload test artifacts
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-results-python-${{ matrix.python-version }}
-        path: |
-          /tmp/fdq_test_results/
-          test_results/
-          *.log
-        retention-days: 30

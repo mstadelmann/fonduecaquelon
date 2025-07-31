@@ -9,7 +9,7 @@ on:
 
 jobs:
   version-bump-on-merge:
-    name: Version bump ⬆️ (micro)
+    name: Version bump (micro)
     if: ${{ github.event.pull_request.merged == true }}
     permissions:
       contents: write
@@ -20,7 +20,7 @@ jobs:
           ref: ${{ github.base_ref }}
           fetch-depth: 0
           token: ${{ secrets.READ_WRITE_PAT }}
-      - name: Hatch version bump ⬆️
+      - name: Hatch version bump
         uses: phdenzel/hatch-bump@v2
         with:
           type: "micro"

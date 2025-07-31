@@ -4,7 +4,7 @@ import time
 import tensorrt as trt
 from typing import Any
 import pycuda.driver as cuda
-import pycuda.autoinit
+import pycuda.autoinit  # noqa: F401
 
 
 class TensorRTInference:

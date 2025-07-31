@@ -18,8 +18,13 @@ jobs:
   #     pytest: true
   #     artifact-name: "pytest-results"
 
+  run-ruff:
+    name: Run Ruff
+    uses: ./.github/workflows/ruff.yml
+
   run-unittests:
     name: Run Unittests
+    needs: run-ruff
     # needs: in-pr-check
     # if: ${{ needs.in-pr-check.outputs.result == 'false' }}
     uses: ./.github/workflows/unittest.yml
