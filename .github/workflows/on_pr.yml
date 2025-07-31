@@ -9,14 +9,6 @@ on:
     paths-ignore: ["**/__about__.py"]
 
 jobs:
-  # test-install-python-version:
-  #   name: Test install on 🐍
-  #   uses: ./.github/workflows/test-install.yml
-  #   with:
-  #     versions: '["3.10", "3.11", "3.12"]'
-  #     lint: true
-  #     pytest: true
-  #     artifact-name: "pytest-results"
 
   run-ruff:
     name: Run Ruff
@@ -25,13 +17,10 @@ jobs:
   run-unittests:
     name: Run Unittests
     needs: run-ruff
-    # needs: in-pr-check
-    # if: ${{ needs.in-pr-check.outputs.result == 'false' }}
     uses: ./.github/workflows/unittest.yml
 
   build-package:
     name: Build distribution 📦
-    # needs: test-install-python-version
     needs: run-unittests
     uses: ./.github/workflows/build-package.yml
     with:
