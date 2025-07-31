@@ -1,17 +1,26 @@
-name: Run Tests
+name: Run Unittests
 
 on:
-  push:
-    branches: [ "**" ]
+  # push:
+  #   branches: [ "**" ]
     # branches: [ main, master ]
+  workflow_call:
+    inputs:
+      versions:
+        description: "Test the installation on these Python versions"
+        type: string
+        # default: '["3.10", "3.11", "3.12"]'
+        default: '["3.12"]'
+        required: false
 
 jobs:
-  test:
+  run-unittests:
     runs-on: ubuntu-latest
     
     strategy:
       matrix:
-        python-version: ["3.12"]
+        # python-version: ["3.12"]
+        python-version: ${{ fromJSON(inputs.versions) }}
 
     steps:
     - uses: actions/checkout@v4

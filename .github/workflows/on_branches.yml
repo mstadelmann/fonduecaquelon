@@ -8,13 +8,20 @@ on:
     paths-ignore: ["**/__about__.py"]
 
 jobs:
-  in-pr-check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: insurgent-lab/is-in-pr-action@v0.2.0
-        id: isInPR
-    outputs:
-      result: ${{ steps.isInPR.outputs.result }}
+  # in-pr-check:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: insurgent-lab/is-in-pr-action@v0.2.0
+  #       id: isInPR
+  #   outputs:
+  #     result: ${{ steps.isInPR.outputs.result }}
+
+  run-unittests:
+    name: Run Unittests
+    # needs: in-pr-check
+    # if: ${{ needs.in-pr-check.outputs.result == 'false' }}
+    uses: ./.github/workflows/test.yml
+
 
   # test-install-python-version:
   #   name: Test install on 🐍
@@ -30,6 +37,7 @@ jobs:
   build-package:
     name: Build distribution 📦
     # needs: test-install-python-version
+    needs: run-unittests
     uses: ./.github/workflows/build-package.yml
     with:
       artifact-name: "package-dist"
