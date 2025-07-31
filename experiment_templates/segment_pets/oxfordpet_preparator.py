@@ -65,18 +65,12 @@ class OxfordPetDataset(torch.utils.data.Dataset):
 
         if self.binary:
             mask = torch.where(mask == 2.0, torch.tensor(0.0, dtype=mask.dtype), mask)
-            mask = torch.where(
-                (mask == 1.0) | (mask == 3.0), torch.tensor(1.0, dtype=mask.dtype), mask
-            )
+            mask = torch.where((mask == 1.0) | (mask == 3.0), torch.tensor(1.0, dtype=mask.dtype), mask)
             # add channel dimension
             mask = mask.unsqueeze(0)
         else:
             # one hot encoding
-            mask = (
-                torch.nn.functional.one_hot((mask - 1).long(), num_classes=3)
-                .permute(2, 0, 1)
-                .float()
-            )
+            mask = torch.nn.functional.one_hot((mask - 1).long(), num_classes=3).permute(2, 0, 1).float()
 
         if self.transform_img is not None:
             image = self.transform_img(image)

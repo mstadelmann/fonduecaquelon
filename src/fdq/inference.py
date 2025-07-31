@@ -23,21 +23,14 @@ def find_onnx_models(experiment: Any) -> str:
                 onnx_files.append(file)
 
     if not onnx_files:
-        raise FileNotFoundError(
-            f"No ONNX files found in directory: {path}. Dump model first!"
-        )
+        raise FileNotFoundError(f"No ONNX files found in directory: {path}. Dump model first!")
 
     onnx_files.sort()
     iprint("\nAvailable ONNX models:")
     for i, model_file in enumerate(onnx_files):
         iprint(f"{i + 1}) {model_file}")
 
-    idx = (
-        getIntInput(
-            f"Select ONNX model (1-{len(onnx_files)}): ", drange=[1, len(onnx_files)]
-        )
-        - 1
-    )
+    idx = getIntInput(f"Select ONNX model (1-{len(onnx_files)}): ", drange=[1, len(onnx_files)]) - 1
 
     selected_model = onnx_files[idx]
     selected_path = os.path.join(path, selected_model)
@@ -54,16 +47,11 @@ def get_precision_choice() -> str:
     for i, choice in enumerate(choices):
         iprint(f"{i + 1}) {choice}")
 
-    idx = (
-        getIntInput(f"Choose precision (1-{len(choices)}): ", drange=[1, len(choices)])
-        - 1
-    )
+    idx = getIntInput(f"Choose precision (1-{len(choices)}): ", drange=[1, len(choices)]) - 1
     return choices[idx]
 
 
-def compare_with_pytorch(
-    onnx_path: str, sample_input: np.ndarray, trt_output: np.ndarray
-):
+def compare_with_pytorch(onnx_path: str, sample_input: np.ndarray, trt_output: np.ndarray):
     """Compare TensorRT trt_result with PyTorch ONNX runtime (if available)."""
     try:
         iprint("\n-----------------------------------------------------------")
@@ -100,9 +88,7 @@ def compare_with_pytorch(
         print(f"Comparison failed: {e}")
 
 
-def run_tensorrt_inference(
-    onnx_model_path: str, precision: str = "fp32", experiment: Any = None
-) -> None:
+def run_tensorrt_inference(onnx_model_path: str, precision: str = "fp32", experiment: Any = None) -> None:
     """Run TensorRT inference on an ONNX model.
 
     Args:
@@ -185,9 +171,7 @@ def inference_model(experiment: Any) -> None:
     iprint("-----------------------------------------------------------\n")
 
     if experiment.is_distributed():
-        raise ValueError(
-            "ERROR: Cannot run inference with world size > 1; please run in single process mode!"
-        )
+        raise ValueError("ERROR: Cannot run inference with world size > 1; please run in single process mode!")
     experiment.setupData()
 
     onnx_path = find_onnx_models(experiment)

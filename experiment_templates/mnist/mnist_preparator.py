@@ -26,9 +26,7 @@ def create_datasets(experiment, args):
 
     transform = experiment.transformers["resize_norm_inp"]
 
-    train_all_set = datasets.MNIST(
-        args.base_path, train=True, download=True, transform=transform
-    )
+    train_all_set = datasets.MNIST(args.base_path, train=True, download=True, transform=transform)
     test_set = datasets.MNIST(args.base_path, train=False, transform=transform)
 
     n_train_all = len(train_all_set)
@@ -38,17 +36,13 @@ def create_datasets(experiment, args):
     subset_ratio = args.get("subset_train", 1)
     if subset_ratio < 1:
         n_subset_samples = int(n_train_all * subset_ratio)
-        train_all_set, _ = random_split(
-            train_all_set, [n_subset_samples, n_train_all - n_subset_samples]
-        )
+        train_all_set, _ = random_split(train_all_set, [n_subset_samples, n_train_all - n_subset_samples])
         n_train_all = len(train_all_set)
 
     subset_ratio = args.get("subset_test", 1)
     if subset_ratio < 1:
         n_subset_samples = int(n_test_samples * subset_ratio)
-        test_set, _ = random_split(
-            test_set, [n_subset_samples, n_test_samples - n_subset_samples]
-        )
+        test_set, _ = random_split(test_set, [n_subset_samples, n_test_samples - n_subset_samples])
         n_test_samples = len(test_set)
 
     # val set = subset from train
@@ -56,9 +50,7 @@ def create_datasets(experiment, args):
     if val_ratio is not None and val_ratio > 0:
         n_val_samples = int(n_train_all * val_ratio)
         n_train_samples = n_train_all - n_val_samples
-        train_set, val_set = random_split(
-            train_all_set, [n_train_samples, n_val_samples]
-        )
+        train_set, val_set = random_split(train_all_set, [n_train_samples, n_val_samples])
     else:
         n_val_samples = 0
         n_train_samples = n_train_all

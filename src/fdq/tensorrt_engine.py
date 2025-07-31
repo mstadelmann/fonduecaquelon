@@ -10,9 +10,7 @@ import pycuda.autoinit  # noqa: F401
 class TensorRTInference:
     """TensorRT inference class for ONNX models."""
 
-    def __init__(
-        self, onnx_path: str, engine_path: str = None, precision: str = "fp32"
-    ):
+    def __init__(self, onnx_path: str, engine_path: str = None, precision: str = "fp32"):
         """Initialize TensorRT inference.
 
         Args:
@@ -21,9 +19,7 @@ class TensorRTInference:
             precision: Precision mode - "fp32", "fp16", or "int8"
         """
         self.onnx_path = onnx_path
-        self.engine_path = engine_path or onnx_path.replace(
-            ".onnx", f"_{precision}.trt"
-        )
+        self.engine_path = engine_path or onnx_path.replace(".onnx", f"_{precision}.trt")
         self.precision = precision
 
         # TensorRT objects
@@ -58,9 +54,7 @@ class TensorRTInference:
     def _build_engine_from_onnx(self):
         """Build TensorRT engine from ONNX model."""
         builder = trt.Builder(self.logger)
-        network = builder.create_network(
-            1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
-        )
+        network = builder.create_network(1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH))
         parser = trt.OnnxParser(network, self.logger)
 
         # Parse ONNX model
@@ -83,18 +77,14 @@ class TensorRTInference:
                 config.set_flag(trt.BuilderFlag.FP16)
                 print("Using FP16 precision")
             else:
-                print(
-                    "Warning: FP16 not supported on this platform, falling back to FP32"
-                )
+                print("Warning: FP16 not supported on this platform, falling back to FP32")
                 self.precision = "fp32"
         elif self.precision == "int8":
             if builder.platform_has_fast_int8:
                 config.set_flag(trt.BuilderFlag.INT8)
                 print("Using INT8 precision")
             else:
-                print(
-                    "Warning: INT8 not supported on this platform, falling back to FP32"
-                )
+                print("Warning: INT8 not supported on this platform, falling back to FP32")
                 self.precision = "fp32"
         else:
             print("Using FP32 precision")
@@ -107,14 +97,10 @@ class TensorRTInference:
             print(f"Warning: Could not set memory pool limit: {e}")
 
         # Print network info before building
-        print(
-            f"Network has {network.num_inputs} inputs and {network.num_outputs} outputs"
-        )
+        print(f"Network has {network.num_inputs} inputs and {network.num_outputs} outputs")
         for i in range(network.num_inputs):
             input_tensor = network.get_input(i)
-            print(
-                f"  Input {i}: {input_tensor.name}, shape: {input_tensor.shape}, dtype: {input_tensor.dtype}"
-            )
+            print(f"  Input {i}: {input_tensor.name}, shape: {input_tensor.shape}, dtype: {input_tensor.dtype}")
 
         # Build engine with detailed logging
         print("Building TensorRT engine... This may take a while.")
@@ -206,9 +192,7 @@ class TensorRTInference:
         if len(self.inputs) == 1:
             expected_shape = self.inputs[0]["shape"]
             if data.shape != expected_shape:
-                print(
-                    f"Warning: Input shape {data.shape} doesn't match expected {expected_shape}"
-                )
+                print(f"Warning: Input shape {data.shape} doesn't match expected {expected_shape}")
 
         return data.astype(np.float32)
 
@@ -263,9 +247,7 @@ class TensorRTInference:
 
         return self.postprocess_output(outputs)
 
-    def benchmark(
-        self, input_data: np.ndarray, num_runs: int = 100, warmup_runs: int = 10
-    ) -> dict[str, float]:
+    def benchmark(self, input_data: np.ndarray, num_runs: int = 100, warmup_runs: int = 10) -> dict[str, float]:
         """Benchmark inference performance.
 
         Args:
@@ -276,9 +258,7 @@ class TensorRTInference:
         Returns:
             Performance metrics
         """
-        print(
-            f"Benchmarking with {warmup_runs} warmup runs and {num_runs} timing runs..."
-        )
+        print(f"Benchmarking with {warmup_runs} warmup runs and {num_runs} timing runs...")
 
         # Warmup
         for _ in range(warmup_runs):

@@ -92,9 +92,7 @@ class CustomProgressBar(progressbar.ProgressBar):
             super().finish()
 
 
-def startProgBar(
-    nbstepts: int, message: str | None = None, is_active: bool = True
-) -> CustomProgressBar:
+def startProgBar(nbstepts: int, message: str | None = None, is_active: bool = True) -> CustomProgressBar:
     """Starts and returns a progress bar with the specified number of steps and optional message."""
     global GLOBAL_RANK
     if GLOBAL_RANK != 0:
@@ -119,9 +117,7 @@ def show_train_progress(experiment: Any) -> None:
     This function requires GNUplot to be installed.
     """
     global GNUPLOT_WARNING_SHOWN
-    iprint(
-        f"\nProject: {experiment.project} | Experiment name: {experiment.experimentName}"
-    )
+    iprint(f"\nProject: {experiment.project} | Experiment name: {experiment.experimentName}")
 
     try:
         trainLoss = experiment.trainLoss_per_ep
@@ -142,9 +138,7 @@ def show_train_progress(experiment: Any) -> None:
             wprint("GNUplot is not available, loss is not plotted.")
             GNUPLOT_WARNING_SHOWN = True
 
-    iprint(
-        f"Training Loss: {experiment.trainLoss:.4f}, Validation Loss: {experiment.valLoss:.4f}"
-    )
+    iprint(f"Training Loss: {experiment.trainLoss:.4f}, Validation Loss: {experiment.valLoss:.4f}")
 
 
 def iprint(msg: Any, distributed=False) -> None:
@@ -196,13 +190,9 @@ def cprint(
     supported_bg_colors = ["on_" + c for c in supported_colors]
 
     if text_color is not None and text_color not in supported_colors:
-        raise ValueError(
-            f"Text color {text_color} is not supported. Supported colors are {supported_colors}"
-        )
+        raise ValueError(f"Text color {text_color} is not supported. Supported colors are {supported_colors}")
     if bg_color is not None and bg_color not in supported_bg_colors:
-        raise ValueError(
-            f"Background color {bg_color} is not supported. Supported colors are {supported_bg_colors}"
-        )
+        raise ValueError(f"Background color {bg_color} is not supported. Supported colors are {supported_bg_colors}")
 
     if text_color is None:
         print(msg)
@@ -313,9 +303,7 @@ def save_images(
 
     # Check consistency of batch sizes
     if batch_detected and len(set(batch_sizes)) > 1:
-        eprint(
-            f"Inconsistent batch sizes detected: {batch_sizes}. All images should have the same batch size."
-        )
+        eprint(f"Inconsistent batch sizes detected: {batch_sizes}. All images should have the same batch size.")
         return
 
     max_batch_size = max(batch_sizes) if batch_sizes else 1
@@ -354,9 +342,7 @@ def save_images(
 
                     # Create single image plot
                     fig, ax = plt.subplots(1, 1, figsize=figsize)
-                    if single_img.ndim == 2 or (
-                        single_img.ndim == 3 and single_img.shape[2] == 1
-                    ):
+                    if single_img.ndim == 2 or (single_img.ndim == 3 and single_img.shape[2] == 1):
                         if single_img.ndim == 3:
                             single_img = single_img.squeeze(2)
                         ax.imshow(single_img, cmap=cmap)
@@ -371,9 +357,7 @@ def save_images(
                     plt.savefig(individual_path, dpi=300, bbox_inches="tight")
                     plt.close()
 
-                iprint(
-                    f"Saved {img.shape[0]} individual images from batch to {base_path}_batch_XXX{ext}"
-                )
+                iprint(f"Saved {img.shape[0]} individual images from batch to {base_path}_batch_XXX{ext}")
                 return
             else:
                 # Only add first image from batch

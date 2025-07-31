@@ -21,17 +21,11 @@ def get_nb_exp_epochs(path: str) -> int:
 def find_experiment_result_dirs(experiment: Any) -> tuple[str, list[str]]:
     """Finds and returns the experiment result directory and its subfolders for the given experiment."""
     if experiment.is_slurm and experiment.inargs.train_model:
-        wprint(
-            "WARNING: This is a slurm TRAINING session - looking only for results in scratch_results_path!"
-        )
-        outbasepath: str | None = experiment.exp_def.get("slurm_cluster", {}).get(
-            "scratch_results_path"
-        )
+        wprint("WARNING: This is a slurm TRAINING session - looking only for results in scratch_results_path!")
+        outbasepath: str | None = experiment.exp_def.get("slurm_cluster", {}).get("scratch_results_path")
 
     elif experiment.is_slurm and not experiment.mode.op_mode.train:
-        wprint(
-            "WARNING: This is a slurm INFERENCE session - looking for results in regular path!"
-        )
+        wprint("WARNING: This is a slurm INFERENCE session - looking for results in regular path!")
         outbasepath = experiment.exp_def.get("store", {}).get("results_path")
 
         if outbasepath[0] == "~":
@@ -48,23 +42,15 @@ def find_experiment_result_dirs(experiment: Any) -> tuple[str, list[str]]:
     if outbasepath is None:
         raise ValueError("Error: No store path specified in experiment file.")
 
-    experiment_res_path: str = os.path.join(
-        outbasepath, experiment.project, experiment.experimentName
-    )
-    subfolders: list[str] = [
-        f.path.split("/")[-1] for f in os.scandir(experiment_res_path) if f.is_dir()
-    ]
+    experiment_res_path: str = os.path.join(outbasepath, experiment.project, experiment.experimentName)
+    subfolders: list[str] = [f.path.split("/")[-1] for f in os.scandir(experiment_res_path) if f.is_dir()]
 
     return experiment_res_path, subfolders
 
 
-def manual_experiment_selection(
-    subfolders_dict: dict[str, str], res_root_path: str
-) -> str:
+def manual_experiment_selection(subfolders_dict: dict[str, str], res_root_path: str) -> str:
     """UI to manually select experiment ."""
-    subfolders_datetime = [
-        datetime.strptime(s, "%Y%m%d_%H_%M_%S") for s in subfolders_dict.keys()
-    ]
+    subfolders_datetime = [datetime.strptime(s, "%Y%m%d_%H_%M_%S") for s in subfolders_dict.keys()]
     subfolders_datetime.sort()
     sorted_keys = [s.strftime("%Y%m%d_%H_%M_%S") for s in subfolders_datetime]
 
@@ -74,12 +60,8 @@ def manual_experiment_selection(
             # old naming scheme, without funkyBob
             nb_epochs = get_nb_exp_epochs(os.path.join(res_root_path, d))
         else:
-            nb_epochs = get_nb_exp_epochs(
-                os.path.join(res_root_path, d + "__" + subfolders_dict[d])
-            )
-        print(
-            f"{i:<3}: {d:<20} {subfolders_dict[d]:<25} {nb_epochs} epochs {'(!)' if nb_epochs == 0 else ''}"
-        )
+            nb_epochs = get_nb_exp_epochs(os.path.join(res_root_path, d + "__" + subfolders_dict[d]))
+        print(f"{i:<3}: {d:<20} {subfolders_dict[d]:<25} {nb_epochs} epochs {'(!)' if nb_epochs == 0 else ''}")
     exp_idx: int = getIntInput("Enter index: ", [0, len(subfolders_datetime) - 1])
     return sorted_keys[exp_idx]
 
@@ -103,24 +85,17 @@ def find_model_path(experiment: Any) -> tuple[str, str]:
         or experiment.mode.test_mode.custom_best_val
         or experiment.mode.test_mode.custom_best_train
     ):
-        selected_exp_date_str = manual_experiment_selection(
-            subfolders_dict, experiment_res_path
-        )
+        selected_exp_date_str = manual_experiment_selection(subfolders_dict, experiment_res_path)
     else:
         selected_exp_date_str = sorted(subfolders_date_str)[-1]
 
     res = [i for i in subfolders if selected_exp_date_str in i]
     if not len(res) == 1:
-        raise ValueError(
-            f"No corresponding result folder was found in '{experiment_res_path}'. Specify path manually!"
-        )
+        raise ValueError(f"No corresponding result folder was found in '{experiment_res_path}'. Specify path manually!")
 
     if experiment.mode.test_mode.custom_last or experiment.mode.test_mode.last:
         search_string = "last_"
-    elif (
-        experiment.mode.test_mode.custom_best_train
-        or experiment.mode.test_mode.best_train
-    ):
+    elif experiment.mode.test_mode.custom_best_train or experiment.mode.test_mode.best_train:
         search_string = "best_train_"
     else:
         search_string = "best_val_"
@@ -131,18 +106,12 @@ def find_model_path(experiment: Any) -> tuple[str, str]:
             possible_files.append(fn)
 
     if len(possible_files) == 0:
-        raise ValueError(
-            f"No corresponding model file was found in '{experiment_res_path}'. Specify path manually!"
-        )
+        raise ValueError(f"No corresponding model file was found in '{experiment_res_path}'. Specify path manually!")
 
     if len(possible_files) > 1:
-        wprint(
-            f"Multiple corresponding models files were found in '{experiment_res_path}':"
-        )
+        wprint(f"Multiple corresponding models files were found in '{experiment_res_path}':")
         wprint(possible_files)
-        wprint(
-            f"Selecting automatically the first one for testing: '{possible_files[0]}'"
-        )
+        wprint(f"Selecting automatically the first one for testing: '{possible_files[0]}'")
 
     return os.path.join(experiment_res_path, res[0]), possible_files[0]
 
@@ -153,9 +122,7 @@ def save_test_results(test_results: Any, experiment: Any) -> None:
         now: datetime = datetime.now()
         dt_string: str = now.strftime("%Y%m%d_%H_%M")
 
-        results_fp: str = os.path.join(
-            experiment.test_dir, f"00_test_results_{dt_string}.json"
-        )
+        results_fp: str = os.path.join(experiment.test_dir, f"00_test_results_{dt_string}.json")
 
         with open(results_fp, "w", encoding="utf-8") as f:
             json.dump(
@@ -169,9 +136,7 @@ def save_test_results(test_results: Any, experiment: Any) -> None:
             )
 
 
-def save_test_info(
-    experiment: Any, model_path: Any | None = None, weights: Any | None = None
-) -> None:
+def save_test_info(experiment: Any, model_path: Any | None = None, weights: Any | None = None) -> None:
     """Save test configuration information to a JSON file."""
     now: datetime = datetime.now()
     dt_string: str = now.strftime("%Y%m%d_%H_%M")
@@ -188,9 +153,7 @@ def save_test_info(
 
 def ui_ask_test_mode(experiment: Any) -> None:
     """UI to select test mode."""
-    exp_mode: int = getIntInput(
-        "\nExperiment Selection:\n1: Last, 2: From List, 3: Path to model\n", [1, 3]
-    )
+    exp_mode: int = getIntInput("\nExperiment Selection:\n1: Last, 2: From List, 3: Path to model\n", [1, 3])
     model_mode: int = 1  # Default value
     if exp_mode in [1, 2]:
         model_mode = getIntInput(
@@ -244,9 +207,7 @@ def run_test(experiment: Any) -> None:
     iprint("-----------------------------------------------------------")
 
     if experiment.is_distributed():
-        raise ValueError(
-            "ERROR: Cannot run test in distributed mode! Please run in single process mode."
-        )
+        raise ValueError("ERROR: Cannot run test in distributed mode! Please run in single process mode.")
 
     experiment.file_store_cnt = 0
 

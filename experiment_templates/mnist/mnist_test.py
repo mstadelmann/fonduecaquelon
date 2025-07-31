@@ -33,9 +33,7 @@ def interactive_test(experiment, test_loader):
     Returns:
         accuracy (float or None): The computed accuracy of the model, or None if no samples were tested.
     """
-    max_samples_to_print = getIntInput(
-        "How many test batches do you want to check?\n", drange=[1, 1000]
-    )
+    max_samples_to_print = getIntInput("How many test batches do you want to check?\n", drange=[1, 1000])
     labels_gt = []
     labels_pred = []
     total_accuracy = []
@@ -132,9 +130,7 @@ def fdq_test(experiment):
     accuracy = None
 
     if experiment.exp_def.data.MNIST.args.test_batch_size != 1:
-        raise ValueError(
-            "Error: Test batch size must be 1 for this experiment. Please change the experiment file."
-        )
+        raise ValueError("Error: Test batch size must be 1 for this experiment. Please change the experiment file.")
 
     if experiment.mode.op_mode.unittest or experiment.inargs.test_model_auto:
         # no interactive for test experiments
@@ -155,9 +151,7 @@ def fdq_test(experiment):
 
     if tmode == 3:
         in_scalar = getIntInput("Int input value?", drange=[0, 5000])
-        in_tensor = in_scalar * torch.ones(
-            (1, 3, experiment.net_input_size[0], experiment.net_input_size[1])
-        )
+        in_tensor = in_scalar * torch.ones((1, 3, experiment.net_input_size[0], experiment.net_input_size[1]))
 
         print(in_tensor.shape)
 
@@ -165,8 +159,6 @@ def fdq_test(experiment):
         pred_sm = F.softmax(pred, dim=1)
         pred_am = pred_sm.argmax()
 
-        print(
-            f"Prediction: {pred.tolist()} \nSoftmax: {pred_sm.tolist()} \nArgmax: {pred_am.tolist()}"
-        )
+        print(f"Prediction: {pred.tolist()} \nSoftmax: {pred_sm.tolist()} \nArgmax: {pred_am.tolist()}")
 
     return accuracy
