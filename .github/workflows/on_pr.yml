@@ -1,4 +1,4 @@
-# Workflow that triggers when commits are pushed to an unmerged PR
+# Triggers when commits are pushed to an unmerged PR targeting main
 
 name: PR workflow
 
@@ -18,9 +18,16 @@ jobs:
   #     pytest: true
   #     artifact-name: "pytest-results"
 
+  run-unittests:
+    name: Run Unittests
+    # needs: in-pr-check
+    # if: ${{ needs.in-pr-check.outputs.result == 'false' }}
+    uses: ./.github/workflows/test.yml
+
   build-package:
     name: Build distribution 📦
     # needs: test-install-python-version
+    needs: run-unittests
     uses: ./.github/workflows/build-package.yml
     with:
       artifact-name: "package-dist"

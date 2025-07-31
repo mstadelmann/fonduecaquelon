@@ -1,4 +1,4 @@
-# Workflow that triggers when commits are pushed to a non-default branch, but aren't in a PR
+# Triggers when commits are pushed to a non-default branch, but aren't in a PR
 
 name: Branch workflow
 
@@ -8,18 +8,18 @@ on:
     paths-ignore: ["**/__about__.py"]
 
 jobs:
-  # in-pr-check:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: insurgent-lab/is-in-pr-action@v0.2.0
-  #       id: isInPR
-  #   outputs:
-  #     result: ${{ steps.isInPR.outputs.result }}
+  in-pr-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: insurgent-lab/is-in-pr-action@v0.2.0
+        id: isInPR
+    outputs:
+      result: ${{ steps.isInPR.outputs.result }}
 
   run-unittests:
     name: Run Unittests
-    # needs: in-pr-check
-    # if: ${{ needs.in-pr-check.outputs.result == 'false' }}
+    needs: in-pr-check
+    if: ${{ needs.in-pr-check.outputs.result == 'false' }}
     uses: ./.github/workflows/test.yml
 
 
