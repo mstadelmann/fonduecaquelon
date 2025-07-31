@@ -21,6 +21,7 @@ jobs:
   build-package:
     name: Build distribution 📦
     # needs: test-install-python-version
+    if: ${{ startsWith(github.event.head_commit.message, 'Bump') || startsWith(github.event.head_commit.message, 'bump') }}
     uses: ./.github/workflows/build-package.yml
     with:
       artifact-name: "package-dist"
