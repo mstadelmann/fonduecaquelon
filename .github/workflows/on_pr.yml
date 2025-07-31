@@ -25,15 +25,15 @@ jobs:
     with:
       artifact-name: "package-dist"
 
-  # publish-to-testpypi:
-  #   name: Publish 🐍📦 to PyPI
-  #   needs: build-package
-  #   if: ${{ github.event.pull_request.merged == false }}
-  #   secrets: inherit
-  #   uses: ./.github/workflows/publish-to-pypi.yml
-  #   with:
-  #     test: true
-  #     artifact-name: "package-dist"
+  publish-to-testpypi:
+    name: Publish 🐍📦 to PyPI
+    needs: build-package
+    if: ${{ github.event.pull_request.merged == false }}
+    secrets: inherit
+    uses: ./.github/workflows/publish-to-pypi.yml
+    with:
+      test: true
+      artifact-name: "package-dist"
 
   version-bump-dev:
     name: Version bump ↗️ (dev)
