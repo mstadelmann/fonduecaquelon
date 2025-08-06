@@ -166,7 +166,7 @@ if ! source /scratch/fdqenv/bin/activate; then
 fi
 
 echo "Installing FDQ version $FDQ_VERSION..."
-if ! uv pip install "fdq==$FDQ_VERSION"; then
+if ! uv pip install "fdq[gpu]==$FDQ_VERSION"; then
     echo "ERROR: Failed to install FDQ"
     exit 1
 fi
@@ -339,8 +339,7 @@ elif [ "$RUN_TEST" == True ]; then
 fi
 
 echo -----------------------------------------------------------
-echo "JOB COMPLETED SUCCESSFULLY"
-echo "Final exit code: $RETVALUE"
+echo "Job COMPLETED with exit code: $RETVALUE"
 echo -----------------------------------------------------------
 exit $RETVALUE
 """

@@ -1,7 +1,7 @@
 [project]
 name = "fdq"
 dynamic = ["version"]
-license = { file = "LICENSE" }
+license = { text = "GPL-3.0-or-later" }
 authors = [
   { name = "Marc Stadelmann", email = "stdma@pm.me" },
 ]
@@ -11,7 +11,6 @@ readme = "README.md"
 requires-python = ">=3.10,<3.13"
 classifiers = [
   "Programming Language :: Python :: 3",
-  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
   "Operating System :: OS Independent",
 ]
 dependencies = [
@@ -35,12 +34,14 @@ dependencies = [
   "opencv-python==4.11.0.86",
   "ruff==0.11.8",
   "onnxruntime==1.22.1",
-  "pycuda==2025.1.1",
 ]
 
 [project.optional-dependencies]
 dev = [
   "ruff==0.11.8",
+]
+gpu = [
+  "pycuda==2025.1.1",
 ]
 
 [dependency-groups]
