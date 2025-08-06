@@ -35,6 +35,7 @@ dependencies = [
   "opencv-python==4.11.0.86",
   "ruff==0.11.8",
   "onnxruntime==1.22.1",
+  "pycuda==2025.1.1",
 ]
 
 [project.optional-dependencies]
