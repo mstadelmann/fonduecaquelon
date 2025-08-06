@@ -339,8 +339,7 @@ elif [ "$RUN_TEST" == True ]; then
 fi
 
 echo -----------------------------------------------------------
-echo "JOB COMPLETED SUCCESSFULLY"
-echo "Final exit code: $RETVALUE"
+echo "Job COMPLETED with exit code: $RETVALUE"
 echo -----------------------------------------------------------
 exit $RETVALUE
 """
