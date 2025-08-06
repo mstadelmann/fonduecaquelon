@@ -79,7 +79,7 @@ class OxfordPetDataset(torch.utils.data.Dataset):
 
         return {"image": image, "mask": mask}
 
-    def _read_split(self):
+    def _read_split(self) -> list[str]:
         split_filename = "test.txt" if self.mode == "test" else "trainval.txt"
         split_filepath = os.path.join(self.root, "annotations", split_filename)
         with open(split_filepath, encoding="utf8") as f:
@@ -92,7 +92,7 @@ class OxfordPetDataset(torch.utils.data.Dataset):
         return filenames
 
     @staticmethod
-    def download(root):
+    def download(root: str) -> None:
         # load images
         filepath = os.path.join(root, "images.tar.gz")
         download_url(
@@ -110,7 +110,7 @@ class OxfordPetDataset(torch.utils.data.Dataset):
         extract_archive(filepath)
 
 
-def create_datasets(experiment, args=None):
+def create_datasets(experiment, args=None) -> dict:
     """Creates and returns data loaders and dataset statistics for the Oxford Pet dataset based on the experiment configuration."""
     pin_mem = True if experiment.is_cuda else args.get("pin_memory", False)
     drop_last = args.get("drop_last", True)
@@ -218,13 +218,13 @@ def create_datasets(experiment, args=None):
 class TqdmUpTo(tqdm):
     """A tqdm progress bar subclass that provides an 'update_to' method for use with urlretrieve reporthook."""
 
-    def update_to(self, b=1, bsize=1, tsize=None):
+    def update_to(self, b: int = 1, bsize: int = 1, tsize: int | None = None) -> None:
         if tsize is not None:
             self.total = tsize
         self.update(b * bsize - self.n)
 
 
-def download_url(url, filepath):
+def download_url(url: str, filepath: str) -> None:
     """Download a file from a URL to the specified filepath, showing a progress bar."""
     directory = os.path.dirname(os.path.abspath(filepath))
     os.makedirs(directory, exist_ok=True)
@@ -242,7 +242,7 @@ def download_url(url, filepath):
         t.total = t.n
 
 
-def extract_archive(filepath):
+def extract_archive(filepath: str) -> None:
     """Extracts the archive at the given filepath to its containing directory if not already extracted."""
     extract_dir = os.path.dirname(os.path.abspath(filepath))
     dst_dir = os.path.splitext(filepath)[0]

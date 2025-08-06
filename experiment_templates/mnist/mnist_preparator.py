@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader, random_split
 from torchvision import datasets
 
 
-def create_datasets(experiment, args):
+def create_datasets(experiment, args) -> dict:
     """Creates MNIST  DataLoaders.
 
     Creates and returns MNIST dataset DataLoaders for training, validation, and testing,
