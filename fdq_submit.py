@@ -65,6 +65,7 @@ def get_template() -> str:
 #SBATCH --ntasks=#ntasks#
 #SBATCH --cpus-per-task=#cpus_per_task#
 #SBATCH --nodes=#nodes#
+#NODELIST#
 #SBATCH --gres=#gres#
 #SBATCH --mem=#mem#
 #SBATCH --partition=#partition#
@@ -535,6 +536,7 @@ def get_default_config(slurm_conf: Any) -> dict[str, Any]:
         "cpus_per_task": 8,
         "cpus_per_task_test": None,
         "nodes": 1,
+        "nodelist": None,
         "gres": "gpu:1",
         "gres_test": None,
         "mem": "32G",
@@ -659,6 +661,14 @@ def create_submit_file(job_config: dict[str, Any], slurm_conf: Any, submit_path:
             placeholder = f"#{key}#"
             if placeholder in template_content:
                 template_content = template_content.replace(placeholder, str(value))
+
+        # set nodelist if specified
+        nodelist_placeholder = "#NODELIST#"
+        if job_config["nodelist"] == "None":
+            nodelist_string = ""
+        else:
+            nodelist_string = f"#SBATCH --nodelist={job_config['nodelist']}"
+        template_content = template_content.replace(nodelist_placeholder, nodelist_string)
 
         # Clean up double slashes in paths
         template_content = template_content.replace("//", "/")
