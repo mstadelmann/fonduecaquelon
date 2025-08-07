@@ -14,7 +14,6 @@ classifiers = [
   "Operating System :: OS Independent",
 ]
 dependencies = [
-  "chuchichaestli==0.2.7",
   "einops==0.8.1",
   "torch==2.7.0",
   "torch_tensorrt==2.7.0",
@@ -22,7 +21,6 @@ dependencies = [
   "torchview==0.2.7",
   "funkybob==2023.12.0",
   "wandb==0.19.10",
-  "monai==1.4.0",
   "progressbar==2.5",
   "tpl==0.10",
   "termplotlib==0.3.9",
@@ -32,7 +30,6 @@ dependencies = [
   "scikit-learn==1.6.1",
   "tensorboard==2.19.0",
   "opencv-python==4.11.0.86",
-  "ruff==0.11.8",
   "onnxruntime==1.22.1",
 ]
 
@@ -47,6 +44,9 @@ gpu = [
 [dependency-groups]
 dev = [
   "ruff==0.11.8",
+]
+gpu = [
+  "pycuda==2025.1.1",
 ]
 
 [project.urls]

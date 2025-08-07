@@ -139,6 +139,9 @@
         "run_test": true,
         "auto_resubmit": true,
         "world_size": 1,
-        "resume_chpt_path": null
+        "resume_chpt_path": null,
+        "additional_pip_packages": [
+            "chuchichaestli==0.2.12"
+        ]
     }
 }
