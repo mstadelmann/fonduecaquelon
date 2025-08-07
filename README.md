@@ -31,12 +31,17 @@ Install the latest release from PyPI:
 pip install fdq
 ```
 
+If you have an Nvidia GPU and want to run inference, additionally install the GPU dependencies:
+```bash
+pip install fdq[gpu]
+```
+
 Or, for development and the latest features, clone the repository:
 
 ```bash
 git clone https://github.com/mstadelmann/fonduecaquelon.git
 cd fonduecaquelon
-pip install -e .
+pip install -e .[dev,gpu]
 ```
 
 ---
@@ -214,7 +219,7 @@ Example:
 
 ```json
 "slurm_cluster": {
-    "fdq_version": "0.0.51",
+    "fdq_version": "0.0.63",
     "...": "...",
     "additional_pip_packages": [
         "monai==1.4.0",
