@@ -199,6 +199,8 @@ def create_datasets(experiment, args=None) -> dict:
         sampler=val_sampler,
     )
 
+    # No mandatory structure here, instead all values
+    # that are returned can be accessed in the training loop.
     return {
         "train_data_loader": train_loader,
         "val_data_loader": val_loader,

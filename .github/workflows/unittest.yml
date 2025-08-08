@@ -57,6 +57,14 @@ jobs:
         PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}
         HOME: /tmp
     
+    - name: Run transformer tests
+      run: |
+        cd ${{ github.workspace }}
+        python -m unittest test.test_transformers -v
+      env:
+        PYTHONPATH: ${{ github.workspace }}/src:${{ github.workspace }}
+        HOME: /tmp
+    
     - name: Run MNIST classifier test
       run: |
         cd ${{ github.workspace }}
