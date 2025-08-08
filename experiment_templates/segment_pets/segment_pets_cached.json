@@ -8,9 +8,9 @@
         "OXPET": {
             "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxfordpet_preparator.py",
             "args": {
-                "subset_train": 0.4,
-                "subset_val": 0.4,
-                "subset_test": 0.4,
+                "subset_train": 0.2,
+                "subset_val": 0.2,
+                "subset_test": 0.2,
                 "pin_memory": true,
                 "num_workers": 4,
                 "train_batch_size": 48,
@@ -22,7 +22,12 @@
             },
             "caching": {
                 "enabled": true,
-                "cache_dir": "/scratch/fdq_cache/"
+                "cache_dir": "/scratch/fdq_cache/",
+                "shuffle_train": true,
+                "shuffle_val": false,
+                "shuffle_test": false,
+                "pin_memory": true,
+                "num_workers": 4
             }
         }
     }

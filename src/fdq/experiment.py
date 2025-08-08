@@ -433,7 +433,7 @@ class fdqExperiment:
             if data_source.caching is None:
                 self.data[data_name] = DictToObj(processor.create_datasets(self, args))
             else:
-                self.data[data_name] = DictToObj(cache_datasets(self, processor, args, data_name, data_source))
+                self.data[data_name] = DictToObj(cache_datasets(self, processor, data_name, data_source))
 
         self.print_dataset_infos()
 

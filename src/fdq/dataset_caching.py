@@ -111,20 +111,20 @@ class CachedDataset(Dataset):
         return self.cached_data[idx]
 
 
-def cache_datasets(experiment, processor, args, data_name, data_source):
+def cache_datasets(experiment, processor, data_name, data_source):
     """Cache dataset to disk and return a RAM-based dataset.
 
     Args:
         experiment: The experiment object
         processor: Data processor object
-        args: Arguments for dataset creation
         data_name: Name of the dataset
         data_source: Data source configuration
 
     Returns:
         DictToObj: Updated data object with cached dataloaders
     """
-    data = DictToObj(processor.create_datasets(experiment, args))
+
+    data = DictToObj(processor.create_datasets(experiment, data_source.args))
 
     cache_dir = data_source.caching.cache_dir
     create_cache_dir(cache_dir)
@@ -143,43 +143,38 @@ def cache_datasets(experiment, processor, args, data_name, data_source):
         "test": data.test_data_loader if hasattr(data, "test_data_loader") else None,
     }
 
-    cached_loaders = {}
+    shuffle_settings = get_shuffle_setting(data_source)
 
+    cached_loaders = {}
     # Cache each split
     for split_name, dataloader in loaders_to_cache.items():
         if dataloader is None:
             print(f"No {split_name} dataloader found, skipping...")
             continue
 
-        cache_file_path = cache_files[split_name]
-
         # Check if cache already exists
-        if not os.path.exists(cache_file_path):
-            print(f"Caching {split_name} dataset to {cache_file_path}...")
-            cached_samples = _cache_dataloader(dataloader, split_name)
+        if not os.path.exists(cache_files[split_name]):
+            print(f"Caching {split_name} dataset to {cache_files[split_name]}...")
+            cached_samples = cache_dataloader(dataloader, split_name)
 
             # Save cached data to disk
-            _save_samples_to_hdf5(cached_samples, cache_file_path)
-            print(
-                f"{split_name.capitalize()} dataset cached successfully! {len(cached_samples)} samples saved."
-            )
+            _save_samples_to_hdf5(cached_samples, cache_files[split_name])
+            print(f"{split_name.capitalize()} dataset cached successfully! {len(cached_samples)} samples saved.")
         else:
-            print(
-                f"Cache file already exists at {cache_file_path}, loading {split_name} from cache..."
-            )
+            print(f"Cache file already exists at {cache_files[split_name]}, loading {split_name} from cache...")
 
         # Create cached dataset that loads data into RAM
-        cached_dataset = CachedDataset(cache_file_path)
+        cached_dataset = CachedDataset(cache_files[split_name])
 
         # Create new DataLoader with cached dataset
         cached_loader = DataLoader(
             cached_dataset,
             batch_size=dataloader.batch_size,
-            shuffle=_get_shuffle_setting(dataloader, split_name),
-            num_workers=0,  # No need for workers since data is in RAM
-            pin_memory=False,  # Data is already in memory
+            shuffle=shuffle_settings[split_name],
+            num_workers=data_source.caching.get("num_workers", 0),  # recommended 0 as data is already in RAM
+            pin_memory=data_source.caching.get("pin_memory", False),  # no need to PIN memory as data is in RAM
             drop_last=getattr(dataloader, "drop_last", False),
-            sampler=None,  # Remove sampler for cached data
+            sampler=None,  # TODO
         )
 
         cached_loaders[split_name] = cached_loader
@@ -295,7 +290,7 @@ def set_dataloader_workers_to_zero(dataloader):
     )
 
 
-def _cache_dataloader(dataloader, split_name):
+def cache_dataloader(dataloader, split_name):
     """Cache a single dataloader's data.
 
     Args:
@@ -309,9 +304,7 @@ def _cache_dataloader(dataloader, split_name):
 
     if dataloader.num_workers != 0:
         # If num_workers is not zero, set it to zero for caching
-        print(
-            "WARNING: multiple dataloader workers might cause CUDA issues during caching."
-        )
+        print("WARNING: multiple dataloader workers might cause CUDA issues during caching.")
         print("Setting dataloader num_workers to 0 for caching.")
         dataloader = set_dataloader_workers_to_zero(dataloader)
 
@@ -360,8 +353,7 @@ def _cache_dataloader(dataloader, split_name):
                     cached_samples.append((inp, tgt))
             else:
                 # Handle single tensor batches
-                for i in range(len(batch)):
-                    item = batch[i]
+                for item in batch:
                     if torch.is_tensor(item):
                         item = item.cpu()
                         if not item.is_contiguous():
@@ -372,26 +364,12 @@ def _cache_dataloader(dataloader, split_name):
     return cached_samples
 
 
-def _get_shuffle_setting(dataloader, split_name):
-    """Determine shuffle setting for cached dataloader.
+def get_shuffle_setting(data_source):
+    shuffle_settings = {}
+    for split_name in ["train", "val", "test"]:
+        shuffle = data_source.caching.get(f"shuffle_{split_name}", data_source.args.get(f"shuffle_{split_name}"))
+        if shuffle is None:
+            raise ValueError(f"Shuffle setting for {split_name} is not defined in caching configuration or args.")
+        shuffle_settings[split_name] = shuffle
 
-    Args:
-        dataloader: Original dataloader
-        split_name: Name of the split
-
-    Returns:
-        bool: Whether to shuffle the cached dataloader
-    """
-    # Generally, only shuffle training data
-    if split_name == "train":
-        # Try to get shuffle setting from original dataloader
-        if hasattr(dataloader, "shuffle"):
-            return dataloader.shuffle
-        # If sampler exists, it handles shuffling
-        elif hasattr(dataloader, "sampler") and dataloader.sampler is not None:
-            return False  # Sampler handles shuffling
-        else:
-            return True  # Default to shuffle for training
-    else:
-        # Validation and test sets typically shouldn't be shuffled
-        return False
+    return shuffle_settings
