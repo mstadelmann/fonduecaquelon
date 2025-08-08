@@ -5,6 +5,7 @@ import h5py
 import json
 import hashlib
 import glob
+from datetime import datetime
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from fdq.misc import DictToObj
@@ -183,8 +184,7 @@ def find_valid_cache_file(cache_dir, data_name, split_name, expected_hash):
     Returns:
         str or None: Path to valid cache file or None if not found
     """
-    # Look for files matching the pattern with any hash
-    import glob
+    # Look for files matching the pattern with any timestamp
     pattern = os.path.join(cache_dir, f"{data_name}_{split_name}_*.h5")
     candidate_files = glob.glob(pattern)
     
@@ -228,8 +228,9 @@ def cache_datasets(experiment, processor, data_name, data_source):
         if existing_file:
             cache_files[split_name] = existing_file
         else:
-            # Create new filename with hash
-            cache_files[split_name] = os.path.join(cache_dir, f"{data_name}_{split_name}_{conf_hash[:8]}.h5")
+            # Create new filename with datetime stamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            cache_files[split_name] = os.path.join(cache_dir, f"{data_name}_{split_name}_{timestamp}.h5")
 
     # Define which dataloaders to cache
     loaders_to_cache = {
