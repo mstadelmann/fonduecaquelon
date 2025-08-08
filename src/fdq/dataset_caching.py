@@ -5,7 +5,8 @@ import h5py
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from fdq.misc import DictToObj
-
+import json
+import hashlib
 
 def create_cache_dir(cache_dir: str) -> None:
     """Create the cache directory if it doesn't exist."""
@@ -161,6 +162,14 @@ class CachedDataset(Dataset):
         return self.cached_data[idx]
 
 
+def hash_conf(conf):
+    """Create a hash from a dictionary."""
+    # Convert dict to JSON string with sorted keys for consistency
+    dict_string = json.dumps(conf.to_dict(), sort_keys=True, ensure_ascii=True)
+    # Create hash
+    return hashlib.md5(dict_string.encode()).hexdigest()
+
+
 def cache_datasets(experiment, processor, data_name, data_source):
     """Cache dataset to disk and return a RAM-based dataset.
 
@@ -173,7 +182,8 @@ def cache_datasets(experiment, processor, data_name, data_source):
     Returns:
         DictToObj: Updated data object with cached dataloaders
     """
-
+    conf_hash = hash_conf(data_source.args)
+    
     data = DictToObj(processor.create_datasets(experiment, data_source.args))
 
     cache_dir = data_source.caching.cache_dir
