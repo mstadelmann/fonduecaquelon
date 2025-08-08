@@ -1,5 +1,7 @@
 import os
+import numpy as np
 import torch
+import h5py
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from fdq.misc import DictToObj
@@ -18,9 +20,87 @@ class CachedDataset(Dataset):
         """Initialize the cached dataset.
 
         Args:
-            cache_file_path: Path to the cached .pt file
+            cache_file_path: Path to the cached .h5 file
         """
-        self.cached_data = torch.load(cache_file_path, map_location="cpu")
+        self.cache_file_path = cache_file_path
+        # Load the data into memory for fast access
+        with h5py.File(cache_file_path, "r") as f:
+            # Load metadata from attributes
+            if "num_samples" in f.attrs:
+                self.num_samples = f.attrs["num_samples"]
+            else:
+                # Fallback: count groups
+                self.num_samples = len([k for k in f.keys() if k.startswith("sample_")])
+
+            # Pre-load all data into memory
+            self.cached_data = []
+            for i in range(self.num_samples):
+                sample_group = f[f"sample_{i}"]
+                sample = self._load_sample_from_group(sample_group)
+                self.cached_data.append(sample)
+
+    def _load_sample_from_group(self, group):
+        """Load a sample from an HDF5 group."""
+        if "type" in group.attrs:
+            sample_type = group.attrs["type"]
+
+            if sample_type == "dict":
+                sample = {}
+                for key in group.keys():
+                    if key.endswith("_data"):
+                        original_key = key[:-5]  # Remove '_data' suffix
+                        value = group[key][:]
+                        # Convert back to tensor
+                        sample[original_key] = torch.from_numpy(value)
+
+                # Load non-array attributes
+                for attr_name in group.attrs.keys():
+                    if attr_name != "type":
+                        sample[attr_name] = group.attrs[attr_name]
+                return sample
+
+            elif sample_type == "tuple":
+                items = []
+                # Get the number of items from attributes
+                num_items = group.attrs.get("num_items", 0)
+                for i in range(num_items):
+                    if f"item_{i}_data" in group:
+                        value = group[f"item_{i}_data"][:]
+                        items.append(torch.from_numpy(value))
+                    else:
+                        # Get scalar value from attributes
+                        attr_name = f"item_{i}_value"
+                        if attr_name in group.attrs:
+                            items.append(group.attrs[attr_name])
+                return tuple(items)
+
+            elif sample_type == "list":
+                items = []
+                # Get the number of items from attributes
+                num_items = group.attrs.get("num_items", 0)
+                for i in range(num_items):
+                    if f"item_{i}_data" in group:
+                        value = group[f"item_{i}_data"][:]
+                        items.append(torch.from_numpy(value))
+                    else:
+                        # Get scalar value from attributes
+                        attr_name = f"item_{i}_value"
+                        if attr_name in group.attrs:
+                            items.append(group.attrs[attr_name])
+                return items
+
+            elif sample_type == "tensor":
+                value = group["data"][:]
+                return torch.from_numpy(value)
+
+            elif sample_type == "other":
+                # Get the value from attributes
+                return group.attrs.get("value", None)
+
+        # Fallback for older format or unknown type
+        if "data" in group:
+            return torch.from_numpy(group["data"][:])
+        return None
 
     def __len__(self):
         """Return the number of cached samples."""
@@ -28,44 +108,7 @@ class CachedDataset(Dataset):
 
     def __getitem__(self, idx):
         """Return the cached sample at the given index."""
-        sample = self.cached_data[idx]
-
-        # Ensure tensors are contiguous and properly aligned for CUDA operations
-        if isinstance(sample, dict):
-            result = {}
-            for key, value in sample.items():
-                if torch.is_tensor(value):
-                    # Ensure tensor is contiguous and create a new aligned tensor
-                    tensor = value.contiguous()
-                    # Force memory alignment by cloning if needed
-                    if not tensor.is_contiguous():
-                        tensor = tensor.clone()
-                    result[key] = tensor
-                else:
-                    result[key] = value
-            return result
-        elif isinstance(sample, tuple | list):
-            result = []
-            for item in sample:
-                if torch.is_tensor(item):
-                    # Ensure tensor is contiguous and create a new aligned tensor
-                    tensor = item.contiguous()
-                    # Force memory alignment by cloning if needed
-                    if not tensor.is_contiguous():
-                        tensor = tensor.clone()
-                    result.append(tensor)
-                else:
-                    result.append(item)
-            return tuple(result) if isinstance(sample, tuple) else result
-        else:
-            if torch.is_tensor(sample):
-                # Ensure tensor is contiguous and create a new aligned tensor
-                tensor = sample.contiguous()
-                # Force memory alignment by cloning if needed
-                if not tensor.is_contiguous():
-                    tensor = tensor.clone()
-                return tensor
-            return sample
+        return self.cached_data[idx]
 
 
 def cache_datasets(experiment, processor, args, data_name, data_source):
@@ -88,9 +131,9 @@ def cache_datasets(experiment, processor, args, data_name, data_source):
 
     # Define cache file paths for each split
     cache_files = {
-        "train": os.path.join(cache_dir, f"{data_name}_train_cache.pt"),
-        "val": os.path.join(cache_dir, f"{data_name}_val_cache.pt"),
-        "test": os.path.join(cache_dir, f"{data_name}_test_cache.pt"),
+        "train": os.path.join(cache_dir, f"{data_name}_train_cache.h5"),
+        "val": os.path.join(cache_dir, f"{data_name}_val_cache.h5"),
+        "test": os.path.join(cache_dir, f"{data_name}_test_cache.h5"),
     }
 
     # Define which dataloaders to cache
@@ -116,10 +159,14 @@ def cache_datasets(experiment, processor, args, data_name, data_source):
             cached_samples = _cache_dataloader(dataloader, split_name)
 
             # Save cached data to disk
-            torch.save(cached_samples, cache_file_path)
-            print(f"{split_name.capitalize()} dataset cached successfully! {len(cached_samples)} samples saved.")
+            _save_samples_to_hdf5(cached_samples, cache_file_path)
+            print(
+                f"{split_name.capitalize()} dataset cached successfully! {len(cached_samples)} samples saved."
+            )
         else:
-            print(f"Cache file already exists at {cache_file_path}, loading {split_name} from cache...")
+            print(
+                f"Cache file already exists at {cache_file_path}, loading {split_name} from cache..."
+            )
 
         # Create cached dataset that loads data into RAM
         cached_dataset = CachedDataset(cache_file_path)
@@ -148,6 +195,106 @@ def cache_datasets(experiment, processor, args, data_name, data_source):
     return data
 
 
+def _save_samples_to_hdf5(samples, file_path):
+    """Save samples to HDF5 format.
+
+    Args:
+        samples: List of samples to save
+        file_path: Path to save the HDF5 file
+    """
+    with h5py.File(file_path, "w") as f:
+        # Save metadata as root attributes
+        f.attrs["num_samples"] = len(samples)
+
+        for i, sample in enumerate(samples):
+            sample_group = f.create_group(f"sample_{i}")
+            _save_sample_to_group(sample, sample_group)
+
+
+def _save_sample_to_group(sample, group):
+    """Save a single sample to an HDF5 group.
+
+    Args:
+        sample: The sample to save
+        group: HDF5 group to save to
+    """
+    if isinstance(sample, dict):
+        group.attrs["type"] = "dict"
+        for key, value in sample.items():
+            if isinstance(value, np.ndarray):
+                # Save numpy array directly
+                group.create_dataset(f"{key}_data", data=value, compression="gzip")
+            elif isinstance(value, (int, float, str, bool, np.integer, np.floating)):
+                # Save scalar values as attributes
+                group.attrs[key] = value
+            else:
+                # For complex types, convert to string representation
+                group.attrs[key] = str(value)
+
+    elif isinstance(sample, tuple):
+        group.attrs["type"] = "tuple"
+        group.attrs["num_items"] = len(sample)
+        for i, item in enumerate(sample):
+            if isinstance(item, np.ndarray):
+                group.create_dataset(f"item_{i}_data", data=item, compression="gzip")
+            elif isinstance(item, (int, float, str, bool, np.integer, np.floating)):
+                group.attrs[f"item_{i}_value"] = item
+            else:
+                group.attrs[f"item_{i}_value"] = str(item)
+
+    elif isinstance(sample, list):
+        group.attrs["type"] = "list"
+        group.attrs["num_items"] = len(sample)
+        for i, item in enumerate(sample):
+            if isinstance(item, np.ndarray):
+                group.create_dataset(f"item_{i}_data", data=item, compression="gzip")
+            elif isinstance(item, (int, float, str, bool, np.integer, np.floating)):
+                group.attrs[f"item_{i}_value"] = item
+            else:
+                group.attrs[f"item_{i}_value"] = str(item)
+
+    elif isinstance(sample, np.ndarray):
+        group.attrs["type"] = "tensor"
+        group.create_dataset("data", data=sample, compression="gzip")
+
+    else:
+        # For other types, store as attributes
+        group.attrs["type"] = "other"
+        if isinstance(sample, (int, float, str, bool, np.integer, np.floating)):
+            group.attrs["value"] = sample
+        else:
+            group.attrs["value"] = str(sample)
+
+
+def set_dataloader_workers_to_zero(dataloader):
+    """Create a new DataLoader identical to the input but with num_workers=0.
+
+    Args:
+        dataloader: PyTorch DataLoader to modify
+
+    Returns:
+        DataLoader: New DataLoader with num_workers=0 and all other parameters preserved
+    """
+    return DataLoader(
+        dataset=dataloader.dataset,
+        batch_size=dataloader.batch_size,
+        shuffle=False,
+        sampler=dataloader.sampler,
+        # batch_sampler=dataloader.batch_sampler,
+        # batch_sampler option is mutually exclusive with batch_size, shuffle, sampler, and drop_last
+        num_workers=0,  # Set to 0
+        collate_fn=dataloader.collate_fn,
+        pin_memory=dataloader.pin_memory,
+        drop_last=dataloader.drop_last,
+        timeout=dataloader.timeout,
+        worker_init_fn=dataloader.worker_init_fn,
+        multiprocessing_context=dataloader.multiprocessing_context,
+        generator=dataloader.generator,
+        prefetch_factor=None,  # Set to None to avoid issues with num_workers=0
+        persistent_workers=dataloader.persistent_workers,
+    )
+
+
 def _cache_dataloader(dataloader, split_name):
     """Cache a single dataloader's data.
 
@@ -160,6 +307,14 @@ def _cache_dataloader(dataloader, split_name):
     """
     cached_samples = []
 
+    if dataloader.num_workers != 0:
+        # If num_workers is not zero, set it to zero for caching
+        print(
+            "WARNING: multiple dataloader workers might cause CUDA issues during caching."
+        )
+        print("Setting dataloader num_workers to 0 for caching.")
+        dataloader = set_dataloader_workers_to_zero(dataloader)
+
     # Iterate through the entire dataset and cache it
     for batch in tqdm(dataloader, desc=f"Caching {split_name} dataset"):
         # Store each sample in the batch individually
@@ -169,14 +324,14 @@ def _cache_dataloader(dataloader, split_name):
             for i in range(batch_size):
                 sample = {}
                 for key, value in batch.items():
-                    # Ensure tensor is contiguous, aligned, and on CPU for proper serialization
+                    # Convert tensor to numpy array for efficient storage
                     if torch.is_tensor(value):
-                        # Move to CPU first, then ensure contiguity and proper alignment
+                        # Move to CPU first, then convert to numpy
                         tensor = value[i].cpu()
                         if not tensor.is_contiguous():
                             tensor = tensor.contiguous()
-                        # Clone to ensure proper memory alignment
-                        sample[key] = tensor.clone()
+                        # Convert to numpy array
+                        sample[key] = tensor.numpy()
                     else:
                         sample[key] = value[i]
                 cached_samples.append(sample)
@@ -186,7 +341,7 @@ def _cache_dataloader(dataloader, split_name):
                 inputs, targets = batch
                 batch_size = len(inputs)
                 for i in range(batch_size):
-                    # Ensure tensors are contiguous, aligned, and on CPU
+                    # Convert tensors to numpy arrays
                     inp = inputs[i]
                     tgt = targets[i]
 
@@ -194,13 +349,13 @@ def _cache_dataloader(dataloader, split_name):
                         inp = inp.cpu()
                         if not inp.is_contiguous():
                             inp = inp.contiguous()
-                        inp = inp.clone()
+                        inp = inp.numpy()
 
                     if torch.is_tensor(tgt):
                         tgt = tgt.cpu()
                         if not tgt.is_contiguous():
                             tgt = tgt.contiguous()
-                        tgt = tgt.clone()
+                        tgt = tgt.numpy()
 
                     cached_samples.append((inp, tgt))
             else:
@@ -211,7 +366,7 @@ def _cache_dataloader(dataloader, split_name):
                         item = item.cpu()
                         if not item.is_contiguous():
                             item = item.contiguous()
-                        item = item.clone()
+                        item = item.numpy()
                     cached_samples.append(item)
 
     return cached_samples
@@ -240,81 +395,3 @@ def _get_shuffle_setting(dataloader, split_name):
     else:
         # Validation and test sets typically shouldn't be shuffled
         return False
-
-
-def cache_single_dataset(dataloader, cache_file_path, split_name="dataset"):
-    """Cache a single dataloader to a specific file path.
-
-    Args:
-        dataloader: PyTorch DataLoader to cache
-        cache_file_path: Path where to save the cached data
-        split_name: Name of the split (for logging)
-
-    Returns:
-        DataLoader: New DataLoader with cached data
-    """
-    # Ensure cache directory exists
-    cache_dir = os.path.dirname(cache_file_path)
-    create_cache_dir(cache_dir)
-
-    # Check if cache already exists
-    if not os.path.exists(cache_file_path):
-        print(f"Caching {split_name} dataset to {cache_file_path}...")
-        cached_samples = _cache_dataloader(dataloader, split_name)
-
-        # Save cached data to disk with proper serialization
-        print(f"Saving {len(cached_samples)} samples to {cache_file_path}...")
-
-        # Ensure all tensors are properly formatted before saving
-        cleaned_samples = []
-        for sample in cached_samples:
-            if isinstance(sample, dict):
-                cleaned_sample = {}
-                for key, value in sample.items():
-                    if torch.is_tensor(value):
-                        # Ensure tensor is in the most compatible format
-                        value = value.cpu().contiguous().clone()
-                        # Force float32 for images and masks to ensure compatibility
-                        if value.dtype in [torch.float64, torch.float16]:
-                            value = value.float()
-                        cleaned_sample[key] = value
-                    else:
-                        cleaned_sample[key] = value
-                cleaned_samples.append(cleaned_sample)
-            elif isinstance(sample, tuple | list):
-                cleaned_sample = []
-                for item in sample:
-                    if torch.is_tensor(item):
-                        item = item.cpu().contiguous().clone()
-                        if item.dtype in [torch.float64, torch.float16]:
-                            item = item.float()
-                        cleaned_sample.append(item)
-                    else:
-                        cleaned_sample.append(item)
-                cleaned_samples.append(tuple(cleaned_sample) if isinstance(sample, tuple) else cleaned_sample)
-            else:
-                if torch.is_tensor(sample):
-                    sample = sample.cpu().contiguous().clone()
-                    if sample.dtype in [torch.float64, torch.float16]:
-                        sample = sample.float()
-                cleaned_samples.append(sample)
-
-        torch.save(cleaned_samples, cache_file_path)
-        print(f"{split_name.capitalize()} dataset cached successfully! {len(cached_samples)} samples saved.")
-    else:
-        print(f"Cache file already exists at {cache_file_path}, loading {split_name} from cache...")
-
-    # Create cached dataset that loads data into RAM
-    cached_dataset = CachedDataset(cache_file_path)
-
-    # Create new DataLoader with cached dataset
-    cached_loader = DataLoader(
-        cached_dataset,
-        batch_size=dataloader.batch_size,
-        shuffle=_get_shuffle_setting(dataloader, split_name),
-        num_workers=0,  # No need for workers since data is in RAM
-        pin_memory=False,  # Data is already in memory
-        drop_last=getattr(dataloader, "drop_last", False),
-    )
-
-    return cached_loader

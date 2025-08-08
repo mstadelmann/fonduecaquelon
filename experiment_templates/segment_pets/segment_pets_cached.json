@@ -1,0 +1,29 @@
+{
+    "globals": {
+        "project": "Segment OXPET segmentation",
+        "author": "Marc",
+        "parent": "segment_pets.json"
+    },
+    "data": {
+        "OXPET": {
+            "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxfordpet_preparator.py",
+            "args": {
+                "subset_train": 0.4,
+                "subset_val": 0.4,
+                "subset_test": 0.4,
+                "pin_memory": true,
+                "num_workers": 4,
+                "train_batch_size": 48,
+                "val_batch_size": 48,
+                "test_batch_size": 1,
+                "shuffle_train": true,
+                "shuffle_val": false,
+                "shuffle_test": false
+            },
+            "caching": {
+                "enabled": true,
+                "cache_dir": "/scratch/fdq_cache/"
+            }
+        }
+    }
+}

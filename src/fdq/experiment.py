@@ -34,6 +34,7 @@ from fdq.misc import (
     save_wandb,
     load_conf_file,
 )
+from fdq.dataset_caching import cache_datasets
 
 
 class fdqExperiment:
@@ -429,7 +430,11 @@ class fdqExperiment:
         for data_name, data_source in self.exp_def.data.items():
             processor = self.import_class(file_path=data_source.processor)
             args = self.exp_def.data.get(data_name).args
-            self.data[data_name] = DictToObj(processor.create_datasets(self, args))
+            if data_source.caching is None:
+                self.data[data_name] = DictToObj(processor.create_datasets(self, args))
+            else:
+                self.data[data_name] = DictToObj(cache_datasets(self, processor, args, data_name, data_source))
+
         self.print_dataset_infos()
 
     def save_current_model(self) -> None:
