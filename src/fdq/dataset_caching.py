@@ -2,11 +2,12 @@ import os
 import numpy as np
 import torch
 import h5py
+import json
+import hashlib
+import glob
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from fdq.misc import DictToObj
-import json
-import hashlib
 
 def create_cache_dir(cache_dir: str) -> None:
     """Create the cache directory if it doesn't exist."""
@@ -170,6 +171,36 @@ def hash_conf(conf):
     return hashlib.md5(dict_string.encode()).hexdigest()
 
 
+def find_valid_cache_file(cache_dir, data_name, split_name, expected_hash):
+    """Find a cache file with the correct configuration hash.
+    
+    Args:
+        cache_dir: Directory to search for cache files
+        data_name: Name of the dataset
+        split_name: Split name (train/val/test)
+        expected_hash: Expected configuration hash
+        
+    Returns:
+        str or None: Path to valid cache file or None if not found
+    """
+    # Look for files matching the pattern with any hash
+    import glob
+    pattern = os.path.join(cache_dir, f"{data_name}_{split_name}_*.h5")
+    candidate_files = glob.glob(pattern)
+    
+    for file_path in candidate_files:
+        try:
+            with h5py.File(file_path, "r") as f:
+                stored_hash = f.attrs.get("config_hash", "")
+                if stored_hash == expected_hash:
+                    return file_path
+        except Exception:
+            # Skip corrupted or unreadable files
+            continue
+    
+    return None
+
+
 def cache_datasets(experiment, processor, data_name, data_source):
     """Cache dataset to disk and return a RAM-based dataset.
 
@@ -182,19 +213,23 @@ def cache_datasets(experiment, processor, data_name, data_source):
     Returns:
         DictToObj: Updated data object with cached dataloaders
     """
-    conf_hash = hash_conf(data_source.args)
+    # Create configuration hash for cache validation
+    conf_hash = hash_conf(data_source)
     
     data = DictToObj(processor.create_datasets(experiment, data_source.args))
 
     cache_dir = data_source.caching.cache_dir
     create_cache_dir(cache_dir)
 
-    # Define cache file paths for each split
-    cache_files = {
-        "train": os.path.join(cache_dir, f"{data_name}_train_cache.h5"),
-        "val": os.path.join(cache_dir, f"{data_name}_val_cache.h5"),
-        "test": os.path.join(cache_dir, f"{data_name}_test_cache.h5"),
-    }
+    # Try to find existing cache files with correct hash or create new paths
+    cache_files = {}
+    for split_name in ["train", "val", "test"]:
+        existing_file = find_valid_cache_file(cache_dir, data_name, split_name, conf_hash)
+        if existing_file:
+            cache_files[split_name] = existing_file
+        else:
+            # Create new filename with hash
+            cache_files[split_name] = os.path.join(cache_dir, f"{data_name}_{split_name}_{conf_hash[:8]}.h5")
 
     # Define which dataloaders to cache
     loaders_to_cache = {
@@ -214,13 +249,32 @@ def cache_datasets(experiment, processor, data_name, data_source):
             print(f"No {split_name} dataloader found, skipping...")
             continue
 
-        # Check if cache already exists
-        if not os.path.exists(cache_files[split_name]):
+        # Check if cache with correct hash already exists
+        if os.path.exists(cache_files[split_name]):
+            # Verify the hash matches
+            try:
+                with h5py.File(cache_files[split_name], "r") as f:
+                    stored_hash = f.attrs.get("config_hash", "")
+                    if stored_hash == conf_hash:
+                        file_size_mb = get_file_size_mb(cache_files[split_name])
+                        print(f"Cache file already exists at {cache_files[split_name]}, loading {split_name} from cache...")
+                        print(f"Existing cache file size: {file_size_mb:.2f} MB")
+                        cache_exists = True
+                    else:
+                        print(f"Cache file exists but configuration hash mismatch. Creating new cache...")
+                        cache_exists = False
+            except Exception:
+                print(f"Cache file exists but is corrupted. Creating new cache...")
+                cache_exists = False
+        else:
+            cache_exists = False
+
+        if not cache_exists:
             print(f"Caching {split_name} dataset to {cache_files[split_name]}...")
             cached_samples = cache_dataloader(dataloader, split_name)
 
             # Save cached data to disk
-            _save_samples_to_hdf5(cached_samples, cache_files[split_name])
+            _save_samples_to_hdf5(cached_samples, cache_files[split_name], conf_hash)
 
             # Calculate and print file size
             file_size_mb = get_file_size_mb(cache_files[split_name])
@@ -228,8 +282,6 @@ def cache_datasets(experiment, processor, data_name, data_source):
             print(f"Cache file size: {file_size_mb:.2f} MB")
         else:
             file_size_mb = get_file_size_mb(cache_files[split_name])
-            print(f"Cache file already exists at {cache_files[split_name]}, loading {split_name} from cache...")
-            print(f"Existing cache file size: {file_size_mb:.2f} MB")
 
         total_cache_size_mb += file_size_mb
 
@@ -263,16 +315,19 @@ def cache_datasets(experiment, processor, data_name, data_source):
     return data
 
 
-def _save_samples_to_hdf5(samples, file_path):
+def _save_samples_to_hdf5(samples, file_path, config_hash=None):
     """Save samples to HDF5 format.
 
     Args:
         samples: List of samples to save
         file_path: Path to save the HDF5 file
+        config_hash: Configuration hash to store as attribute
     """
     with h5py.File(file_path, "w") as f:
         # Save metadata as root attributes
         f.attrs["num_samples"] = len(samples)
+        if config_hash:
+            f.attrs["config_hash"] = config_hash
 
         for i, sample in enumerate(samples):
             sample_group = f.create_group(f"sample_{i}")
@@ -437,6 +492,14 @@ def cache_dataloader(dataloader, split_name):
 
 
 def get_shuffle_setting(data_source):
+    """Determine if a data source should be shuffled.
+    
+    Args:
+        data_source: The data source to check
+        
+    Returns:
+        bool: True if the data source should be shuffled, False otherwise
+    """
     shuffle_settings = {}
     for split_name in ["train", "val", "test"]:
         shuffle = data_source.caching.get(f"shuffle_{split_name}", data_source.args.get(f"shuffle_{split_name}"))
