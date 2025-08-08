@@ -141,8 +141,7 @@
         "world_size": 1,
         "resume_chpt_path": null,
         "additional_pip_packages": [
-            "chuchichaestli==0.2.12",
-            "tqdm"
+            "chuchichaestli==0.2.12"
         ]
     }
 }
