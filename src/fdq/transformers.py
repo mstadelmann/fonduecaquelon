@@ -354,50 +354,57 @@ class Get2DFrom3DTransform:
             raise ValueError(f"Axis {self.axis} is out of bounds for the tensor with {t.dim()} dimensions.")
         return t.select(dim=self.axis, index=self.index)
 
+
 class SynchronizedRandomVerticalFlip:
-    """Apply synchronized random vertical flip (upside down along 
-    the vertical axis) to multiple tensors."""
+    """Apply synchronized random vertical flip (upside down along the vertical axis) to multiple tensors."""
 
     def __init__(self, p=0.5):
         """Initialize the SynchronizedRandomVerticalFlip transform.
-        
+
         Args:
             p (float): Probability of applying the flip. Default is 0.5.
         """
         self.p = p
-    
+
     def __call__(self, *tensors):
         generator = torch.Generator()
         generator.manual_seed(torch.randint(0, 2**32, (1,)).item())
-        
+
         if torch.rand(1, generator=generator) < self.p:
             return tuple(torch.flip(tensor, dims=[-2]) for tensor in tensors)
         return tensors
-    
+
     def apply_transform(self, tensors):
         """Apply the vertical flip transform to tensors.
-        
+
         Args:
             tensors: Input tensors to transform.
-            
+
         Returns:
             Transformed tensors.
         """
         return self(*tensors)
-    
+
+
 class SynchronizedRandomHorizontalFlip:
     """Apply synchronized random horizontal flip (left-right along the horizontal axis) to multiple tensors."""
 
     def __init__(self, p=0.5):
+        """Initialize the SynchronizedRandomHorizontalFlip transform.
+
+        Args:
+            p (float): Probability of applying the flip. Default is 0.5.
+        """
         self.p = p
-    
+
     def __call__(self, *tensors):
         generator = torch.Generator()
         generator.manual_seed(torch.randint(0, 2**32, (1,)).item())
-        
+
         if torch.rand(1, generator=generator) < self.p:
             return tuple(torch.flip(tensor, dims=[-1]) for tensor in tensors)
         return tensors
+
 
 def get_transformers(t_defs: Any) -> transforms.Compose:
     """Compose a sequence of transformers specified by their names or configuration dictionaries.
@@ -503,13 +510,13 @@ def get_transformer_by_names(transformer_name: str, parameters: dict[str, Any] |
 
     elif transformer_name == "RandomHorizontalFlip":
         transformer = transforms.RandomHorizontalFlip(p=0.5 if parameters is None else parameters.get("p", 0.5))
-        
+
     elif transformer_name == "SynchronizedRandomHorizontalFlip":
         transformer = SynchronizedRandomHorizontalFlip(p=0.5 if parameters is None else parameters.get("p", 0.5))
 
     elif transformer_name == "RandomVerticalFlip":
         transformer = transforms.RandomVerticalFlip(p=0.5 if parameters is None else parameters.get("p", 0.5))
-        
+
     elif transformer_name == "SynchronizedRandomVerticalFlip":
         transformer = SynchronizedRandomVerticalFlip(p=0.5 if parameters is None else parameters.get("p", 0.5))
 

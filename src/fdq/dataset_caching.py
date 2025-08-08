@@ -10,6 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from fdq.misc import DictToObj
 
+
 def create_cache_dir(cache_dir: str) -> None:
     """Create the cache directory if it doesn't exist."""
     if not os.path.exists(cache_dir):
@@ -69,11 +70,13 @@ def print_cache_summary(cache_files, data_name):
 class CachedDataset(Dataset):
     """A dataset that loads cached data from RAM for fast access."""
 
-    def __init__(self, cache_file_path: str,data_source,experiment):
+    def __init__(self, cache_file_path: str, data_source, experiment):
         """Initialize the cached dataset.
 
         Args:
             cache_file_path: Path to the cached .h5 file
+            data_source: Data source configuration object
+            experiment: The experiment object containing class imports and configuration
         """
         self.experiment = experiment
         self.augmenter_path = data_source.caching.nondeterministic_transforms.processor
@@ -81,8 +84,7 @@ class CachedDataset(Dataset):
             self.augmenter = experiment.import_class(file_path=self.augmenter_path)
         else:
             self.augmenter = None
-        
-        
+
         self.cache_file_path = cache_file_path
         # Load the data into memory for fast access
         with h5py.File(cache_file_path, "r") as f:
@@ -169,9 +171,9 @@ class CachedDataset(Dataset):
 
     def __getitem__(self, idx):
         """Return the cached sample at the given index."""
-        sample= self.cached_data[idx]
+        sample = self.cached_data[idx]
         if self.augmenter is not None:
-            return self.augmenter.augment(sample,self.experiment)
+            return self.augmenter.augment(sample, self.experiment)
         return sample
 
 
@@ -185,20 +187,20 @@ def hash_conf(conf):
 
 def find_valid_cache_file(cache_dir, data_name, split_name, expected_hash):
     """Find a cache file with the correct configuration hash.
-    
+
     Args:
         cache_dir: Directory to search for cache files
         data_name: Name of the dataset
         split_name: Split name (train/val/test)
         expected_hash: Expected configuration hash
-        
+
     Returns:
         str or None: Path to valid cache file or None if not found
     """
     # Look for files matching the pattern with any timestamp
     pattern = os.path.join(cache_dir, f"{data_name}_{split_name}_*.h5")
     candidate_files = glob.glob(pattern)
-    
+
     for file_path in candidate_files:
         try:
             with h5py.File(file_path, "r") as f:
@@ -208,7 +210,7 @@ def find_valid_cache_file(cache_dir, data_name, split_name, expected_hash):
         except Exception:
             # Skip corrupted or unreadable files
             continue
-    
+
     return None
 
 
@@ -224,11 +226,9 @@ def cache_datasets(experiment, processor, data_name, data_source):
     Returns:
         DictToObj: Updated data object with cached dataloaders
     """
-
-    
     # Create configuration hash for cache validation
     conf_hash = hash_conf(data_source)
-    
+
     data = DictToObj(processor.create_datasets(experiment, data_source.args))
 
     cache_dir = data_source.caching.cache_dir
@@ -271,14 +271,16 @@ def cache_datasets(experiment, processor, data_name, data_source):
                     stored_hash = f.attrs.get("config_hash", "")
                     if stored_hash == conf_hash:
                         file_size_mb = get_file_size_mb(cache_files[split_name])
-                        print(f"Cache file already exists at {cache_files[split_name]}, loading {split_name} from cache...")
+                        print(
+                            f"Cache file already exists at {cache_files[split_name]}, loading {split_name} from cache..."
+                        )
                         print(f"Existing cache file size: {file_size_mb:.2f} MB")
                         cache_exists = True
                     else:
-                        print(f"Cache file exists but configuration hash mismatch. Creating new cache...")
+                        print("Cache file exists but configuration hash mismatch. Creating new cache...")
                         cache_exists = False
             except Exception:
-                print(f"Cache file exists but is corrupted. Creating new cache...")
+                print("Cache file exists but is corrupted. Creating new cache...")
                 cache_exists = False
         else:
             cache_exists = False
@@ -300,7 +302,7 @@ def cache_datasets(experiment, processor, data_name, data_source):
         total_cache_size_mb += file_size_mb
 
         # Create cached dataset that loads data into RAM
-        cached_dataset = CachedDataset(cache_files[split_name],data_source,experiment)
+        cached_dataset = CachedDataset(cache_files[split_name], data_source, experiment)
 
         # Create new DataLoader with cached dataset
         cached_loader = DataLoader(
@@ -361,7 +363,7 @@ def _save_sample_to_group(sample, group):
             if isinstance(value, np.ndarray):
                 # Save numpy array directly
                 group.create_dataset(f"{key}_data", data=value, compression="gzip")
-            elif isinstance(value, (int, float, str, bool, np.integer, np.floating)):
+            elif isinstance(value, int | float | str | bool | np.integer | np.floating):
                 # Save scalar values as attributes
                 group.attrs[key] = value
             else:
@@ -374,7 +376,7 @@ def _save_sample_to_group(sample, group):
         for i, item in enumerate(sample):
             if isinstance(item, np.ndarray):
                 group.create_dataset(f"item_{i}_data", data=item, compression="gzip")
-            elif isinstance(item, (int, float, str, bool, np.integer, np.floating)):
+            elif isinstance(item, int | float | str | bool | np.integer | np.floating):
                 group.attrs[f"item_{i}_value"] = item
             else:
                 group.attrs[f"item_{i}_value"] = str(item)
@@ -385,7 +387,7 @@ def _save_sample_to_group(sample, group):
         for i, item in enumerate(sample):
             if isinstance(item, np.ndarray):
                 group.create_dataset(f"item_{i}_data", data=item, compression="gzip")
-            elif isinstance(item, (int, float, str, bool, np.integer, np.floating)):
+            elif isinstance(item, int | float | str | bool | np.integer | np.floating):
                 group.attrs[f"item_{i}_value"] = item
             else:
                 group.attrs[f"item_{i}_value"] = str(item)
@@ -397,7 +399,7 @@ def _save_sample_to_group(sample, group):
     else:
         # For other types, store as attributes
         group.attrs["type"] = "other"
-        if isinstance(sample, (int, float, str, bool, np.integer, np.floating)):
+        if isinstance(sample, int | float | str | bool | np.integer | np.floating):
             group.attrs["value"] = sample
         else:
             group.attrs["value"] = str(sample)
@@ -507,10 +509,10 @@ def cache_dataloader(dataloader, split_name):
 
 def get_shuffle_setting(data_source):
     """Determine if a data source should be shuffled.
-    
+
     Args:
         data_source: The data source to check
-        
+
     Returns:
         bool: True if the data source should be shuffled, False otherwise
     """
