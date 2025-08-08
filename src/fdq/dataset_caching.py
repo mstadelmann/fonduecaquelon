@@ -13,6 +13,56 @@ def create_cache_dir(cache_dir: str) -> None:
         os.makedirs(cache_dir)
 
 
+def get_file_size_mb(file_path):
+    """Get file size in MB.
+
+    Args:
+        file_path: Path to the file
+
+    Returns:
+        float: File size in MB
+    """
+    if os.path.exists(file_path):
+        size_bytes = os.path.getsize(file_path)
+        size_mb = size_bytes / (1024 * 1024)
+        return size_mb
+    return 0.0
+
+
+def print_cache_summary(cache_files, data_name):
+    """Print a summary of cache file sizes.
+
+    Args:
+        cache_files: Dictionary of cache file paths
+        data_name: Name of the dataset
+    """
+    print(f"\n=== Cache Summary for {data_name} ===")
+    total_size_mb = 0.0
+
+    for split_name, file_path in cache_files.items():
+        if os.path.exists(file_path):
+            size_mb = get_file_size_mb(file_path)
+            total_size_mb += size_mb
+
+            # Get number of samples from HDF5 file
+            try:
+                with h5py.File(file_path, "r") as f:
+                    num_samples = f.attrs.get("num_samples", 0)
+                    avg_size_kb = (size_mb * 1024) / num_samples if num_samples > 0 else 0
+                    print(
+                        f"  {split_name:>5}: {size_mb:>8.2f} MB ({num_samples:>6} samples, {avg_size_kb:>6.2f} KB/sample)"
+                    )
+            except Exception as e:
+                print(f"  {split_name:>5}: {size_mb:>8.2f} MB (unable to read sample count: {e})")
+        else:
+            print(f"  {split_name:>5}: File not found")
+
+    print(f"  {'Total':>5}: {total_size_mb:>8.2f} MB")
+    if total_size_mb > 1024:
+        print(f"  {'Total':>5}: {total_size_mb / 1024:>8.2f} GB")
+    print("=" * 40)
+
+
 class CachedDataset(Dataset):
     """A dataset that loads cached data from RAM for fast access."""
 
@@ -146,6 +196,8 @@ def cache_datasets(experiment, processor, data_name, data_source):
     shuffle_settings = get_shuffle_setting(data_source)
 
     cached_loaders = {}
+    total_cache_size_mb = 0.0
+
     # Cache each split
     for split_name, dataloader in loaders_to_cache.items():
         if dataloader is None:
@@ -159,9 +211,17 @@ def cache_datasets(experiment, processor, data_name, data_source):
 
             # Save cached data to disk
             _save_samples_to_hdf5(cached_samples, cache_files[split_name])
+
+            # Calculate and print file size
+            file_size_mb = get_file_size_mb(cache_files[split_name])
             print(f"{split_name.capitalize()} dataset cached successfully! {len(cached_samples)} samples saved.")
+            print(f"Cache file size: {file_size_mb:.2f} MB")
         else:
+            file_size_mb = get_file_size_mb(cache_files[split_name])
             print(f"Cache file already exists at {cache_files[split_name]}, loading {split_name} from cache...")
+            print(f"Existing cache file size: {file_size_mb:.2f} MB")
+
+        total_cache_size_mb += file_size_mb
 
         # Create cached dataset that loads data into RAM
         cached_dataset = CachedDataset(cache_files[split_name])
@@ -186,6 +246,9 @@ def cache_datasets(experiment, processor, data_name, data_source):
         data.val_data_loader = cached_loaders["val"]
     if "test" in cached_loaders:
         data.test_data_loader = cached_loaders["test"]
+
+    # Print detailed cache summary
+    print_cache_summary(cache_files, data_name)
 
     return data
 
@@ -304,8 +367,7 @@ def cache_dataloader(dataloader, split_name):
 
     if dataloader.num_workers != 0:
         # If num_workers is not zero, set it to zero for caching
-        print("WARNING: multiple dataloader workers might cause CUDA issues during caching.")
-        print("Setting dataloader num_workers to 0 for caching.")
+        print("WARNING: Setting dataloader num_workers to 0 for caching to avoid CUDA issues.")
         dataloader = set_dataloader_workers_to_zero(dataloader)
 
     # Iterate through the entire dataset and cache it
