@@ -426,12 +426,14 @@ class fdqExperiment:
         if self.data:
             # data already loaded, skip setup
             return
+        
         self.copy_data_to_scratch()
+        
         for data_name, data_source in self.exp_def.data.items():
             processor = self.import_class(file_path=data_source.processor)
-            args = self.exp_def.data.get(data_name).args
+            
             if data_source.caching is None:
-                self.data[data_name] = DictToObj(processor.create_datasets(self, args))
+                self.data[data_name] = DictToObj(processor.create_datasets(self, self.exp_def.data.get(data_name).args))
             else:
                 self.data[data_name] = DictToObj(cache_datasets(self, processor, data_name, data_source))
 

@@ -69,12 +69,20 @@ def print_cache_summary(cache_files, data_name):
 class CachedDataset(Dataset):
     """A dataset that loads cached data from RAM for fast access."""
 
-    def __init__(self, cache_file_path: str):
+    def __init__(self, cache_file_path: str,data_source,experiment):
         """Initialize the cached dataset.
 
         Args:
             cache_file_path: Path to the cached .h5 file
         """
+        self.experiment = experiment
+        self.augmenter_path = data_source.caching.nondeterministic_transforms.processor
+        if self.augmenter_path is not None:
+            self.augmenter = experiment.import_class(file_path=self.augmenter_path)
+        else:
+            self.augmenter = None
+        
+        
         self.cache_file_path = cache_file_path
         # Load the data into memory for fast access
         with h5py.File(cache_file_path, "r") as f:
@@ -161,7 +169,10 @@ class CachedDataset(Dataset):
 
     def __getitem__(self, idx):
         """Return the cached sample at the given index."""
-        return self.cached_data[idx]
+        sample= self.cached_data[idx]
+        if self.augmenter is not None:
+            return self.augmenter.augment(sample,self.experiment)
+        return sample
 
 
 def hash_conf(conf):
@@ -213,6 +224,8 @@ def cache_datasets(experiment, processor, data_name, data_source):
     Returns:
         DictToObj: Updated data object with cached dataloaders
     """
+
+    
     # Create configuration hash for cache validation
     conf_hash = hash_conf(data_source)
     
@@ -287,7 +300,7 @@ def cache_datasets(experiment, processor, data_name, data_source):
         total_cache_size_mb += file_size_mb
 
         # Create cached dataset that loads data into RAM
-        cached_dataset = CachedDataset(cache_files[split_name])
+        cached_dataset = CachedDataset(cache_files[split_name],data_source,experiment)
 
         # Create new DataLoader with cached dataset
         cached_loader = DataLoader(
