@@ -142,7 +142,7 @@ class TestClampPercTransform(unittest.TestCase):
         # Create tensor where 20th percentile = 2, 80th percentile = 8
         input_tensor = torch.tensor([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0])
         result = transform(input_tensor)
-        
+
         # Values should be clamped to approximately [2.6, 8.4]
         self.assertGreaterEqual(result.min().item(), 2.0)
         self.assertLessEqual(result.max().item(), 9.0)
@@ -152,7 +152,7 @@ class TestClampPercTransform(unittest.TestCase):
         transform = ClampPercTransform(0.25, 0.75)
         input_tensor = torch.tensor([1.0, 5.0, 10.0, 15.0])
         result = transform(input_tensor)
-        
+
         # Check that clamping occurred
         self.assertEqual(len(result), len(input_tensor))
         self.assertTrue(torch.all(result >= result.min()))
@@ -210,7 +210,7 @@ class TestReRangeMinMaxTransform(unittest.TestCase):
         transform = ReRangeMinMaxTransform(0.0, 1.0)
         input_tensor = torch.tensor([5.0, 5.0, 5.0])
         result = transform(input_tensor)
-        
+
         # When min == max, we get division by zero which results in NaN
         self.assertTrue(torch.isnan(result).all())
 
@@ -223,7 +223,7 @@ class TestStack3DTransform(unittest.TestCase):
         transform = Stack3DTransform(stack_n=3)
         input_tensor = torch.ones(2, 4, 4)  # [C, H, W]
         result = transform(input_tensor)
-        
+
         # Stack3DTransform stacks along dim=2, so [C, H, W] -> [C, D, H, W]
         # torch.stack([t] * stack_n, dim=2) gives [2, 4, 3, 4]
         self.assertEqual(result.shape, (2, 4, 3, 4))  # [C, H, D, W]
@@ -233,7 +233,7 @@ class TestStack3DTransform(unittest.TestCase):
         transform = Stack3DTransform(stack_n=1)
         input_tensor = torch.ones(1, 2, 2)  # [C, H, W]
         result = transform(input_tensor)
-        
+
         # Single stack: [C, H, W] -> [C, H, D, W] where D=1
         self.assertEqual(result.shape, (1, 2, 1, 2))
 
@@ -246,7 +246,7 @@ class TestResizeMaxDimPadTransform(unittest.TestCase):
         transform = ResizeMaxDimPadTransform(64)
         input_tensor = torch.rand(3, 32, 32)
         result = transform(input_tensor)
-        
+
         self.assertEqual(result.shape, (3, 64, 64))
 
     def test_resize_max_dim_rectangular_input(self):
@@ -254,19 +254,19 @@ class TestResizeMaxDimPadTransform(unittest.TestCase):
         transform = ResizeMaxDimPadTransform(100)
         input_tensor = torch.rand(3, 50, 80)  # H < W
         result = transform(input_tensor)
-        
+
         self.assertEqual(result.shape, (3, 100, 100))
 
     def test_resize_max_dim_different_modes(self):
         """Test resizing with different padding modes."""
         transform_constant = ResizeMaxDimPadTransform(64, mode="constant", value=0.5)
         transform_replicate = ResizeMaxDimPadTransform(64, mode="replicate")
-        
+
         input_tensor = torch.rand(1, 30, 40)
-        
+
         result_constant = transform_constant(input_tensor)
         result_replicate = transform_replicate(input_tensor)
-        
+
         self.assertEqual(result_constant.shape, (1, 64, 64))
         self.assertEqual(result_replicate.shape, (1, 64, 64))
 
@@ -279,7 +279,7 @@ class TestPaddingTransform(unittest.TestCase):
         transform = PaddingTransform((1, 1, 2, 2))  # pad last 2 dims
         input_tensor = torch.ones(3, 4)
         result = transform(input_tensor)
-        
+
         # Padding (1,1,2,2): last dim +2, second-to-last dim +4
         self.assertEqual(result.shape, (3 + 2 + 2, 4 + 1 + 1))  # (7, 6)
 
@@ -288,10 +288,10 @@ class TestPaddingTransform(unittest.TestCase):
         transform = PaddingTransform((1, 1), padding_mode="constant", padding_value=5.0)
         input_tensor = torch.ones(3, 4)
         result = transform(input_tensor)
-        
+
         # Check shape
         self.assertEqual(result.shape, (3, 6))
-        
+
         # Check padding values
         self.assertTrue(torch.allclose(result[:, 0], torch.tensor(5.0)))
         self.assertTrue(torch.allclose(result[:, -1], torch.tensor(5.0)))
@@ -310,11 +310,11 @@ class TestUnPaddingTransform(unittest.TestCase):
         # First pad, then unpad
         pad_transform = PaddingTransform((1, 1, 2, 2))
         unpad_transform = UnPaddingTransform((1, 1, 2, 2))
-        
+
         input_tensor = torch.rand(1, 3, 4, 4)
         padded = pad_transform(input_tensor)
         unpadded = unpad_transform(padded)
-        
+
         torch.testing.assert_close(unpadded, input_tensor)
 
     def test_unpadding_5d(self):
@@ -322,10 +322,10 @@ class TestUnPaddingTransform(unittest.TestCase):
         unpad_transform = UnPaddingTransform((1, 1, 1, 1))
         input_tensor = torch.rand(2, 3, 4, 6, 8)
         result = unpad_transform(input_tensor)
-        
+
         # Padding (1, 1, 1, 1) removes:
         # - 1 from each side of last dim: 8 - 1 - 1 = 6
-        # - 1 from each side of second-to-last dim: 6 - 1 - 1 = 4  
+        # - 1 from each side of second-to-last dim: 6 - 1 - 1 = 4
         self.assertEqual(result.shape, (2, 3, 4, 4, 6))  # reduced by padding
 
     def test_unpadding_3d(self):
@@ -333,7 +333,7 @@ class TestUnPaddingTransform(unittest.TestCase):
         unpad_transform = UnPaddingTransform((1, 1))
         input_tensor = torch.rand(2, 3, 4)  # 3D tensor
         result = unpad_transform(input_tensor)
-        
+
         # Padding (1, 1) removes 1 from each side of last dim: 4 - 1 - 1 = 2
         self.assertEqual(result.shape, (2, 3, 2))
 
@@ -346,7 +346,7 @@ class TestFloat32Transform(unittest.TestCase):
         transform = Float32Transform()
         input_tensor = torch.tensor([1, 2, 3], dtype=torch.int64)
         result = transform(input_tensor)
-        
+
         self.assertEqual(result.dtype, torch.float32)
         torch.testing.assert_close(result, torch.tensor([1.0, 2.0, 3.0]))
 
@@ -355,7 +355,7 @@ class TestFloat32Transform(unittest.TestCase):
         transform = Float32Transform()
         input_tensor = torch.tensor([1.0, 2.0, 3.0], dtype=torch.float32)
         result = transform(input_tensor)
-        
+
         self.assertEqual(result.dtype, torch.float32)
         torch.testing.assert_close(result, input_tensor)
 
@@ -368,7 +368,7 @@ class TestUint8Transform(unittest.TestCase):
         transform = Uint8Transform()
         input_tensor = torch.tensor([1.0, 2.0, 3.0])
         result = transform(input_tensor)
-        
+
         self.assertEqual(result.dtype, torch.uint8)
         torch.testing.assert_close(result, torch.tensor([1, 2, 3], dtype=torch.uint8))
 
@@ -377,7 +377,7 @@ class TestUint8Transform(unittest.TestCase):
         transform = Uint8Transform()
         input_tensor = torch.tensor([-1.0, 256.0, 128.0])
         result = transform(input_tensor)
-        
+
         self.assertEqual(result.dtype, torch.uint8)
         # Values should be clipped to uint8 range [0, 255]
 
@@ -390,7 +390,7 @@ class TestGet2DFrom3DTransform(unittest.TestCase):
         input_tensor = torch.rand(6, 4, 4)
         transform = Get2DFrom3DTransform(axis=0, index=None)  # None = middle
         result = transform(input_tensor)
-        
+
         self.assertEqual(result.shape, (4, 4))
         # Middle of 6 elements is index 3 (6//2 = 3)
         torch.testing.assert_close(result, input_tensor[3, :, :])  # middle slice
@@ -400,7 +400,7 @@ class TestGet2DFrom3DTransform(unittest.TestCase):
         transform = Get2DFrom3DTransform(axis=1, index=2)
         input_tensor = torch.rand(3, 5, 4)
         result = transform(input_tensor)
-        
+
         self.assertEqual(result.shape, (3, 4))
         torch.testing.assert_close(result, input_tensor[:, 2, :])
 
@@ -408,7 +408,7 @@ class TestGet2DFrom3DTransform(unittest.TestCase):
         """Test invalid axis for 3D tensor."""
         transform = Get2DFrom3DTransform(axis=3, index=0)
         input_tensor = torch.rand(2, 3, 4)  # 3D tensor
-        
+
         with self.assertRaises(ValueError):
             transform(input_tensor)
 
@@ -416,7 +416,7 @@ class TestGet2DFrom3DTransform(unittest.TestCase):
         """Test negative axis for 3D tensor."""
         transform = Get2DFrom3DTransform(axis=-1, index=0)
         input_tensor = torch.rand(2, 3, 4)
-        
+
         with self.assertRaises(ValueError):
             transform(input_tensor)
 
@@ -427,39 +427,37 @@ class TestSynchronizedRandomVerticalFlip(unittest.TestCase):
     def test_synchronized_vertical_flip_deterministic(self):
         """Test that synchronized flip affects all tensors the same way."""
         transform = SynchronizedRandomVerticalFlip(p=1.0)  # Always flip
-        
+
         tensor1 = torch.arange(12).reshape(3, 4).float()
         tensor2 = torch.arange(12, 24).reshape(3, 4).float()
-        
+
         # Mock the random generator to ensure deterministic behavior
-        with patch('torch.randint') as mock_randint, \
-             patch('torch.rand') as mock_rand:
+        with patch("torch.randint") as mock_randint, patch("torch.rand") as mock_rand:
             mock_randint.return_value = torch.tensor([42])
             mock_rand.return_value = torch.tensor([0.3])  # < p=1.0, so flip
-            
+
             result1, result2 = transform(tensor1, tensor2)
-        
+
         # Both tensors should be flipped vertically (dim=-2)
         expected1 = torch.flip(tensor1, dims=[-2])
         expected2 = torch.flip(tensor2, dims=[-2])
-        
+
         torch.testing.assert_close(result1, expected1)
         torch.testing.assert_close(result2, expected2)
 
     def test_synchronized_vertical_flip_no_flip(self):
         """Test that synchronized flip returns original tensors when no flip."""
         transform = SynchronizedRandomVerticalFlip(p=0.0)  # Never flip
-        
+
         tensor1 = torch.rand(2, 3, 4)
         tensor2 = torch.rand(2, 3, 4)
-        
-        with patch('torch.randint') as mock_randint, \
-             patch('torch.rand') as mock_rand:
+
+        with patch("torch.randint") as mock_randint, patch("torch.rand") as mock_rand:
             mock_randint.return_value = torch.tensor([42])
             mock_rand.return_value = torch.tensor([0.8])  # > p=0.0, so no flip
-            
+
             result1, result2 = transform(tensor1, tensor2)
-        
+
         torch.testing.assert_close(result1, tensor1)
         torch.testing.assert_close(result2, tensor2)
 
@@ -467,14 +465,13 @@ class TestSynchronizedRandomVerticalFlip(unittest.TestCase):
         """Test synchronized flip with single tensor."""
         transform = SynchronizedRandomVerticalFlip(p=1.0)
         tensor = torch.arange(6).reshape(2, 3).float()
-        
-        with patch('torch.randint') as mock_randint, \
-             patch('torch.rand') as mock_rand:
+
+        with patch("torch.randint") as mock_randint, patch("torch.rand") as mock_rand:
             mock_randint.return_value = torch.tensor([42])
             mock_rand.return_value = torch.tensor([0.3])  # < p=1.0, so flip
-            
+
             result = transform(tensor)
-        
+
         expected = torch.flip(tensor, dims=[-2])
         torch.testing.assert_close(result[0], expected)
 
@@ -483,14 +480,13 @@ class TestSynchronizedRandomVerticalFlip(unittest.TestCase):
         transform = SynchronizedRandomVerticalFlip(p=1.0)
         tensor1 = torch.rand(2, 3)
         tensor2 = torch.rand(2, 3)
-        
-        with patch('torch.randint') as mock_randint, \
-             patch('torch.rand') as mock_rand:
+
+        with patch("torch.randint") as mock_randint, patch("torch.rand") as mock_rand:
             mock_randint.return_value = torch.tensor([42])
             mock_rand.return_value = torch.tensor([0.3])  # < p=1.0, so flip
-            
+
             result = transform.apply_transform((tensor1, tensor2))
-        
+
         self.assertEqual(len(result), 2)
         torch.testing.assert_close(result[0], torch.flip(tensor1, dims=[-2]))
         torch.testing.assert_close(result[1], torch.flip(tensor2, dims=[-2]))
@@ -502,55 +498,52 @@ class TestSynchronizedRandomHorizontalFlip(unittest.TestCase):
     def test_synchronized_horizontal_flip_deterministic(self):
         """Test that synchronized flip affects all tensors the same way."""
         transform = SynchronizedRandomHorizontalFlip(p=1.0)  # Always flip
-        
+
         tensor1 = torch.arange(12).reshape(3, 4).float()
         tensor2 = torch.arange(12, 24).reshape(3, 4).float()
-        
+
         # Mock the random generator to ensure deterministic behavior
-        with patch('torch.randint') as mock_randint, \
-             patch('torch.rand') as mock_rand:
+        with patch("torch.randint") as mock_randint, patch("torch.rand") as mock_rand:
             mock_randint.return_value = torch.tensor([42])
             mock_rand.return_value = torch.tensor([0.3])  # < p=1.0, so flip
-            
+
             result1, result2 = transform(tensor1, tensor2)
-        
+
         # Both tensors should be flipped horizontally (dim=-1)
         expected1 = torch.flip(tensor1, dims=[-1])
         expected2 = torch.flip(tensor2, dims=[-1])
-        
+
         torch.testing.assert_close(result1, expected1)
         torch.testing.assert_close(result2, expected2)
 
     def test_synchronized_horizontal_flip_no_flip(self):
         """Test that synchronized flip returns original tensors when no flip."""
         transform = SynchronizedRandomHorizontalFlip(p=0.0)  # Never flip
-        
+
         tensor1 = torch.rand(2, 3, 4)
         tensor2 = torch.rand(2, 3, 4)
-        
-        with patch('torch.randint') as mock_randint, \
-             patch('torch.rand') as mock_rand:
+
+        with patch("torch.randint") as mock_randint, patch("torch.rand") as mock_rand:
             mock_randint.return_value = torch.tensor([42])
             mock_rand.return_value = torch.tensor([0.8])  # > p=0.0, so no flip
-            
+
             result1, result2 = transform(tensor1, tensor2)
-        
+
         torch.testing.assert_close(result1, tensor1)
         torch.testing.assert_close(result2, tensor2)
 
     def test_multiple_tensors_horizontal_flip(self):
         """Test horizontal flip with multiple tensors."""
         transform = SynchronizedRandomHorizontalFlip(p=1.0)
-        
+
         tensors = [torch.rand(2, 4) for _ in range(5)]
-        
-        with patch('torch.randint') as mock_randint, \
-             patch('torch.rand') as mock_rand:
+
+        with patch("torch.randint") as mock_randint, patch("torch.rand") as mock_rand:
             mock_randint.return_value = torch.tensor([42])
             mock_rand.return_value = torch.tensor([0.3])  # < p=1.0, so flip
-            
+
             results = transform(*tensors)
-        
+
         self.assertEqual(len(results), 5)
         for i, result in enumerate(results):
             expected = torch.flip(tensors[i], dims=[-1])
@@ -563,7 +556,7 @@ class TestEdgeCases(unittest.TestCase):
     def test_empty_tensor(self):
         """Test transforms with empty tensors."""
         empty_tensor = torch.empty(0, 3, 4)
-        
+
         # Test transforms that should work with empty tensors
         add_transform = AddValueTransform(1.0)
         result = add_transform(empty_tensor)
@@ -572,7 +565,7 @@ class TestEdgeCases(unittest.TestCase):
     def test_single_element_tensor(self):
         """Test transforms with single element tensors."""
         single_tensor = torch.tensor([5.0])
-        
+
         mult_transform = MultValueTransform(2.0)
         result = mult_transform(single_tensor)
         torch.testing.assert_close(result, torch.tensor([10.0]))
@@ -582,7 +575,7 @@ class TestEdgeCases(unittest.TestCase):
         transform = ClampPercTransform(0.1, 0.9)
         # Create a tensor larger than the threshold (12582912 elements)
         large_tensor = torch.randn(5000, 5000)  # 25M elements
-        
+
         result = transform(large_tensor)
         self.assertEqual(result.shape, large_tensor.shape)
 
@@ -591,15 +584,15 @@ class TestEdgeCases(unittest.TestCase):
         # Test p=0.0 (never flip)
         transform_never = SynchronizedRandomVerticalFlip(p=0.0)
         tensor = torch.rand(2, 3)
-        
-        with patch('torch.rand', return_value=torch.tensor([0.5])):
+
+        with patch("torch.rand", return_value=torch.tensor([0.5])):
             result = transform_never(tensor)
             torch.testing.assert_close(result[0], tensor)
-        
+
         # Test p=1.0 (always flip)
         transform_always = SynchronizedRandomVerticalFlip(p=1.0)
-        
-        with patch('torch.rand', return_value=torch.tensor([0.5])):
+
+        with patch("torch.rand", return_value=torch.tensor([0.5])):
             result = transform_always(tensor)
             expected = torch.flip(tensor, dims=[-2])
             torch.testing.assert_close(result[0], expected)
