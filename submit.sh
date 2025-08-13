@@ -15,3 +15,4 @@ submit_job experiment_templates/segment_pets/segment_pets.json
 submit_job experiment_templates/segment_pets/segment_pets_distributed.json
 submit_job experiment_templates/segment_pets/segment_pets_distributed_v4.json
 submit_job experiment_templates/segment_pets/segment_pets_cached.json
+submit_job experiment_templates/segment_pets/segment_pets_distributed_cached.json

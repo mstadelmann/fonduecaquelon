@@ -879,7 +879,6 @@ class fdqExperiment:
 
     def copy_data_to_scratch(self) -> None:
         """Copy all datasets to scratch dir, and update the paths."""
-
         if self.scratch_data_path is None:
             return
 

@@ -210,6 +210,23 @@ def find_valid_cache_file(cache_dir, data_name, split_name, expected_hash):
 
 
 def cache_datasets_ddp_handler(experiment, processor, data_name, data_source):
+    """Cache datasets with DDP synchronization.
+
+    In distributed (DDP) runs, the main process performs caching first while
+    child processes wait at a barrier. After caching is complete, child
+    processes proceed to load/use the cache so all ranks return consistent
+    dataloaders. Two barriers ensure deterministic ordering and shared state.
+
+    Args:
+        experiment: Experiment object providing DDP helpers and configuration.
+        processor: Data processor with a ``create_datasets`` method.
+        data_name: Human-readable dataset name used in messages/paths.
+        data_source: Configuration object that controls caching/creation.
+
+    Returns:
+        DictToObj: Data object whose train/val/test dataloaders point to
+        cached datasets.
+    """
     if experiment.is_main_process():
         data = cache_datasets(experiment, processor, data_name, data_source)
     experiment.dist_barrier()
