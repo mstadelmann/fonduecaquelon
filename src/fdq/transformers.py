@@ -308,6 +308,30 @@ class UnPaddingTransform:
             ]
         raise ValueError("Only 4D and 5D tensors are supported!")
 
+    # def __call__(self, t):
+    #     req_pad_dim = t.dim() * 2
+    #     pad = list(self.padding_size) + [0] * (req_pad_dim - len(self.padding_size))
+
+    #     # PyTorch padding affects the last len(pad)//2 dimensions in reverse order
+    #     # For pad = [p0, p1, p2, p3, ...]:
+    #     # - p0, p1 affect last dimension (dim -1)
+    #     # - p2, p3 affect second-to-last dimension (dim -2)
+    #     # - etc.
+
+    #     slices = [slice(None)] * t.dim()  # Initialize with full slices
+
+    #     num_affected_dims = len(self.padding_size) // 2
+    #     for i in range(num_affected_dims):
+    #         dim_idx = t.dim() - 1 - i  # Start from last dimension, go backwards
+    #         pad_start = self.padding_size[2 * i]      # Left/start padding
+    #         pad_end = self.padding_size[2 * i + 1]    # Right/end padding
+
+    #         start_idx = pad_start
+    #         end_idx = t.shape[dim_idx] - pad_end if pad_end > 0 else t.shape[dim_idx]
+    #         slices[dim_idx] = slice(start_idx, end_idx)
+
+    #     return t[tuple(slices)]
+
 
 class Float32Transform:
     """A transform that converts the input tensor to torch.float32 dtype."""
@@ -367,10 +391,7 @@ class SynchronizedRandomVerticalFlip:
         self.p = p
 
     def __call__(self, *tensors):
-        generator = torch.Generator()
-        generator.manual_seed(torch.randint(0, 2**32, (1,)).item())
-
-        if torch.rand(1, generator=generator) < self.p:
+        if torch.rand(1) < self.p:
             return tuple(torch.flip(tensor, dims=[-2]) for tensor in tensors)
         return tensors
 
@@ -398,10 +419,7 @@ class SynchronizedRandomHorizontalFlip:
         self.p = p
 
     def __call__(self, *tensors):
-        generator = torch.Generator()
-        generator.manual_seed(torch.randint(0, 2**32, (1,)).item())
-
-        if torch.rand(1, generator=generator) < self.p:
+        if torch.rand(1) < self.p:
             return tuple(torch.flip(tensor, dims=[-1]) for tensor in tensors)
         return tensors
 
