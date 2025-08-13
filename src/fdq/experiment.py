@@ -121,7 +121,6 @@ class fdqExperiment:
             self.world_size: int = self.exp_def.get("slurm_cluster", {}).get("world_size", 1)
         self.master_port: int = self.exp_def.get("slurm_cluster", {}).get("master_port")
         self.ddp_rdvz_path: int = self.exp_def.get("slurm_cluster", {}).get("ddp_rdvz_path", "/scratch/")
-        self.ddp_default_group = None
         self.init_distributed_mode()
 
         self.previous_slurm_job_id: str | None = None
@@ -239,7 +238,7 @@ class fdqExperiment:
     def dist_barrier(self) -> None:
         """Barrier for distributed training."""
         if self.is_distributed():
-            torch.distributed.barrier(group=self.ddp_default_group)
+            torch.distributed.barrier()
 
     def init_distributed_mode(self):
         # if "SLURM_PROCID" not in os.environ or os.environ["SLURM_JOB_NAME"] == "bash":
@@ -267,8 +266,6 @@ class fdqExperiment:
             # timeout=timedelta(minutes=15),
             # device_id=torch.device("cuda", self.rank),
         )
-
-        self.ddp_default_group = torch.distributed.group.WORLD
 
         print(f"Distributed mode initialized on rank {self.rank}.")
         self.dist_barrier()
@@ -882,23 +879,26 @@ class fdqExperiment:
 
     def copy_data_to_scratch(self) -> None:
         """Copy all datasets to scratch dir, and update the paths."""
+
         if self.scratch_data_path is None:
             return
 
         if self.is_main_process():
-            if not os.path.exists(self.scratch_data_path):
-                os.makedirs(self.scratch_data_path)
+            os.makedirs(self.scratch_data_path, exist_ok=True)
 
-            iprint("-----------------------------------------------------------")
-            iprint("Copy datasets to temporary scratch location...")
-            iprint("-----------------------------------------------------------")
+        iprint("-----------------------------------------------------------")
+        iprint("Copy datasets to temporary scratch location...")
+        iprint("-----------------------------------------------------------")
 
-            for data_name, data_source in self.exp_def.data.items():
-                dargs = data_source.args
+        for data_name, data_source in self.exp_def.data.items():
+            dargs = data_source.args
 
-                if dargs.base_path is not None:
+            if dargs.base_path is not None:
+                dst_path = os.path.join(self.scratch_data_path, data_name)
+
+                # actual actions only on rank 0
+                if self.is_main_process():
                     # cleanup old data first -> in case this is a debug run with dirty data
-                    dst_path = os.path.join(self.scratch_data_path, data_name)
                     if os.path.exists(dst_path):
                         shutil.rmtree(dst_path)
 
@@ -922,35 +922,36 @@ class fdqExperiment:
                                 f"Return code: {exc.returncode}, Error: {exc.stderr}"
                             ) from exc
 
-                    dargs.base_path = dst_path
-                else:
-                    for file_cat in [
-                        "train_files_path",
-                        "test_files_path",
-                        "val_files_path",
-                    ]:
-                        fps = dargs.get(file_cat)
-                        if not fps:
-                            continue
-                        if not isinstance(fps, list):
-                            raise ValueError(
-                                f"Error, {data_name} dataset files must be a list of file paths. Got: {fps}"
-                            )
-                        new_paths = []
-                        pbar = startProgBar(len(fps), f"Copy {file_cat} files to scratch")
-                        for i, src_file in enumerate(fps):
-                            pbar.update(i)
-                            rel_path = os.path.relpath(src_file, "/")
-                            dst_file = os.path.join(self.scratch_data_path, rel_path)
+                dargs.base_path = dst_path
+
+            else:
+                for file_cat in [
+                    "train_files_path",
+                    "test_files_path",
+                    "val_files_path",
+                ]:
+                    fps = dargs.get(file_cat)
+                    if not fps:
+                        continue
+                    if not isinstance(fps, list):
+                        raise ValueError(f"Error, {data_name} dataset files must be a list of file paths. Got: {fps}")
+                    new_paths = []
+                    pbar = startProgBar(len(fps), f"Copy {file_cat} files to scratch")
+                    for i, src_file in enumerate(fps):
+                        pbar.update(i)
+                        rel_path = os.path.relpath(src_file, "/")
+                        dst_file = os.path.join(self.scratch_data_path, rel_path)
+                        if self.is_main_process():
                             os.makedirs(os.path.dirname(dst_file), exist_ok=True)
                             shutil.copy(src_file, dst_file)
-                            new_paths.append(dst_file)
-                        dargs.set(file_cat, new_paths)
-                        pbar.finish()
+                        new_paths.append(dst_file)
+                    dargs.set(file_cat, new_paths)
+                    pbar.finish()
 
-            iprint("-----------------------------------------------------------")
-            iprint("Copy datasets to temporary scratch location... Done!")
-            iprint("-----------------------------------------------------------")
+        iprint("-----------------------------------------------------------")
+        iprint("Copy datasets to temporary scratch location... Done!")
+        iprint("-----------------------------------------------------------")
+
         self.dist_barrier()
 
     def prepare_transformers(self) -> None:
