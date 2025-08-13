@@ -280,57 +280,26 @@ class UnPaddingTransform:
         self.padding_size = padding_size
 
     def __call__(self, t):
-        req_pad_dim = t.dim() * 2
-        pad = self.padding_size + [0] * (req_pad_dim - len(self.padding_size))
-        ps_start = pad[::2]
-        ps_stop = pad[1::2]
+        pad_spec = list(self.padding_size)
+        if len(pad_spec) % 2 != 0:
+            raise ValueError("Padding specification must have an even number of elements.")
 
-        for dim in range(t.dim()):
-            if ps_stop[dim] == 0:
-                ps_stop[dim] = t.shape[dim]
-            else:
-                ps_stop[dim] = t.shape[dim] - ps_stop[dim]
+        num_padded_dims = len(pad_spec) // 2
+        if num_padded_dims > t.dim():
+            raise ValueError(f"Padding specification for {num_padded_dims} dims exceeds tensor dims {t.dim()}")
 
-        if t.dim() == 4:
-            return t[
-                ps_start[0] : ps_stop[0],
-                ps_start[1] : ps_stop[1],
-                ps_start[2] : ps_stop[2],
-                ps_start[3] : ps_stop[3],
-            ]
-        if t.dim() == 5:
-            return t[
-                ps_start[0] : ps_stop[0],
-                ps_start[1] : ps_stop[1],
-                ps_start[2] : ps_stop[2],
-                ps_start[3] : ps_stop[3],
-                ps_start[4] : ps_stop[4],
-            ]
-        raise ValueError("Only 4D and 5D tensors are supported!")
+        slices = [slice(None)] * t.dim()
+        # PyTorch F.pad order: (pad_left, pad_right, pad_top, pad_bottom, ...), i.e. last dim first.
+        for i in range(num_padded_dims):
+            left = pad_spec[2 * i]
+            right = pad_spec[2 * i + 1]
+            dim = t.dim() - 1 - i  # map i-th pair to trailing dimension
+            start = left if left > 0 else 0
+            # If right == 0 we leave end as None to take full extent
+            end = -right if right > 0 else None
+            slices[dim] = slice(start, end)
 
-    # def __call__(self, t):
-    #     req_pad_dim = t.dim() * 2
-    #     pad = list(self.padding_size) + [0] * (req_pad_dim - len(self.padding_size))
-
-    #     # PyTorch padding affects the last len(pad)//2 dimensions in reverse order
-    #     # For pad = [p0, p1, p2, p3, ...]:
-    #     # - p0, p1 affect last dimension (dim -1)
-    #     # - p2, p3 affect second-to-last dimension (dim -2)
-    #     # - etc.
-
-    #     slices = [slice(None)] * t.dim()  # Initialize with full slices
-
-    #     num_affected_dims = len(self.padding_size) // 2
-    #     for i in range(num_affected_dims):
-    #         dim_idx = t.dim() - 1 - i  # Start from last dimension, go backwards
-    #         pad_start = self.padding_size[2 * i]      # Left/start padding
-    #         pad_end = self.padding_size[2 * i + 1]    # Right/end padding
-
-    #         start_idx = pad_start
-    #         end_idx = t.shape[dim_idx] - pad_end if pad_end > 0 else t.shape[dim_idx]
-    #         slices[dim_idx] = slice(start_idx, end_idx)
-
-    #     return t[tuple(slices)]
+        return t[tuple(slices)]
 
 
 class Float32Transform:
