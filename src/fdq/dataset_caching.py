@@ -309,7 +309,7 @@ def cache_datasets(experiment, processor, data_name, data_source):
             cached_dataset,
             batch_size=dataloader.batch_size,
             shuffle=shuffle_settings[split_name],
-            num_workers=data_source.caching.get("num_workers", 0),  # recommended 0 as data is already in RAM
+            num_workers=data_source.caching.get("num_workers", 0),  # Set to 0 since data is already in RAM, avoiding multiprocessing overhead
             pin_memory=data_source.caching.get("pin_memory", False),  # no need to PIN memory as data is in RAM
             drop_last=getattr(dataloader, "drop_last", False),
             sampler=None,  # TODO
