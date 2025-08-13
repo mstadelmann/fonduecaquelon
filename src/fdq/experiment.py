@@ -34,7 +34,7 @@ from fdq.misc import (
     save_wandb,
     load_conf_file,
 )
-from fdq.dataset_caching import cache_datasets
+from fdq.dataset_caching import cache_datasets_ddp_handler
 
 
 class fdqExperiment:
@@ -121,6 +121,7 @@ class fdqExperiment:
             self.world_size: int = self.exp_def.get("slurm_cluster", {}).get("world_size", 1)
         self.master_port: int = self.exp_def.get("slurm_cluster", {}).get("master_port")
         self.ddp_rdvz_path: int = self.exp_def.get("slurm_cluster", {}).get("ddp_rdvz_path", "/scratch/")
+        self.ddp_default_group = None
         self.init_distributed_mode()
 
         self.previous_slurm_job_id: str | None = None
@@ -225,9 +226,20 @@ class fdqExperiment:
             return True
         return self.rank == 0
 
+    def is_child_process(self) -> bool:
+        """Check if the current process is a child process in a distributed setup."""
+        if not self.is_distributed():
+            return False
+        return self.rank > 0
+
     def is_distributed(self) -> bool:
         """Check if the current setup is distributed."""
         return self.world_size > 1
+
+    def dist_barrier(self) -> None:
+        """Barrier for distributed training."""
+        if self.is_distributed():
+            torch.distributed.barrier(group=self.ddp_default_group)
 
     def init_distributed_mode(self):
         # if "SLURM_PROCID" not in os.environ or os.environ["SLURM_JOB_NAME"] == "bash":
@@ -255,6 +267,8 @@ class fdqExperiment:
             # timeout=timedelta(minutes=15),
             # device_id=torch.device("cuda", self.rank),
         )
+
+        self.ddp_default_group = torch.distributed.group.WORLD
 
         print(f"Distributed mode initialized on rank {self.rank}.")
         self.dist_barrier()
@@ -435,7 +449,7 @@ class fdqExperiment:
             if data_source.caching is None:
                 self.data[data_name] = DictToObj(processor.create_datasets(self, self.exp_def.data.get(data_name).args))
             else:
-                self.data[data_name] = DictToObj(cache_datasets(self, processor, data_name, data_source))
+                self.data[data_name] = DictToObj(cache_datasets_ddp_handler(self, processor, data_name, data_source))
 
         self.print_dataset_infos()
 
@@ -938,11 +952,6 @@ class fdqExperiment:
             iprint("Copy datasets to temporary scratch location... Done!")
             iprint("-----------------------------------------------------------")
         self.dist_barrier()
-
-    def dist_barrier(self) -> None:
-        """Barrier for distributed training."""
-        if self.is_distributed():
-            torch.distributed.barrier()
 
     def prepare_transformers(self) -> None:
         """Prepare transformers for the experiment."""

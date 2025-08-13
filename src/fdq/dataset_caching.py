@@ -9,12 +9,7 @@ from datetime import datetime
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from fdq.misc import DictToObj
-
-
-def create_cache_dir(cache_dir: str) -> None:
-    """Create the cache directory if it doesn't exist."""
-    if not os.path.exists(cache_dir):
-        os.makedirs(cache_dir)
+from fdq.ui_functions import iprint, wprint, eprint
 
 
 def get_file_size_mb(file_path):
@@ -40,7 +35,7 @@ def print_cache_summary(cache_files, data_name):
         cache_files: Dictionary of cache file paths
         data_name: Name of the dataset
     """
-    print(f"\n=== Cache Summary for {data_name} ===")
+    iprint(f"\n=== Cache Summary for {data_name} ===")
     total_size_mb = 0.0
 
     for split_name, file_path in cache_files.items():
@@ -53,18 +48,18 @@ def print_cache_summary(cache_files, data_name):
                 with h5py.File(file_path, "r") as f:
                     num_samples = f.attrs.get("num_samples", 0)
                     avg_size_kb = (size_mb * 1024) / num_samples if num_samples > 0 else 0
-                    print(
+                    iprint(
                         f"  {split_name:>5}: {size_mb:>8.2f} MB ({num_samples:>6} samples, {avg_size_kb:>6.2f} KB/sample)"
                     )
             except Exception as e:
-                print(f"  {split_name:>5}: {size_mb:>8.2f} MB (unable to read sample count: {e})")
+                eprint(f"  {split_name:>5}: {size_mb:>8.2f} MB (unable to read sample count: {e})")
         else:
-            print(f"  {split_name:>5}: File not found")
+            iprint(f"  {split_name:>5}: File not found")
 
-    print(f"  {'Total':>5}: {total_size_mb:>8.2f} MB")
+    iprint(f"  {'Total':>5}: {total_size_mb:>8.2f} MB")
     if total_size_mb > 1024:
-        print(f"  {'Total':>5}: {total_size_mb / 1024:>8.2f} GB")
-    print("=" * 40)
+        iprint(f"  {'Total':>5}: {total_size_mb / 1024:>8.2f} GB")
+    iprint("=" * 40)
 
 
 class CachedDataset(Dataset):
@@ -214,6 +209,18 @@ def find_valid_cache_file(cache_dir, data_name, split_name, expected_hash):
     return None
 
 
+def cache_datasets_ddp_handler(experiment, processor, data_name, data_source):
+    if experiment.is_main_process():
+        data = cache_datasets(experiment, processor, data_name, data_source)
+    experiment.dist_barrier()
+
+    if experiment.is_child_process():
+        data = cache_datasets(experiment, processor, data_name, data_source)
+    experiment.dist_barrier()
+
+    return data
+
+
 def cache_datasets(experiment, processor, data_name, data_source):
     """Cache dataset to disk and return a RAM-based dataset.
 
@@ -230,9 +237,8 @@ def cache_datasets(experiment, processor, data_name, data_source):
     conf_hash = hash_conf(data_source)
 
     data = DictToObj(processor.create_datasets(experiment, data_source.args))
-
     cache_dir = data_source.caching.cache_dir
-    create_cache_dir(cache_dir)
+    os.makedirs(cache_dir, exist_ok=True)
 
     # Try to find existing cache files with correct hash or create new paths
     cache_files = {}
@@ -260,7 +266,7 @@ def cache_datasets(experiment, processor, data_name, data_source):
     # Cache each split
     for split_name, dataloader in loaders_to_cache.items():
         if dataloader is None:
-            print(f"No {split_name} dataloader found, skipping...")
+            iprint(f"No {split_name} dataloader found, skipping...")
             continue
 
         # Check if cache with correct hash already exists
@@ -271,22 +277,22 @@ def cache_datasets(experiment, processor, data_name, data_source):
                     stored_hash = f.attrs.get("config_hash", "")
                     if stored_hash == conf_hash:
                         file_size_mb = get_file_size_mb(cache_files[split_name])
-                        print(
+                        iprint(
                             f"Cache file already exists at {cache_files[split_name]}, loading {split_name} from cache..."
                         )
-                        print(f"Existing cache file size: {file_size_mb:.2f} MB")
+                        iprint(f"Existing cache file size: {file_size_mb:.2f} MB")
                         cache_exists = True
                     else:
-                        print("Cache file exists but configuration hash mismatch. Creating new cache...")
+                        iprint("Cache file exists but configuration hash mismatch. Creating new cache...")
                         cache_exists = False
             except Exception:
-                print("Cache file exists but is corrupted. Creating new cache...")
+                wprint("Cache file exists but is corrupted. Creating new cache...")
                 cache_exists = False
         else:
             cache_exists = False
 
         if not cache_exists:
-            print(f"Caching {split_name} dataset to {cache_files[split_name]}...")
+            iprint(f"Caching {split_name} dataset to {cache_files[split_name]}...")
             cached_samples = cache_dataloader(dataloader, split_name)
 
             # Save cached data to disk
@@ -294,8 +300,8 @@ def cache_datasets(experiment, processor, data_name, data_source):
 
             # Calculate and print file size
             file_size_mb = get_file_size_mb(cache_files[split_name])
-            print(f"{split_name.capitalize()} dataset cached successfully! {len(cached_samples)} samples saved.")
-            print(f"Cache file size: {file_size_mb:.2f} MB")
+            iprint(f"{split_name.capitalize()} dataset cached successfully! {len(cached_samples)} samples saved.")
+            iprint(f"Cache file size: {file_size_mb:.2f} MB")
         else:
             file_size_mb = get_file_size_mb(cache_files[split_name])
 
@@ -450,7 +456,7 @@ def cache_dataloader(dataloader, split_name):
 
     if dataloader.num_workers != 0:
         # If num_workers is not zero, set it to zero for caching
-        print("WARNING: Setting dataloader num_workers to 0 for caching to avoid CUDA issues.")
+        wprint("WARNING: Setting dataloader num_workers to 0 for caching to avoid CUDA issues.")
         dataloader = set_dataloader_workers_to_zero(dataloader)
 
     # Iterate through the entire dataset and cache it
