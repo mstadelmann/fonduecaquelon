@@ -169,8 +169,11 @@ fi
 
 echo "Installing FDQ version $FDQ_VERSION..."
 if [ "$FDQ_TEST_REPO" == True ]; then
-    if ! uv pip install -i https://test.pypi.org/simple/ "fdq[gpu]==$FDQ_VERSION"; then
-        echo "ERROR: Failed to install FDQ from test repository"
+    echo "Installing from TestPyPI with PyPI fallback..."
+    if ! uv pip install --index-url https://test.pypi.org/simple/ \
+        --extra-index-url https://pypi.org/simple \
+        --index-strategy unsafe-best-match "fdq[gpu]==$FDQ_VERSION"; then
+        echo "ERROR: Failed to install fdq (test + fallback)"
         exit 1
     fi
 else
