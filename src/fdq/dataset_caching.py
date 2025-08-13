@@ -320,7 +320,7 @@ def cache_datasets(experiment, processor, data_name, data_source):
             ),  # Set to 0 since data is already in RAM, avoiding multiprocessing overhead
             pin_memory=data_source.caching.get("pin_memory", False),  # no need to PIN memory as data is in RAM
             drop_last=getattr(dataloader, "drop_last", False),
-            sampler=None,  # TODO
+            sampler=getattr(dataloader, "sampler", None),
         )
 
         cached_loaders[split_name] = cached_loader
