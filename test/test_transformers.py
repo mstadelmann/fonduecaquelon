@@ -491,6 +491,70 @@ class TestSynchronizedRandomVerticalFlip(unittest.TestCase):
         torch.testing.assert_close(result[0], torch.flip(tensor1, dims=[-2]))
         torch.testing.assert_close(result[1], torch.flip(tensor2, dims=[-2]))
 
+    def test_generator_deterministic_behavior(self):
+        """Test that generator parameter provides deterministic behavior."""
+        # Create a fixed generator for deterministic results
+        generator = torch.Generator()
+        generator.manual_seed(42)
+
+        transform = SynchronizedRandomVerticalFlip(p=0.5, generator=generator)
+        tensor1 = torch.arange(12).reshape(3, 4).float()
+        tensor2 = torch.arange(12, 24).reshape(3, 4).float()
+
+        # First call
+        result1_1, result1_2 = transform(tensor1, tensor2)
+
+        # Reset generator to same seed
+        generator.manual_seed(42)
+
+        # Second call should produce identical results
+        result2_1, result2_2 = transform(tensor1, tensor2)
+
+        torch.testing.assert_close(result1_1, result2_1)
+        torch.testing.assert_close(result1_2, result2_2)
+
+    def test_generator_different_seeds(self):
+        """Test that different generator seeds produce different results."""
+        tensor1 = torch.arange(12).reshape(3, 4).float()
+        tensor2 = torch.arange(12, 24).reshape(3, 4).float()
+
+        # Generator with seed 42
+        generator1 = torch.Generator()
+        generator1.manual_seed(42)
+        transform1 = SynchronizedRandomVerticalFlip(p=0.5, generator=generator1)
+
+        # Generator with seed 123
+        generator2 = torch.Generator()
+        generator2.manual_seed(123)
+        transform2 = SynchronizedRandomVerticalFlip(p=0.5, generator=generator2)
+
+        # Run multiple times to increase chance of different outcomes
+        results_different = False
+        for _ in range(10):
+            generator1.manual_seed(42)
+            generator2.manual_seed(123)
+
+            result1_1, result1_2 = transform1(tensor1, tensor2)
+            result2_1, result2_2 = transform2(tensor1, tensor2)
+
+            # Check if results are different (at least one should be different across iterations)
+            if not torch.equal(result1_1, result2_1) or not torch.equal(result1_2, result2_2):
+                results_different = True
+                break
+
+        # With different seeds, we should get different results at least once
+        self.assertTrue(results_different, "Different generator seeds should produce different results")
+
+    def test_generator_none_uses_global_state(self):
+        """Test that generator=None uses global random state."""
+        transform = SynchronizedRandomVerticalFlip(p=0.5, generator=None)
+        tensor = torch.arange(6).reshape(2, 3).float()
+
+        # This should work without error (uses global random state)
+        result = transform(tensor)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].shape, tensor.shape)
+
 
 class TestSynchronizedRandomHorizontalFlip(unittest.TestCase):
     """Test SynchronizedRandomHorizontalFlip class."""
@@ -548,6 +612,70 @@ class TestSynchronizedRandomHorizontalFlip(unittest.TestCase):
         for i, result in enumerate(results):
             expected = torch.flip(tensors[i], dims=[-1])
             torch.testing.assert_close(result, expected)
+
+    def test_generator_deterministic_behavior(self):
+        """Test that generator parameter provides deterministic behavior."""
+        # Create a fixed generator for deterministic results
+        generator = torch.Generator()
+        generator.manual_seed(42)
+
+        transform = SynchronizedRandomHorizontalFlip(p=0.5, generator=generator)
+        tensor1 = torch.arange(12).reshape(3, 4).float()
+        tensor2 = torch.arange(12, 24).reshape(3, 4).float()
+
+        # First call
+        result1_1, result1_2 = transform(tensor1, tensor2)
+
+        # Reset generator to same seed
+        generator.manual_seed(42)
+
+        # Second call should produce identical results
+        result2_1, result2_2 = transform(tensor1, tensor2)
+
+        torch.testing.assert_close(result1_1, result2_1)
+        torch.testing.assert_close(result1_2, result2_2)
+
+    def test_generator_different_seeds(self):
+        """Test that different generator seeds produce different results."""
+        tensor1 = torch.arange(12).reshape(3, 4).float()
+        tensor2 = torch.arange(12, 24).reshape(3, 4).float()
+
+        # Generator with seed 42
+        generator1 = torch.Generator()
+        generator1.manual_seed(42)
+        transform1 = SynchronizedRandomHorizontalFlip(p=0.5, generator=generator1)
+
+        # Generator with seed 123
+        generator2 = torch.Generator()
+        generator2.manual_seed(123)
+        transform2 = SynchronizedRandomHorizontalFlip(p=0.5, generator=generator2)
+
+        # Run multiple times to increase chance of different outcomes
+        results_different = False
+        for _ in range(10):
+            generator1.manual_seed(42)
+            generator2.manual_seed(123)
+
+            result1_1, result1_2 = transform1(tensor1, tensor2)
+            result2_1, result2_2 = transform2(tensor1, tensor2)
+
+            # Check if results are different (at least one should be different across iterations)
+            if not torch.equal(result1_1, result2_1) or not torch.equal(result1_2, result2_2):
+                results_different = True
+                break
+
+        # With different seeds, we should get different results at least once
+        self.assertTrue(results_different, "Different generator seeds should produce different results")
+
+    def test_generator_none_uses_global_state(self):
+        """Test that generator=None uses global random state."""
+        transform = SynchronizedRandomHorizontalFlip(p=0.5, generator=None)
+        tensor = torch.arange(6).reshape(2, 3).float()
+
+        # This should work without error (uses global random state)
+        result = transform(tensor)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].shape, tensor.shape)
 
 
 class TestEdgeCases(unittest.TestCase):
