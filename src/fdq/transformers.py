@@ -351,21 +351,13 @@ class Get2DFrom3DTransform:
 class SynchronizedRandomVerticalFlip:
     """Apply synchronized random vertical flip (upside down along the vertical axis) to multiple tensors."""
 
-    def __init__(self, p=0.5):
-        """Initialize the SynchronizedRandomVerticalFlip transform.
-
-        Args:
-            p (float): Probability of applying the flip. Default is 0.5.
-        """
-        self.p = p
-
-    def __call__(self, *tensors):
     def __init__(self, p=0.5, generator=None):
         """Initialize the SynchronizedRandomVerticalFlip transform.
 
         Args:
             p (float): Probability of applying the flip. Default is 0.5.
             generator (torch.Generator, optional): Random number generator for deterministic behavior.
+                       Allows consistent random decision across distributed processes.
         """
         self.p = p
         self.generator = generator
@@ -390,16 +382,19 @@ class SynchronizedRandomVerticalFlip:
 class SynchronizedRandomHorizontalFlip:
     """Apply synchronized random horizontal flip (left-right along the horizontal axis) to multiple tensors."""
 
-    def __init__(self, p=0.5):
+    def __init__(self, p=0.5, generator=None):
         """Initialize the SynchronizedRandomHorizontalFlip transform.
 
         Args:
             p (float): Probability of applying the flip. Default is 0.5.
+            generator (torch.Generator, optional): Random number generator for deterministic behavior.
+                       Allows consistent random decision across distributed processes.
         """
         self.p = p
+        self.generator = generator
 
     def __call__(self, *tensors):
-        if torch.rand(1) < self.p:
+        if torch.rand(1, generator=self.generator) < self.p:
             return tuple(torch.flip(tensor, dims=[-1]) for tensor in tensors)
         return tensors
 
