@@ -363,7 +363,7 @@ class SynchronizedRandomVerticalFlip:
         self.generator = generator
 
     def __call__(self, *tensors):
-        if torch.rand(1, generator=self.generator) < self.p:
+        if torch.rand((), generator=self.generator).item() < self.p:
             return tuple(torch.flip(tensor, dims=[-2]) for tensor in tensors)
         return tensors
 
