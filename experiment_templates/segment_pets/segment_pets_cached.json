@@ -55,7 +55,8 @@
                 "num_workers": 0,
                 "nondeterministic_transforms": {
                     "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxpets_augmentation.py"
-                }
+                },
+                "compress_cache": true
             }
         }
     }

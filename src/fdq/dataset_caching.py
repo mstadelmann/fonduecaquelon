@@ -11,6 +11,8 @@ from tqdm import tqdm
 from fdq.misc import DictToObj
 from fdq.ui_functions import iprint, wprint, eprint
 
+FDQ_CACHE_HASH_KEY = "fdq_data_hash"
+
 
 def get_file_size_mb(file_path):
     """Get file size in MB.
@@ -28,17 +30,17 @@ def get_file_size_mb(file_path):
     return 0.0
 
 
-def print_cache_summary(cache_files, data_name):
+def print_cache_summary(cache_paths, data_name):
     """Print a summary of cache file sizes.
 
     Args:
-        cache_files: Dictionary of cache file paths
+        cache_paths: Dictionary of cache file paths
         data_name: Name of the dataset
     """
     iprint(f"\n=== Cache Summary for {data_name} ===")
     total_size_mb = 0.0
 
-    for split_name, file_path in cache_files.items():
+    for split_name, file_path in cache_paths.items():
         if os.path.exists(file_path):
             size_mb = get_file_size_mb(file_path)
             total_size_mb += size_mb
@@ -202,7 +204,7 @@ def find_valid_cache_file(cache_dir, data_name, split_name, expected_hash):
     for file_path in candidate_files:
         try:
             with h5py.File(file_path, "r") as f:
-                stored_hash = f.attrs.get("config_hash", "")
+                stored_hash = f.attrs.get(FDQ_CACHE_HASH_KEY, "")
                 if stored_hash == expected_hash:
                     return file_path
         except Exception:
@@ -253,23 +255,22 @@ def cache_datasets(experiment, processor, data_name, data_source):
     Returns:
         DictToObj: Updated data object with cached dataloaders
     """
-    # Create configuration hash for cache validation
-    conf_hash = hash_conf(data_source)
+    data_hash = hash_conf(data_source)
 
     data = DictToObj(processor.create_datasets(experiment, data_source.args))
     cache_dir = data_source.caching.cache_dir
     os.makedirs(cache_dir, exist_ok=True)
 
     # Try to find existing cache files with correct hash or create new paths
-    cache_files = {}
+    cache_paths = {}
     for split_name in ["train", "val", "test"]:
-        existing_file = find_valid_cache_file(cache_dir, data_name, split_name, conf_hash)
+        existing_file = find_valid_cache_file(cache_dir, data_name, split_name, data_hash)
         if existing_file:
-            cache_files[split_name] = existing_file
+            cache_paths[split_name] = existing_file
         else:
             # Create new filename with datetime stamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            cache_files[split_name] = os.path.join(cache_dir, f"{data_name}_{split_name}_{timestamp}.h5")
+            cache_paths[split_name] = os.path.join(cache_dir, f"{data_name}_{split_name}_{timestamp}.h5")
 
     # Define which dataloaders to cache
     loaders_to_cache = {
@@ -288,15 +289,15 @@ def cache_datasets(experiment, processor, data_name, data_source):
             continue
 
         # Check if cache with correct hash already exists
-        if os.path.exists(cache_files[split_name]):
+        if os.path.exists(cache_paths[split_name]):
             # Verify the hash matches
             try:
-                with h5py.File(cache_files[split_name], "r") as f:
-                    stored_hash = f.attrs.get("config_hash", "")
-                    if stored_hash == conf_hash:
-                        file_size_mb = get_file_size_mb(cache_files[split_name])
+                with h5py.File(cache_paths[split_name], "r") as f:
+                    stored_hash = f.attrs.get(FDQ_CACHE_HASH_KEY, "")
+                    if stored_hash == data_hash:
+                        file_size_mb = get_file_size_mb(cache_paths[split_name])
                         iprint(
-                            f"Cache file already exists at {cache_files[split_name]}, loading {split_name} from cache..."
+                            f"Cache file already exists at {cache_paths[split_name]}, loading {split_name} from file..."
                         )
                         iprint(f"Existing cache file size: {file_size_mb:.2f} MB")
                         cache_exists = True
@@ -310,37 +311,39 @@ def cache_datasets(experiment, processor, data_name, data_source):
             cache_exists = False
 
         if not cache_exists:
-            iprint(f"Caching {split_name} dataset to {cache_files[split_name]}...")
+            iprint(f"Caching {split_name} dataset to {cache_paths[split_name]}...")
             cached_samples = cache_dataloader(orig_dataloader, split_name)
 
             # Save cached data to disk
-            _save_samples_to_hdf5(cached_samples, cache_files[split_name], conf_hash)
+            _save_samples_to_hdf5(
+                samples=cached_samples,
+                file_path=cache_paths[split_name],
+                config_hash=data_hash,
+                compression=data_source.caching.get("compress_cache", True),
+            )
 
             # Calculate and print file size
-            file_size_mb = get_file_size_mb(cache_files[split_name])
+            file_size_mb = get_file_size_mb(cache_paths[split_name])
             iprint(
                 f"{split_name.capitalize()} dataset cached successfully! {len(cached_samples)} samples saved. Cache file size: {file_size_mb:.2f} MB"
             )
         else:
-            file_size_mb = get_file_size_mb(cache_files[split_name])
+            file_size_mb = get_file_size_mb(cache_paths[split_name])
 
         total_cache_size_mb += file_size_mb
 
         # Create cached dataset that loads data into RAM
-        cached_dataset = CachedDataset(cache_files[split_name], data_source, experiment)
-
-        # orig_custom_sampler = getattr(orig_dataloader, "sampler", None)
-        # # shuffle and custom sampler are mutually exclusive!
-        # shuffle_settings = get_shuffle_setting(data_source)
-        # current_shuffle = shuffle_settings[split_name] if orig_custom_sampler is None else False
+        cached_dataset = CachedDataset(cache_paths[split_name], data_source, experiment)
 
         # Create new DataLoader with cached dataset
         # - Set to num_workers = 0 since data is already in RAM, avoiding multiprocessing overhead
         # - no need to PIN memory as data is in RAM
+        # - shuffling is managed by sampler
+        # - prefetch_factor = None to avoid issues with num_workers=0, also not necessary.
         cached_loader = DataLoader(
             dataset=cached_dataset,
             batch_size=orig_dataloader.batch_size,
-            shuffle=False,  # current_shuffle,
+            shuffle=False,
             # batch_sampler=orig_dataloader.batch_sampler,
             sampler=orig_dataloader.sampler,
             num_workers=data_source.caching.get("num_workers", 0),
@@ -351,7 +354,7 @@ def cache_datasets(experiment, processor, data_name, data_source):
             worker_init_fn=orig_dataloader.worker_init_fn,
             multiprocessing_context=orig_dataloader.multiprocessing_context,
             generator=orig_dataloader.generator,
-            prefetch_factor=None,  # Set to None to avoid issues with num_workers=0
+            prefetch_factor=None,
             persistent_workers=orig_dataloader.persistent_workers,
         )
 
@@ -366,43 +369,46 @@ def cache_datasets(experiment, processor, data_name, data_source):
         data.test_data_loader = cached_loaders["test"]
 
     # Print detailed cache summary
-    print_cache_summary(cache_files, data_name)
+    print_cache_summary(cache_paths, data_name)
 
     return data
 
 
-def _save_samples_to_hdf5(samples, file_path, config_hash=None):
+def _save_samples_to_hdf5(samples, file_path, config_hash=None, compression=True):
     """Save samples to HDF5 format.
 
     Args:
         samples: List of samples to save
         file_path: Path to save the HDF5 file
         config_hash: Configuration hash to store as attribute
+        compression: Apply gzip compression when saving data
     """
     with h5py.File(file_path, "w") as f:
         # Save metadata as root attributes
         f.attrs["num_samples"] = len(samples)
         if config_hash:
-            f.attrs["config_hash"] = config_hash
+            f.attrs[FDQ_CACHE_HASH_KEY] = config_hash
 
         for i, sample in enumerate(samples):
             sample_group = f.create_group(f"sample_{i}")
-            _save_sample_to_group(sample, sample_group)
+            _save_sample_to_group(sample, sample_group, compression)
 
 
-def _save_sample_to_group(sample, group):
+def _save_sample_to_group(sample, group, compression):
     """Save a single sample to an HDF5 group.
 
     Args:
         sample: The sample to save
         group: HDF5 group to save to
+        compression: Apply gzip compression when saving data
     """
+    compression_algo = "gzip" if compression else None
     if isinstance(sample, dict):
         group.attrs["type"] = "dict"
         for key, value in sample.items():
             if isinstance(value, np.ndarray):
                 # Save numpy array directly
-                group.create_dataset(f"{key}_data", data=value, compression="gzip")
+                group.create_dataset(f"{key}_data", data=value, compression=compression_algo)
             elif isinstance(value, int | float | str | bool | np.integer | np.floating):
                 # Save scalar values as attributes
                 group.attrs[key] = value
@@ -415,7 +421,7 @@ def _save_sample_to_group(sample, group):
         group.attrs["num_items"] = len(sample)
         for i, item in enumerate(sample):
             if isinstance(item, np.ndarray):
-                group.create_dataset(f"item_{i}_data", data=item, compression="gzip")
+                group.create_dataset(f"item_{i}_data", data=item, compression=compression_algo)
             elif isinstance(item, int | float | str | bool | np.integer | np.floating):
                 group.attrs[f"item_{i}_value"] = item
             else:
@@ -426,7 +432,7 @@ def _save_sample_to_group(sample, group):
         group.attrs["num_items"] = len(sample)
         for i, item in enumerate(sample):
             if isinstance(item, np.ndarray):
-                group.create_dataset(f"item_{i}_data", data=item, compression="gzip")
+                group.create_dataset(f"item_{i}_data", data=item, compression=compression_algo)
             elif isinstance(item, int | float | str | bool | np.integer | np.floating):
                 group.attrs[f"item_{i}_value"] = item
             else:
@@ -434,7 +440,7 @@ def _save_sample_to_group(sample, group):
 
     elif isinstance(sample, np.ndarray):
         group.attrs["type"] = "tensor"
-        group.create_dataset("data", data=sample, compression="gzip")
+        group.create_dataset("data", data=sample, compression=compression_algo)
 
     else:
         # For other types, store as attributes
@@ -545,22 +551,3 @@ def cache_dataloader(dataloader, split_name):
                     cached_samples.append(item)
 
     return cached_samples
-
-
-def get_shuffle_setting(data_source):
-    """Determine if a data source should be shuffled.
-
-    Args:
-        data_source: The data source to check
-
-    Returns:
-        bool: True if the data source should be shuffled, False otherwise
-    """
-    shuffle_settings = {}
-    for split_name in ["train", "val", "test"]:
-        shuffle = data_source.caching.get(f"shuffle_{split_name}", data_source.args.get(f"shuffle_{split_name}"))
-        if shuffle is None:
-            raise ValueError(f"Shuffle setting for {split_name} is not defined in caching configuration or args.")
-        shuffle_settings[split_name] = shuffle
-
-    return shuffle_settings

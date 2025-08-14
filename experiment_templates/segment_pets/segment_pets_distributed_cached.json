@@ -2,62 +2,7 @@
     "globals": {
         "project": "Segment OXPET segmentation",
         "author": "Marc",
-        "parent": "segment_pets.json"
-    },
-    "transforms": {
-        "resize_and_pad_bilinear": [
-            {
-                "ResizeMaxDimPad": {
-                    "max_dim": 256,
-                    "interpol_mode": "bilinear"
-                }
-            }
-        ],
-        "resize_and_pad_nearest": [
-            {
-                "ResizeMaxDimPad": {
-                    "max_dim": 256,
-                    "interpol_mode": "nearest"
-                }
-            }
-        ],
-        "random_vertical_flip_sync": [
-            {
-                "SynchronizedRandomVerticalFlip": {
-                    "p": 0.5
-                }
-            }
-        ]
-    },
-    "data": {
-        "OXPET": {
-            "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxfordpet_preparator.py",
-            "args": {
-                "subset_train": 0.2,
-                "subset_val": 0.2,
-                "subset_test": 0.2,
-                "pin_memory": true,
-                "num_workers": 4,
-                "train_batch_size": 48,
-                "val_batch_size": 48,
-                "test_batch_size": 1,
-                "shuffle_train": true,
-                "shuffle_val": false,
-                "shuffle_test": false
-            },
-            "caching": {
-                "enabled": true,
-                "cache_dir": "/scratch/fdq_cache/",
-                "shuffle_train": true,
-                "shuffle_val": false,
-                "shuffle_test": false,
-                "pin_memory": false,
-                "num_workers": 0,
-                "nondeterministic_transforms": {
-                    "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxpets_augmentation.py"
-                }
-            }
-        }
+        "parent": "segment_pets_cached.json"
     },
     "slurm_cluster": {
         "world_size": 2,
