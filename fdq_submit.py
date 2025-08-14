@@ -94,6 +94,7 @@ SUBMIT_FILE_PATH=#submit_file_path#
 PY_MODULE=#python_env_module#
 UV_MODULE=#uv_env_module#
 FDQ_VERSION=#fdq_version#
+FDQ_TEST_REPO=#fdq_test_repo# # if True, install fdq from https://test.pypi.org
 RETVALUE=1 # will become zero if training is successful, which will launch an optional test job
 
 # Function for safe file operations
@@ -167,9 +168,19 @@ if ! source /scratch/fdqenv/bin/activate; then
 fi
 
 echo "Installing FDQ version $FDQ_VERSION..."
-if ! uv pip install "fdq[gpu]==$FDQ_VERSION"; then
-    echo "ERROR: Failed to install FDQ"
-    exit 1
+if [ "$FDQ_TEST_REPO" == True ]; then
+    echo "Installing from TestPyPI with PyPI fallback..."
+    if ! uv pip install --index-url https://test.pypi.org/simple/ \
+        --extra-index-url https://pypi.org/simple \
+        --index-strategy unsafe-best-match "fdq[gpu]==$FDQ_VERSION"; then
+        echo "ERROR: Failed to install fdq (test + fallback)"
+        exit 1
+    fi
+else
+    if ! uv pip install "fdq[gpu]==$FDQ_VERSION"; then
+        echo "ERROR: Failed to install FDQ"
+        exit 1
+    fi
 fi
 
 # Install additional packages
@@ -554,6 +565,7 @@ def get_default_config(slurm_conf: Any) -> dict[str, Any]:
         "python_env_module": None,
         "uv_env_module": None,
         "fdq_version": None,
+        "fdq_test_repo": False,
         "exp_file_path": None,
         "scratch_results_path": "/scratch/fdq_results/",
         "scratch_data_path": "/scratch/fdq_data/",

@@ -211,6 +211,87 @@ See [oxpets_test.py](experiment_templates/segment_pets/oxpets_test.py) for an ex
 
 ---
 
+## 💾 Dataset Caching
+
+FDQ provides a powerful dataset caching system that can significantly speed up training by caching preprocessed data to disk and loading it into RAM for fast access during training.
+
+### How It Works
+
+The caching system operates in two stages:
+
+1. **Deterministic Preprocessing & Caching:** Expensive, deterministic transformations (like resizing, normalization, data loading) are applied once and cached to HDF5 files on disk.
+
+2. **On-the-fly Augmentation:** Fast, random augmentations (like flips, rotations) are applied dynamically during training for data variety.
+
+### Configuration
+
+Enable caching in your experiment configuration by adding a `caching` section to your data loader:
+
+```json
+"data": {
+    "OXPET": {
+        "class_name": "experiment_templates.segment_pets.oxpets_data.OxPetsData",
+        "args": {
+            "data_path": "/path/to/data",
+            "batch_size": 8
+        },
+        "caching": {
+            "cache_dir": "/path/to/cache",
+            "shuffle_train": true,
+            "shuffle_val": false,
+            "shuffle_test": false
+        }
+    }
+}
+```
+
+### Custom Augmentations
+
+Create a custom augmentation script for on-the-fly transformations:
+
+```python
+# oxpets_augmentation.py
+def augment(sample, transformers=None):
+    """Apply custom augmentations to cached dataset samples.
+    
+    Args:
+        sample (dict): Cached sample with keys like "image", "mask"
+        transformers (dict): Dictionary of transformation functions
+        
+    Returns:
+        dict: Augmented sample
+    """
+    # Apply synchronized random transformations
+    sample["image"], sample["mask"] = transformers["random_vflip_sync"](
+        sample["image"], sample["mask"]
+    )
+    return sample
+```
+
+Reference the augmentation script in your config:
+
+```json
+"data": {
+    "OXPET": {
+        "caching": {
+            "augmentation_script": "experiment_templates.segment_pets.oxpets_augmentation"
+        }
+    }
+}
+```
+
+### Key Features
+
+- **Configuration Hash Validation:** Cache files are automatically invalidated when dataset configurations change
+- **Faster Training:** Eliminate repeated preprocessing computations
+- **Reduced I/O:** Minimize disk access during training
+- **Reproducible Experiments:** Deterministic preprocessing with controllable randomness
+- **Storage Efficiency:** HDF5 compression reduces disk space usage
+- **Flexible Augmentation:** Combine cached preprocessing with dynamic augmentation
+
+
+---
+
 ## 📦 Installing Additional Python Packages in your managed SLURM Environment
 
 If your experiment requires extra Python packages, specify them in your config under `additional_pip_packages`. FDQ will install them automatically before running your experiment.
@@ -219,7 +300,7 @@ Example:
 
 ```json
 "slurm_cluster": {
-    "fdq_version": "0.0.63",
+    "fdq_version": "0.0.64",
     "...": "...",
     "additional_pip_packages": [
         "monai==1.4.0",

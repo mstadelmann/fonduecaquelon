@@ -280,33 +280,26 @@ class UnPaddingTransform:
         self.padding_size = padding_size
 
     def __call__(self, t):
-        req_pad_dim = t.dim() * 2
-        pad = self.padding_size + [0] * (req_pad_dim - len(self.padding_size))
-        ps_start = pad[::2]
-        ps_stop = pad[1::2]
+        pad_spec = list(self.padding_size)
+        if len(pad_spec) % 2 != 0:
+            raise ValueError("Padding specification must have an even number of elements.")
 
-        for dim in range(t.dim()):
-            if ps_stop[dim] == 0:
-                ps_stop[dim] = t.shape[dim]
-            else:
-                ps_stop[dim] = t.shape[dim] - ps_stop[dim]
+        num_padded_dims = len(pad_spec) // 2
+        if num_padded_dims > t.dim():
+            raise ValueError(f"Padding specification for {num_padded_dims} dims exceeds tensor dims {t.dim()}")
 
-        if t.dim() == 4:
-            return t[
-                ps_start[0] : ps_stop[0],
-                ps_start[1] : ps_stop[1],
-                ps_start[2] : ps_stop[2],
-                ps_start[3] : ps_stop[3],
-            ]
-        if t.dim() == 5:
-            return t[
-                ps_start[0] : ps_stop[0],
-                ps_start[1] : ps_stop[1],
-                ps_start[2] : ps_stop[2],
-                ps_start[3] : ps_stop[3],
-                ps_start[4] : ps_stop[4],
-            ]
-        raise ValueError("Only 4D and 5D tensors are supported!")
+        slices = [slice(None)] * t.dim()
+        # PyTorch F.pad order: (pad_left, pad_right, pad_top, pad_bottom, ...), i.e. last dim first.
+        for i in range(num_padded_dims):
+            left = pad_spec[2 * i]
+            right = pad_spec[2 * i + 1]
+            dim = t.dim() - 1 - i  # map i-th pair to trailing dimension
+            start = left if left > 0 else 0
+            # If right == 0 we leave end as None to take full extent
+            end = -right if right > 0 else None
+            slices[dim] = slice(start, end)
+
+        return t[tuple(slices)]
 
 
 class Float32Transform:
@@ -353,6 +346,57 @@ class Get2DFrom3DTransform:
         if self.axis < 0 or self.axis >= t.dim():
             raise ValueError(f"Axis {self.axis} is out of bounds for the tensor with {t.dim()} dimensions.")
         return t.select(dim=self.axis, index=self.index)
+
+
+class SynchronizedRandomVerticalFlip:
+    """Apply synchronized random vertical flip (upside down along the vertical axis) to multiple tensors."""
+
+    def __init__(self, p=0.5, generator=None):
+        """Initialize the SynchronizedRandomVerticalFlip transform.
+
+        Args:
+            p (float): Probability of applying the flip. Default is 0.5.
+            generator (torch.Generator, optional): Random number generator for deterministic behavior.
+                       Allows consistent random decision across distributed processes.
+        """
+        self.p = p
+        self.generator = generator
+
+    def __call__(self, *tensors):
+        if torch.rand((), generator=self.generator).item() < self.p:
+            return tuple(torch.flip(tensor, dims=[-2]) for tensor in tensors)
+        return tensors
+
+    def apply_transform(self, tensors):
+        """Apply the vertical flip transform to tensors.
+
+        Args:
+            tensors: Input tensors to transform.
+
+        Returns:
+            Transformed tensors.
+        """
+        return self(*tensors)
+
+
+class SynchronizedRandomHorizontalFlip:
+    """Apply synchronized random horizontal flip (left-right along the horizontal axis) to multiple tensors."""
+
+    def __init__(self, p=0.5, generator=None):
+        """Initialize the SynchronizedRandomHorizontalFlip transform.
+
+        Args:
+            p (float): Probability of applying the flip. Default is 0.5.
+            generator (torch.Generator, optional): Random number generator for deterministic behavior.
+                       Allows consistent random decision across distributed processes.
+        """
+        self.p = p
+        self.generator = generator
+
+    def __call__(self, *tensors):
+        if torch.rand((), generator=self.generator).item() < self.p:
+            return tuple(torch.flip(tensor, dims=[-1]) for tensor in tensors)
+        return tensors
 
 
 def get_transformers(t_defs: Any) -> transforms.Compose:
@@ -460,8 +504,14 @@ def get_transformer_by_names(transformer_name: str, parameters: dict[str, Any] |
     elif transformer_name == "RandomHorizontalFlip":
         transformer = transforms.RandomHorizontalFlip(p=0.5 if parameters is None else parameters.get("p", 0.5))
 
+    elif transformer_name == "SynchronizedRandomHorizontalFlip":
+        transformer = SynchronizedRandomHorizontalFlip(p=0.5 if parameters is None else parameters.get("p", 0.5))
+
     elif transformer_name == "RandomVerticalFlip":
         transformer = transforms.RandomVerticalFlip(p=0.5 if parameters is None else parameters.get("p", 0.5))
+
+    elif transformer_name == "SynchronizedRandomVerticalFlip":
+        transformer = SynchronizedRandomVerticalFlip(p=0.5 if parameters is None else parameters.get("p", 0.5))
 
     elif transformer_name == "ToTensor":
         transformer = transforms.ToTensor()

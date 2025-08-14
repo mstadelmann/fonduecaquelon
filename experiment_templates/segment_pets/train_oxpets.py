@@ -15,7 +15,6 @@ def fdq_train(experiment: fdqExperiment) -> None:
 
     data = experiment.data["OXPET"]
     model = experiment.models["ccUNET"]
-    device_type = "cuda" if experiment.device == torch.device("cuda") else "cpu"
 
     for epoch in range(experiment.start_epoch, experiment.nb_epochs):
         experiment.current_epoch = epoch
@@ -37,7 +36,7 @@ def fdq_train(experiment: fdqExperiment) -> None:
             inputs = batch["image"].to(experiment.device).type(torch.float32)
             targets = batch["mask"].to(experiment.device).type(torch.float32)
 
-            with torch.autocast(device_type=device_type, enabled=experiment.useAMP):
+            with torch.autocast(device_type=experiment.device.type, enabled=experiment.useAMP):
                 output = model(inputs)
                 train_loss_tensor = experiment.losses["cross_ent"](output, targets) / experiment.gradacc_iter
                 if experiment.useAMP and experiment.scaler is not None:
