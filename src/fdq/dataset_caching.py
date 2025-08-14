@@ -166,7 +166,10 @@ class CachedDataset(Dataset):
 
     def __getitem__(self, idx):
         """Return the cached sample at the given index."""
-        sample = self.cached_data[idx]
+        try:
+            sample = self.cached_data[idx]
+        except IndexError:
+            raise IndexError(f"Index {idx} out of bounds for cached dataset with {len(self.cached_data)} samples.")
         if self.augmenter is not None:
             return self.augmenter.augment(sample, self.experiment)
         return sample
@@ -270,20 +273,18 @@ def cache_datasets(experiment, processor, data_name, data_source):
 
     # Define which dataloaders to cache
     loaders_to_cache = {
-        "train": data.train_data_loader,
+        "train": data.train_data_loader if hasattr(data, "train_data_loader") else None,
         "val": data.val_data_loader if hasattr(data, "val_data_loader") else None,
         "test": data.test_data_loader if hasattr(data, "test_data_loader") else None,
     }
-
-    shuffle_settings = get_shuffle_setting(data_source)
 
     cached_loaders = {}
     total_cache_size_mb = 0.0
 
     # Cache each split
-    for split_name, dataloader in loaders_to_cache.items():
-        if dataloader is None:
-            iprint(f"No {split_name} dataloader found, skipping...")
+    for split_name, orig_dataloader in loaders_to_cache.items():
+        if orig_dataloader is None:
+            wprint(f"No {split_name} dataloader found, skipping...")
             continue
 
         # Check if cache with correct hash already exists
@@ -310,15 +311,16 @@ def cache_datasets(experiment, processor, data_name, data_source):
 
         if not cache_exists:
             iprint(f"Caching {split_name} dataset to {cache_files[split_name]}...")
-            cached_samples = cache_dataloader(dataloader, split_name)
+            cached_samples = cache_dataloader(orig_dataloader, split_name)
 
             # Save cached data to disk
             _save_samples_to_hdf5(cached_samples, cache_files[split_name], conf_hash)
 
             # Calculate and print file size
             file_size_mb = get_file_size_mb(cache_files[split_name])
-            iprint(f"{split_name.capitalize()} dataset cached successfully! {len(cached_samples)} samples saved.")
-            iprint(f"Cache file size: {file_size_mb:.2f} MB")
+            iprint(
+                f"{split_name.capitalize()} dataset cached successfully! {len(cached_samples)} samples saved. Cache file size: {file_size_mb:.2f} MB"
+            )
         else:
             file_size_mb = get_file_size_mb(cache_files[split_name])
 
@@ -327,21 +329,30 @@ def cache_datasets(experiment, processor, data_name, data_source):
         # Create cached dataset that loads data into RAM
         cached_dataset = CachedDataset(cache_files[split_name], data_source, experiment)
 
-        custom_sampler = getattr(dataloader, "sampler", None)
-        # shuffle and custom sampler are mutually exclusive!
-        current_shuffle = shuffle_settings[split_name] if custom_sampler is None else False
+        # orig_custom_sampler = getattr(orig_dataloader, "sampler", None)
+        # # shuffle and custom sampler are mutually exclusive!
+        # shuffle_settings = get_shuffle_setting(data_source)
+        # current_shuffle = shuffle_settings[split_name] if orig_custom_sampler is None else False
 
         # Create new DataLoader with cached dataset
+        # - Set to num_workers = 0 since data is already in RAM, avoiding multiprocessing overhead
+        # - no need to PIN memory as data is in RAM
         cached_loader = DataLoader(
-            cached_dataset,
-            batch_size=dataloader.batch_size,
-            shuffle=current_shuffle,
-            num_workers=data_source.caching.get(
-                "num_workers", 0
-            ),  # Set to 0 since data is already in RAM, avoiding multiprocessing overhead
-            pin_memory=data_source.caching.get("pin_memory", False),  # no need to PIN memory as data is in RAM
-            drop_last=getattr(dataloader, "drop_last", False),
-            sampler=custom_sampler,
+            dataset=cached_dataset,
+            batch_size=orig_dataloader.batch_size,
+            shuffle=False,  # current_shuffle,
+            # batch_sampler=orig_dataloader.batch_sampler,
+            sampler=orig_dataloader.sampler,
+            num_workers=data_source.caching.get("num_workers", 0),
+            collate_fn=orig_dataloader.collate_fn,
+            pin_memory=data_source.caching.get("pin_memory", False),
+            drop_last=orig_dataloader.drop_last,
+            timeout=orig_dataloader.timeout,
+            worker_init_fn=orig_dataloader.worker_init_fn,
+            multiprocessing_context=orig_dataloader.multiprocessing_context,
+            generator=orig_dataloader.generator,
+            prefetch_factor=None,  # Set to None to avoid issues with num_workers=0
+            persistent_workers=orig_dataloader.persistent_workers,
         )
 
         cached_loaders[split_name] = cached_loader
@@ -434,8 +445,13 @@ def _save_sample_to_group(sample, group):
             group.attrs["value"] = str(sample)
 
 
-def set_dataloader_workers_to_zero(dataloader):
-    """Create a new DataLoader identical to the input but with num_workers=0.
+def reconfig_orig_dataloader(dataloader):
+    """Create a new DataLoader with modified parameters.
+
+    - num_workers = 0 to avoid CUDA issues.
+    - batch size = 1 to avoid missing samples (drop last)
+    - shuffle = False to ensure consistent ordering in cache file.
+    - drop_last = False (no influence with batch size = 1)
 
     Args:
         dataloader: PyTorch DataLoader to modify
@@ -445,21 +461,21 @@ def set_dataloader_workers_to_zero(dataloader):
     """
     return DataLoader(
         dataset=dataloader.dataset,
-        batch_size=dataloader.batch_size,
+        batch_size=1,
         shuffle=False,
-        sampler=dataloader.sampler,
+        # sampler=dataloader.sampler,
         # batch_sampler=dataloader.batch_sampler,
         # batch_sampler option is mutually exclusive with batch_size, shuffle, sampler, and drop_last
-        num_workers=0,  # Set to 0
-        collate_fn=dataloader.collate_fn,
-        pin_memory=dataloader.pin_memory,
-        drop_last=dataloader.drop_last,
+        num_workers=0,
+        collate_fn=None,
+        pin_memory=False,
+        drop_last=False,
         timeout=dataloader.timeout,
-        worker_init_fn=dataloader.worker_init_fn,
-        multiprocessing_context=dataloader.multiprocessing_context,
-        generator=dataloader.generator,
+        worker_init_fn=None,
+        multiprocessing_context=None,
+        generator=None,
         prefetch_factor=None,  # Set to None to avoid issues with num_workers=0
-        persistent_workers=dataloader.persistent_workers,
+        persistent_workers=False,
     )
 
 
@@ -475,13 +491,8 @@ def cache_dataloader(dataloader, split_name):
     """
     cached_samples = []
 
-    if dataloader.num_workers != 0:
-        # If num_workers is not zero, set it to zero for caching
-        wprint("WARNING: Setting dataloader num_workers to 0 for caching to avoid CUDA issues.")
-        dataloader = set_dataloader_workers_to_zero(dataloader)
-
     # Iterate through the entire dataset and cache it
-    for batch in tqdm(dataloader, desc=f"Caching {split_name} dataset"):
+    for batch in tqdm(reconfig_orig_dataloader(dataloader), desc=f"Caching {split_name} dataset"):
         # Store each sample in the batch individually
         if isinstance(batch, dict):
             # Handle dict-style batches (common for complex datasets)
