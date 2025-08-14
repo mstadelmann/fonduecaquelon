@@ -232,6 +232,7 @@ def cache_datasets_ddp_handler(experiment, processor, data_name, data_source):
         DictToObj: Data object whose train/val/test dataloaders point to
         cached datasets.
     """
+    data = None
     if experiment.is_main_process():
         data = cache_datasets(experiment, processor, data_name, data_source)
     experiment.dist_barrier()
