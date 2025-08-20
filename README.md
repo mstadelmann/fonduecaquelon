@@ -374,4 +374,4 @@ Contributions are welcome! Please open issues or pull requests on [GitHub](https
 
 ---
 
-## 🧀 Enjoy your fondue and happy experimenting!
+## 🧀 Enjoy your fondue!
