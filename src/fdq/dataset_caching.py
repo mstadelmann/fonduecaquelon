@@ -244,6 +244,25 @@ def cache_datasets_ddp_handler(experiment, processor, data_name, data_source):
     return data
 
 
+def get_loaders_to_cache(experiment, data):
+    """Determine which dataloaders to cache based on experiment configuration.
+
+    Args:
+        experiment: The experiment object containing training/testing flags
+        data: Data object containing train/val/test dataloaders
+
+    Returns:
+        dict: Dictionary mapping split names to dataloaders or None if not needed
+    """
+    is_train = experiment.inargs.train_model
+    is_test = experiment.inargs.test_model_auto or experiment.inargs.test_model_ia
+    return {
+        "train": data.train_data_loader if hasattr(data, "train_data_loader") and is_train else None,
+        "val": data.val_data_loader if hasattr(data, "val_data_loader") and is_train else None,
+        "test": data.test_data_loader if hasattr(data, "test_data_loader") and is_test else None,
+    }
+
+
 def cache_datasets(experiment, processor, data_name, data_source):
     """Cache dataset to disk and return a RAM-based dataset.
 
@@ -258,30 +277,23 @@ def cache_datasets(experiment, processor, data_name, data_source):
     """
     data_hash = hash_conf(data_source)
 
-    data = DictToObj(processor.create_datasets(experiment, data_source.args))
-    cache_dir = data_source.caching.cache_dir
-    os.makedirs(cache_dir, exist_ok=True)
+    os.makedirs(data_source.caching.cache_dir, exist_ok=True)
 
     # Try to find existing cache files with correct hash or create new paths
     cache_paths = {}
     for split_name in ["train", "val", "test"]:
-        existing_file = find_valid_cache_file(cache_dir, data_name, split_name, data_hash)
+        existing_file = find_valid_cache_file(data_source.caching.cache_dir, data_name, split_name, data_hash)
         if existing_file:
             cache_paths[split_name] = existing_file
         else:
             # Create new filename with datetime stamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            cache_paths[split_name] = os.path.join(cache_dir, f"{data_name}_{split_name}_{timestamp}.h5")
+            cache_paths[split_name] = os.path.join(
+                data_source.caching.cache_dir, f"{data_name}_{split_name}_{timestamp}.h5"
+            )
 
-    # Define which dataloaders to cache
-    is_train = experiment.inargs.train_model
-    is_test = experiment.inargs.test_model_auto or experiment.inargs.test_model_ia
-    loaders_to_cache = {
-        "train": data.train_data_loader if hasattr(data, "train_data_loader") and is_train else None,
-        "val": data.val_data_loader if hasattr(data, "val_data_loader") and is_train else None,
-        "test": data.test_data_loader if hasattr(data, "test_data_loader") and is_test else None,
-    }
-
+    data = DictToObj(processor.create_datasets(experiment, data_source.args))
+    loaders_to_cache = get_loaders_to_cache(experiment, data)
     cached_loaders = {}
     total_cache_size_mb = 0.0
 
