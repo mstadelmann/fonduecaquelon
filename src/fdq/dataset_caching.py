@@ -76,7 +76,7 @@ class CachedDataset(Dataset):
             experiment: The experiment object containing class imports and configuration
         """
         self.experiment = experiment
-        self.augmenter_path = data_source.caching.nondeterministic_transforms.processor
+        self.augmenter_path = data_source.caching.get("nondeterministic_transforms", {}).get("processor")
         if self.augmenter_path is not None:
             self.augmenter = experiment.import_class(file_path=self.augmenter_path)
         else:
@@ -274,10 +274,12 @@ def cache_datasets(experiment, processor, data_name, data_source):
             cache_paths[split_name] = os.path.join(cache_dir, f"{data_name}_{split_name}_{timestamp}.h5")
 
     # Define which dataloaders to cache
+    is_train = experiment.inargs.train_model
+    is_test = experiment.inargs.test_model_auto or experiment.inargs.test_model_ia
     loaders_to_cache = {
-        "train": data.train_data_loader if hasattr(data, "train_data_loader") else None,
-        "val": data.val_data_loader if hasattr(data, "val_data_loader") else None,
-        "test": data.test_data_loader if hasattr(data, "test_data_loader") else None,
+        "train": data.train_data_loader if hasattr(data, "train_data_loader") and is_train else None,
+        "val": data.val_data_loader if hasattr(data, "val_data_loader") and is_train else None,
+        "test": data.test_data_loader if hasattr(data, "test_data_loader") and is_test else None,
     }
 
     cached_loaders = {}
@@ -286,7 +288,7 @@ def cache_datasets(experiment, processor, data_name, data_source):
     # Cache each split
     for split_name, orig_dataloader in loaders_to_cache.items():
         if orig_dataloader is None:
-            wprint(f"No {split_name} dataloader found, skipping...")
+            wprint(f"No '{split_name}' dataloader found/required for this run, skipping...")
             continue
 
         # Check if cache with correct hash already exists
