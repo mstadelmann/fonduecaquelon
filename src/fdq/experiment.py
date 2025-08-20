@@ -844,10 +844,10 @@ class fdqExperiment:
             self.run_time = datetime.now() - self.creation_time
 
             iprint(
-                f"Total run time: days: {self.run_time.days}, "
-                f"hours: {self.run_time.seconds // 3600}, "
-                f"minutes: {self.run_time.seconds % 3600 / 60.0:.0f} | "
-                f"current epoch: {int(current_ep_time.total_seconds() // 60)} minutes"
+                f"Total run time: {self.run_time.days} days, "
+                f"{self.run_time.seconds // 3600} hours, "
+                f"{self.run_time.seconds % 3600 / 60.0:.0f} minutes | "
+                f"current epoch: {int(current_ep_time.total_seconds() // 60)} minutes {int(current_ep_time.total_seconds() % 60)} seconds"
             )
             store_processing_infos(self)
         except (AttributeError, ValueError):
