@@ -27,9 +27,9 @@
             "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxfordpet_preparator.py",
             "args": {
                 "base_path": "~/data/ML_data/oxford_pets/",
-                "subset_train": 0.8,
-                "subset_val": 0.8,
-                "subset_test": 0.8,
+                "subset_train": 1.0,
+                "subset_val": 1.0,
+                "subset_test": 1.0,
                 "pin_memory": true,
                 "num_workers": 4,
                 "train_batch_size": 48,
@@ -126,7 +126,7 @@
         "scratch_results_path": "/scratch/fdq_results/",
         "scratch_data_path": "/scratch/fdq_data/",
         "log_path": "~/dev/fonduecaquelon/slurm_log",
-        "job_time": 10,
+        "job_time": 15,
         "stop_grace_time": 3,
         "cpus_per_task": 8,
         "cpus_per_task_test": 8,
@@ -142,7 +142,7 @@
         "world_size": 1,
         "resume_chpt_path": null,
         "additional_pip_packages": [
-            "chuchichaestli==0.2.12"
+            "chuchichaestli==0.2.14"
         ]
     }
 }

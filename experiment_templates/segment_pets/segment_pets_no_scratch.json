@@ -1,0 +1,10 @@
+{
+    "globals": {
+        "project": "Segment OXPET segmentation",
+        "author": "Marc",
+        "parent": "segment_pets.json"
+    },
+    "slurm_cluster": {
+        "scratch_data_path": null
+    }
+}

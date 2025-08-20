@@ -1,6 +1,6 @@
 # FDQ | Fonduecaquelon
 
-Fonduecaquelon (FDQ) is designed for researchers and practitioners who want to focus on deep learning experiments, not boilerplate code. FDQ streamlines your PyTorch workflow, automating repetitive tasks and providing a flexible, extensible framework for experiment management—so you can spend more time on innovation and less on setup.
+A fonduecaquelon is the heavy pot that keeps cheeses (e.g. 50% Gruyère and 50% Vacherin) melting smoothly into a perfectly blended whole — and FDQ does the same for deep learning. It keeps models, data loaders, training loops, and tools at a steady “temperature” so everything works seamlessly together, streamlining PyTorch workflows by automating repetitive tasks and providing a flexible, extensible framework for experiment management. Built for ML engineers who want to focus on experiments instead of boilerplate, FDQ frees you to spend more time innovating and less time setting up.
 
 - [GitHub Repository](https://github.com/mstadelmann/fonduecaquelon)
 - [PyPI Package](https://pypi.org/project/fdq/)
