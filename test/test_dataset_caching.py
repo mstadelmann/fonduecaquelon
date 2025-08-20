@@ -53,6 +53,14 @@ class MockExperiment:
         self.rank = rank
         self.barrier_calls = 0
 
+        # Add minimal inargs for compatibility with get_loaders_to_cache
+        class InArgs:
+            train_model = True
+            test_model_auto = False
+            test_model_ia = False
+
+        self.inargs = InArgs()
+
     def is_main_process(self):
         return self._is_main
 
