@@ -60,6 +60,7 @@ class fdqExperiment:
         self.checkpoint_frequency: int = self.exp_def.store.checkpoint_frequency
         self.mode: FCQmode = FCQmode()
         self.creation_time: datetime = datetime.now()
+        self.last_ep_end_time: datetime = datetime.now()
         self.finish_time: datetime | None = None
         self.run_time: timedelta | None = None
         self.run_info: dict[str, Any] = {}
@@ -838,10 +839,16 @@ class fdqExperiment:
             store_processing_infos(self)
 
         try:
+            current_ep_time = datetime.now() - self.last_ep_end_time
+            self.last_ep_end_time = datetime.now()
             self.run_time = datetime.now() - self.creation_time
-            td = self.run_time
-            run_t_string = f"days: {td.days}, hours: {td.seconds // 3600}, minutes: {td.seconds % 3600 / 60.0:.0f}"
-            iprint(f"Current run time: {run_t_string}")
+
+            iprint(
+                f"Total run time: days: {self.run_time.days}, "
+                f"hours: {self.run_time.seconds // 3600}, "
+                f"minutes: {self.run_time.seconds % 3600 / 60.0:.0f} | "
+                f"current epoch: {int(current_ep_time.total_seconds() // 60)} minutes"
+            )
             store_processing_infos(self)
         except (AttributeError, ValueError):
             pass
