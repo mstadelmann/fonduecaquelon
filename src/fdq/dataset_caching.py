@@ -354,7 +354,7 @@ def cache_datasets(experiment, processor, data_name, data_source):
         # - Set to num_workers = 0 since data is already in RAM, avoiding multiprocessing overhead
         # - no need to PIN memory as data is in RAM
         # - shuffling is managed by sampler
-        # - prefetch_factor = None to avoid issues with num_workers=0, also not necessary.
+
         cached_loader = DataLoader(
             dataset=cached_dataset,
             batch_size=orig_dataloader.batch_size,
@@ -369,7 +369,7 @@ def cache_datasets(experiment, processor, data_name, data_source):
             worker_init_fn=orig_dataloader.worker_init_fn,
             multiprocessing_context=orig_dataloader.multiprocessing_context,
             generator=orig_dataloader.generator,
-            prefetch_factor=None,
+            prefetch_factor=data_source.caching.get("prefetch_factor", None),
             persistent_workers=orig_dataloader.persistent_workers,
         )
 

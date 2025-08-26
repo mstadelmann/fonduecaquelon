@@ -177,6 +177,7 @@ def create_datasets(experiment, args=None) -> dict:
         pin_memory=pin_mem,
         drop_last=drop_last,
         sampler=train_sampler,
+        prefetch_factor=args.prefetch_factor,
     )
 
     test_loader = DataLoader(
@@ -187,6 +188,7 @@ def create_datasets(experiment, args=None) -> dict:
         pin_memory=pin_mem,
         drop_last=drop_last,
         sampler=test_sampler,
+        prefetch_factor=args.prefetch_factor,
     )
 
     val_loader = DataLoader(
@@ -197,6 +199,7 @@ def create_datasets(experiment, args=None) -> dict:
         pin_memory=pin_mem,
         drop_last=drop_last,
         sampler=val_sampler,
+        prefetch_factor=args.prefetch_factor,
     )
 
     # No mandatory structure here, instead all values
