@@ -60,7 +60,7 @@ fdq <path_to_config_file.json>
 
 ### SLURM Cluster Execution
 
-To run experiments on a SLURM cluster, add a `slurm_cluster` section to your config. See [this example](experiment_templates/segment_pets/segment_pets.json).
+To run experiments on a SLURM cluster, add a `slurm_cluster` section to your config. See [this example](experiment_templates/segment_pets/segment_pets_01.json).
 
 Submit your experiment to the cluster:
 

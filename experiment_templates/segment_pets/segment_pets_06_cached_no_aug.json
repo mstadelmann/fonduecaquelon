@@ -2,7 +2,8 @@
     "globals": {
         "project": "Segment OXPET segmentation",
         "author": "Marc",
-        "parent": "segment_pets.json"
+        "parent": "segment_pets_01.json",
+        "comment": "Same experiment as segment_pets_01.json, but with a cached dataset. This version is not using deterministic transforms, therefore, we expect no major performance gain."
     },
     "data": {
         "OXPET": {
