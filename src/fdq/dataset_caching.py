@@ -76,7 +76,7 @@ class CachedDataset(Dataset):
             experiment: The experiment object containing class imports and configuration
         """
         self.experiment = experiment
-        self.augmenter_path = data_source.caching.get("nondeterministic_transforms", {}).get("processor")
+        self.augmenter_path = data_source.caching.get("nondeterministic_transforms", {}).get("processor", None)
         if self.augmenter_path is not None:
             self.augmenter = experiment.import_class(file_path=self.augmenter_path)
         else:
