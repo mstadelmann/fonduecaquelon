@@ -1,0 +1,21 @@
+{
+    "globals": {
+        "project": "Segment OXPET segmentation",
+        "author": "Marc",
+        "parent": "segment_pets.json"
+    },
+    "data": {
+        "OXPET": {
+            "caching": {
+                "enabled": true,
+                "cache_dir": "/scratch/fdq_cache/",
+                "shuffle_train": true,
+                "shuffle_val": false,
+                "shuffle_test": false,
+                "pin_memory": false,
+                "num_workers": 0,
+                "compress_cache": true
+            }
+        }
+    }
+}

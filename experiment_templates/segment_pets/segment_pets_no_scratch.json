@@ -1,0 +1,11 @@
+{
+    "globals": {
+        "project": "Segment OXPET segmentation",
+        "author": "Marc",
+        "parent": "segment_pets.json"
+    },
+    "slurm_cluster": {
+        "scratch_results_path": "/scratch/fdq_results/",
+        "scratch_data_path": null
+    }
+}
