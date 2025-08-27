@@ -800,7 +800,7 @@ class fdqExperiment:
                     optimizer.step()
                 optimizer.zero_grad()
 
-    def start_epoch(self, epoch: int) -> None:
+    def on_epoch_start(self, epoch: int) -> None:
         if epoch is None:
             self.current_epoch += 1
         else:
@@ -810,7 +810,7 @@ class fdqExperiment:
 
         iprint(f"\nEpoch: {self.current_epoch + 1} / {self.nb_epochs}")
 
-    def finalize_epoch(
+    def on_epoch_end(
         self,
         log_scalars: dict[str, float] | None = None,
         log_images_wandb: Any | None = None,
