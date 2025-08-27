@@ -60,9 +60,9 @@ class fdqExperiment:
         self.checkpoint_frequency: int = self.exp_def.store.checkpoint_frequency
         self.mode: FCQmode = FCQmode()
         self.creation_time: datetime = datetime.now()
-        self.last_ep_end_time: datetime = datetime.now()
+        self.current_ep_start_time: datetime | None = None
         self.finish_time: datetime | None = None
-        self.run_time: timedelta | None = None
+        self.total_run_time: timedelta | None = None
         self.run_info: dict[str, Any] = {}
         self.gradacc_iter: int = self.exp_def.train.args.get("accumulate_grad_batches", default=1)
         self.useAMP: bool = bool(self.exp_def.train.args.use_AMP)
@@ -800,6 +800,16 @@ class fdqExperiment:
                     optimizer.step()
                 optimizer.zero_grad()
 
+    def start_epoch(self, epoch: int) -> None:
+        if epoch is None:
+            self.current_epoch += 1
+        else:
+            self.current_epoch = epoch
+
+        self.current_ep_start_time = datetime.now()
+
+        iprint(f"\nEpoch: {self.current_epoch + 1} / {self.nb_epochs}")
+
     def finalize_epoch(
         self,
         log_scalars: dict[str, float] | None = None,
@@ -833,25 +843,23 @@ class fdqExperiment:
             scalars=log_scalars,
         )
 
-        # end of last epoch
-        if self.current_epoch == self.nb_epochs - 1:
-            self.finish_time = datetime.now()
-            store_processing_infos(self)
-
         try:
-            current_ep_time = datetime.now() - self.last_ep_end_time
-            self.last_ep_end_time = datetime.now()
-            self.run_time = datetime.now() - self.creation_time
+            current_ep_time = datetime.now() - self.current_ep_start_time
+            self.total_run_time = datetime.now() - self.creation_time
 
             iprint(
-                f"Total run time: {self.run_time.days} days, "
-                f"{self.run_time.seconds // 3600} hours, "
-                f"{self.run_time.seconds % 3600 / 60.0:.0f} minutes | "
+                f"Total run time: {self.total_run_time.days} days, "
+                f"{self.total_run_time.seconds // 3600} hours, "
+                f"{self.total_run_time.seconds % 3600 / 60.0:.0f} minutes | "
                 f"current epoch: {int(current_ep_time.total_seconds() // 60)} minutes {int(current_ep_time.total_seconds() % 60)} seconds"
             )
-            store_processing_infos(self)
         except (AttributeError, ValueError):
-            pass
+            iprint("Error calculating epoch time - skipping.")
+
+        store_processing_infos(self)
+
+        if self.current_epoch == self.nb_epochs - 1:
+            self.finish_time = datetime.now()
 
         save_train_history(self)
         self.save_checkpoint()
