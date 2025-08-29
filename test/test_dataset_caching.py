@@ -260,7 +260,7 @@ class TestDatasetCaching(unittest.TestCase):
         # Check that it was reconfigured correctly
         self.assertEqual(new_loader.batch_size, 1)
         self.assertFalse(new_loader.dataset != original_loader.dataset)  # Same dataset
-        self.assertEqual(new_loader.num_workers, 0)
+        self.assertEqual(new_loader.num_workers, original_loader.num_workers)
         self.assertFalse(new_loader.pin_memory)
         self.assertFalse(new_loader.drop_last)
 
