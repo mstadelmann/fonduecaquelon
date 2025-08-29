@@ -514,7 +514,8 @@ def get_transformer_by_names(transformer_name: str, parameters: dict[str, Any] |
         transformer = SynchronizedRandomVerticalFlip(p=0.5 if parameters is None else parameters.get("p", 0.5))
 
     elif transformer_name == "ToTensor":
-        transformer = transforms.ToTensor()
+        # transformer = transforms.ToTensor() # deprecated
+        transformer = transforms.Compose([transforms.ToImage(), transforms.ToDtype(torch.float32, scale=True)])
 
     elif transformer_name == "Float32":
         transformer = Float32Transform()
