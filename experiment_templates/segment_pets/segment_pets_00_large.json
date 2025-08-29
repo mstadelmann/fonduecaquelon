@@ -1,0 +1,56 @@
+{
+    "globals": {
+        "project": "Segment OXPET",
+        "author": "Marc",
+        "parent": "segment_pets_00_keys.json",
+        "comment": "Huge model to demonstrate advantages of DDP."
+    },
+    "models": {
+        "ccUNET": {
+            "class_name": "chuchichaestli.models.unet.unet.UNet",
+            "args": {
+                "dimensions": 2,
+                "in_channels": 3,
+                "out_channels": 3,
+                "down_block_types": [
+                    "DownBlock",
+                    "DownBlock",
+                    "AttnDownBlock",
+                    "AttnDownBlock",
+                    "AttnDownBlock"
+                ],
+                "up_block_types": [
+                    "UpBlock",
+                    "UpBlock",
+                    "AttnUpBlock",
+                    "AttnUpBlock",
+                    "AttnUpBlock"
+                ],
+                "block_out_channel_mults": [
+                    1,
+                    2,
+                    2,
+                    2,
+                    4
+                ],
+                "n_channels": 256,
+                "attn_n_heads": 8,
+                "attn_head_dim": 96,
+                "time_embedding": false
+            },
+            "optimizer": {
+                "class_name": "torch.optim.Adam",
+                "args": {
+                    "lr": 0.00001
+                }
+            },
+            "lr_scheduler": {
+                "class_name": "torch.optim.lr_scheduler.StepLR",
+                "args": {
+                    "step_size": 2,
+                    "gamma": 0.95
+                }
+            }
+        }
+    }
+}

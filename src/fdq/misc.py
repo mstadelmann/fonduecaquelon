@@ -249,7 +249,7 @@ def collect_processing_infos(experiment: Any | None = None) -> dict:
         stop_dt_string = None
 
     try:
-        td = experiment.run_time
+        td = experiment.total_run_time
         run_t_string = f"days: {td.days}, hours: {td.seconds // 3600}, minutes: {td.seconds % 3600 / 60.0:.0f}"
     except (AttributeError, KeyError):
         run_t_string = None

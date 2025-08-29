@@ -1,0 +1,15 @@
+{
+    "globals": {
+        "project": "Segment OXPET",
+        "author": "Marc",
+        "parent": "segment_pets_01.json",
+        "comment": "Same experiment as segment_pets_01.json, but with DDP enabled over 2 GPUs. This is only faster if the model is large enough to benefit from parallelism (check segment_pets_00_large.json)."
+    },
+    "slurm_cluster": {
+        "comment": "Assign the same number of GPUs to your job as your world size. Also, this will require more CPU cores and more memory, as multiple dataloaders will be launched.",
+        "world_size": 2,
+        "cpus_per_task": 16,
+        "gres": "gpu:h200sxm:2",
+        "mem": "120G"
+    }
+}

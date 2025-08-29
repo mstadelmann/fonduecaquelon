@@ -1,0 +1,12 @@
+{
+    "globals": {
+        "project": "Segment OXPET",
+        "author": "Marc",
+        "parent": "segment_pets_01.json",
+        "comment": "Same experiment as segment_pets_01.json, but without initially coping datasets to scratch. This has only an influence if dealing with heavy datasets and un-cached dataloaders (i.e. if the dataloader becomes the bottleneck because it reads from disk every epoch)."
+    },
+    "slurm_cluster": {
+        "scratch_results_path": "/scratch/fdq_results/",
+        "scratch_data_path": null
+    }
+}

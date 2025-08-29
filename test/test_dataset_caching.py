@@ -53,10 +53,21 @@ class MockExperiment:
         self.rank = rank
         self.barrier_calls = 0
 
+        # Add minimal inargs for compatibility with get_loaders_to_cache
+        class InArgs:
+            train_model = True
+            test_model_auto = False
+            test_model_ia = False
+
+        self.inargs = InArgs()
+
     def is_main_process(self):
         return self._is_main
 
     def is_child_process(self):
+        return not self._is_main
+
+    def is_distributed(self):
         return not self._is_main
 
     def dist_barrier(self):
@@ -249,7 +260,7 @@ class TestDatasetCaching(unittest.TestCase):
         # Check that it was reconfigured correctly
         self.assertEqual(new_loader.batch_size, 1)
         self.assertFalse(new_loader.dataset != original_loader.dataset)  # Same dataset
-        self.assertEqual(new_loader.num_workers, 0)
+        self.assertEqual(new_loader.num_workers, original_loader.num_workers)
         self.assertFalse(new_loader.pin_memory)
         self.assertFalse(new_loader.drop_last)
 

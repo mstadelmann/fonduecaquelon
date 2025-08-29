@@ -76,7 +76,7 @@ class CachedDataset(Dataset):
             experiment: The experiment object containing class imports and configuration
         """
         self.experiment = experiment
-        self.augmenter_path = data_source.caching.nondeterministic_transforms.processor
+        self.augmenter_path = data_source.caching.get("nondeterministic_transforms", {}).get("processor", None)
         if self.augmenter_path is not None:
             self.augmenter = experiment.import_class(file_path=self.augmenter_path)
         else:
@@ -234,14 +234,36 @@ def cache_datasets_ddp_handler(experiment, processor, data_name, data_source):
     """
     data = None
     if experiment.is_main_process():
+        if experiment.is_distributed():
+            iprint(f"DDP training: caching data ...", dist_print=True)
         data = cache_datasets(experiment, processor, data_name, data_source)
     experiment.dist_barrier()
 
     if experiment.is_child_process():
+        iprint(f"DDP training: loading cached data ...", dist_print=True)
         data = cache_datasets(experiment, processor, data_name, data_source)
     experiment.dist_barrier()
 
     return data
+
+
+def get_loaders_to_cache(experiment, data):
+    """Determine which dataloaders to cache based on experiment configuration.
+
+    Args:
+        experiment: The experiment object containing training/testing flags
+        data: Data object containing train/val/test dataloaders
+
+    Returns:
+        dict: Dictionary mapping split names to dataloaders or None if not needed
+    """
+    is_train = experiment.inargs.train_model
+    is_test = experiment.inargs.test_model_auto or experiment.inargs.test_model_ia
+    return {
+        "train": data.train_data_loader if hasattr(data, "train_data_loader") and is_train else None,
+        "val": data.val_data_loader if hasattr(data, "val_data_loader") and is_train else None,
+        "test": data.test_data_loader if hasattr(data, "test_data_loader") and is_test else None,
+    }
 
 
 def cache_datasets(experiment, processor, data_name, data_source):
@@ -258,35 +280,30 @@ def cache_datasets(experiment, processor, data_name, data_source):
     """
     data_hash = hash_conf(data_source)
 
-    data = DictToObj(processor.create_datasets(experiment, data_source.args))
-    cache_dir = data_source.caching.cache_dir
-    os.makedirs(cache_dir, exist_ok=True)
+    os.makedirs(data_source.caching.cache_dir, exist_ok=True)
 
     # Try to find existing cache files with correct hash or create new paths
     cache_paths = {}
     for split_name in ["train", "val", "test"]:
-        existing_file = find_valid_cache_file(cache_dir, data_name, split_name, data_hash)
+        existing_file = find_valid_cache_file(data_source.caching.cache_dir, data_name, split_name, data_hash)
         if existing_file:
             cache_paths[split_name] = existing_file
         else:
             # Create new filename with datetime stamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            cache_paths[split_name] = os.path.join(cache_dir, f"{data_name}_{split_name}_{timestamp}.h5")
+            cache_paths[split_name] = os.path.join(
+                data_source.caching.cache_dir, f"{data_name}_{split_name}_{timestamp}.h5"
+            )
 
-    # Define which dataloaders to cache
-    loaders_to_cache = {
-        "train": data.train_data_loader if hasattr(data, "train_data_loader") else None,
-        "val": data.val_data_loader if hasattr(data, "val_data_loader") else None,
-        "test": data.test_data_loader if hasattr(data, "test_data_loader") else None,
-    }
-
+    data = DictToObj(processor.create_datasets(experiment, data_source.args))
+    loaders_to_cache = get_loaders_to_cache(experiment, data)
     cached_loaders = {}
     total_cache_size_mb = 0.0
 
     # Cache each split
     for split_name, orig_dataloader in loaders_to_cache.items():
         if orig_dataloader is None:
-            wprint(f"No {split_name} dataloader found, skipping...")
+            wprint(f"No '{split_name}' dataloader found/required for this run, skipping...")
             continue
 
         # Check if cache with correct hash already exists
@@ -340,7 +357,7 @@ def cache_datasets(experiment, processor, data_name, data_source):
         # - Set to num_workers = 0 since data is already in RAM, avoiding multiprocessing overhead
         # - no need to PIN memory as data is in RAM
         # - shuffling is managed by sampler
-        # - prefetch_factor = None to avoid issues with num_workers=0, also not necessary.
+
         cached_loader = DataLoader(
             dataset=cached_dataset,
             batch_size=orig_dataloader.batch_size,
@@ -355,7 +372,7 @@ def cache_datasets(experiment, processor, data_name, data_source):
             worker_init_fn=orig_dataloader.worker_init_fn,
             multiprocessing_context=orig_dataloader.multiprocessing_context,
             generator=orig_dataloader.generator,
-            prefetch_factor=None,
+            prefetch_factor=data_source.caching.get("prefetch_factor", None),
             persistent_workers=orig_dataloader.persistent_workers,
         )
 
@@ -455,7 +472,7 @@ def _save_sample_to_group(sample, group, compression):
 def reconfig_orig_dataloader(dataloader):
     """Create a new DataLoader with modified parameters.
 
-    - num_workers = 0 to avoid CUDA issues.
+    - num_workers = recommended 0 to avoid CUDA issues.
     - batch size = 1 to avoid missing samples (drop last)
     - shuffle = False to ensure consistent ordering in cache file.
     - drop_last = False (no influence with batch size = 1)
@@ -464,8 +481,12 @@ def reconfig_orig_dataloader(dataloader):
         dataloader: PyTorch DataLoader to modify
 
     Returns:
-        DataLoader: New DataLoader with num_workers=0 and all other parameters preserved
+        DataLoader: New DataLoader shuffle=False and BatchSize=1
     """
+    if dataloader.num_workers != 0:
+        wprint(
+            f"WARNING: num_workers is set to {dataloader.num_workers}. If you encounter issues during data caching, try setting it to 0."
+        )
     return DataLoader(
         dataset=dataloader.dataset,
         batch_size=1,
@@ -473,7 +494,7 @@ def reconfig_orig_dataloader(dataloader):
         # sampler=dataloader.sampler,
         # batch_sampler=dataloader.batch_sampler,
         # batch_sampler option is mutually exclusive with batch_size, shuffle, sampler, and drop_last
-        num_workers=0,
+        num_workers=dataloader.num_workers,
         collate_fn=None,
         pin_memory=False,
         drop_last=False,

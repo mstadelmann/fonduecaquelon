@@ -57,9 +57,10 @@
         }
     },
     "slurm_cluster": {
-        "fdq_version": "0.0.64",
+        "fdq_version": "0.0.65",
         "python_env_module": "python/3.12.4",
         "uv_env_module": "uv/0.6.12",
+        "cuda_env_module": "cuda/12.8.0",
         "scratch_results_path": "/scratch/fdq_results/",
         "scratch_data_path": "/scratch/fdq_data/",
         "log_path": "~/dev/fonduecaquelon/slurm_log",

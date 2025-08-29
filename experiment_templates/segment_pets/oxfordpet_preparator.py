@@ -5,7 +5,7 @@ from urllib.request import urlretrieve
 import torch
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data import DataLoader
-from torchvision.transforms import v2 as transforms
+from torchvision.transforms import v2
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
@@ -41,7 +41,7 @@ class OxfordPetDataset(torch.utils.data.Dataset):
         self.root = root
         self.mode = mode
         self.binary = binary
-        self.to_tensor = transforms.ToTensor()
+        self.to_tensor = v2.Compose([v2.ToImage(), v2.ToDtype(torch.float32, scale=True)])
         self.transform_img = transform_image
         self.transform_mask = transform_mask
 
@@ -177,6 +177,7 @@ def create_datasets(experiment, args=None) -> dict:
         pin_memory=pin_mem,
         drop_last=drop_last,
         sampler=train_sampler,
+        prefetch_factor=args.prefetch_factor,
     )
 
     test_loader = DataLoader(
@@ -187,6 +188,7 @@ def create_datasets(experiment, args=None) -> dict:
         pin_memory=pin_mem,
         drop_last=drop_last,
         sampler=test_sampler,
+        prefetch_factor=args.prefetch_factor,
     )
 
     val_loader = DataLoader(
@@ -197,6 +199,7 @@ def create_datasets(experiment, args=None) -> dict:
         pin_memory=pin_mem,
         drop_last=drop_last,
         sampler=val_sampler,
+        prefetch_factor=args.prefetch_factor,
     )
 
     # No mandatory structure here, instead all values

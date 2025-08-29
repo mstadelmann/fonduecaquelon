@@ -1,0 +1,26 @@
+{
+    "globals": {
+        "project": "Segment OXPET",
+        "author": "Marc",
+        "parent": "segment_pets_01.json",
+        "comment": "Same experiment as segment_pets_01.json, but with a cached dataset. This brings only advantages if you use heavy deterministic transforms (which is not the case for this example!), as these are only computed once."
+    },
+    "data": {
+        "OXPET": {
+            "caching": {
+                "enabled": true,
+                "cache_dir": "/scratch/fdq_cache/",
+                "shuffle_train": true,
+                "shuffle_val": false,
+                "shuffle_test": false,
+                "pin_memory": false,
+                "num_workers": 0,
+                "compress_cache": true
+            }
+        }
+    },
+    "slurm_cluster": {
+        "mem": "120G",
+        "mem_test": "120G"
+    }
+}

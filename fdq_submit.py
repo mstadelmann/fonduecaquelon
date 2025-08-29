@@ -93,6 +93,7 @@ RESULTS_PATH=#results_path#
 SUBMIT_FILE_PATH=#submit_file_path#
 PY_MODULE=#python_env_module#
 UV_MODULE=#uv_env_module#
+CUDA_MODULE=#cuda_env_module#
 FDQ_VERSION=#fdq_version#
 FDQ_TEST_REPO=#fdq_test_repo# # if True, install fdq from https://test.pypi.org
 RETVALUE=1 # will become zero if training is successful, which will launch an optional test job
@@ -134,6 +135,7 @@ echo "SCRATCH_DATA_PATH: $SCRATCH_DATA_PATH"
 echo "RESULTS_PATH: $RESULTS_PATH"
 echo "PYTHON MODULE: $PY_MODULE"
 echo "UV MODULE: $UV_MODULE"
+echo "CUDA MODULE: $CUDA_MODULE"
 echo "FDQ VERSION: $FDQ_VERSION"
 
 echo -----------------------------------------------------------
@@ -152,6 +154,14 @@ echo "Loading UV module: $UV_MODULE"
 if ! VENV="fdqenv" module load "$UV_MODULE"; then
     echo "ERROR: Failed to load UV module $UV_MODULE"
     exit 1
+fi
+
+if [ -n "$CUDA_MODULE" ] && [ "$CUDA_MODULE" != "None" ]; then
+    echo "Loading CUDA module: $CUDA_MODULE"
+    if ! VENV="fdqenv" module load "$CUDA_MODULE"; then
+        echo "ERROR: Failed to load CUDA module $CUDA_MODULE"
+        exit 1
+    fi
 fi
 
 # Setup virtual environment
@@ -256,7 +266,7 @@ if [ "$RUN_TRAIN" == True ]; then
 
     # Start training process
     if [ "$RESUME_CHPT_PATH" == None ]; then
-        echo "Starting training from scratch..."
+        echo "Starting training from beginning..."
         fdq "$EXP_FILE_PATH" &
     elif [ -f "$RESUME_CHPT_PATH" ]; then
         echo "Resuming training from checkpoint: $RESUME_CHPT_PATH"
@@ -274,7 +284,7 @@ if [ "$RUN_TRAIN" == True ]; then
 
     echo -----------------------------------------------------------
     echo "TRAINING COMPLETED (exit code: $RETVALUE)"
-    echo "Copying results back to storage..."
+    echo "Copying results back to "$RESULTS_PATH"
     echo -----------------------------------------------------------
     
     copy_start=$(date +%s.%N)
@@ -564,6 +574,7 @@ def get_default_config(slurm_conf: Any) -> dict[str, Any]:
         "stop_grace_time": 15,
         "python_env_module": None,
         "uv_env_module": None,
+        "cuda_env_module": None,
         "fdq_version": None,
         "fdq_test_repo": False,
         "exp_file_path": None,

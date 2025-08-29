@@ -141,31 +141,31 @@ def show_train_progress(experiment: Any) -> None:
     iprint(f"Training Loss: {experiment.trainLoss:.4f}, Validation Loss: {experiment.valLoss:.4f}")
 
 
-def iprint(msg: Any, distributed=False) -> None:
+def iprint(msg: Any, dist_print=False) -> None:
     """Info print: plots information string in green.
 
     In distributed training, only the main process (rank 0) prints.
-    Set `distributed` to True to print from all processes.
+    Set `dist_print` to True to print from all processes.
     """
-    cprint(msg, text_color="green", dist_print=distributed)
+    cprint(msg, text_color="green", dist_print=dist_print)
 
 
-def wprint(msg: Any, distributed=False) -> None:
+def wprint(msg: Any, dist_print=False) -> None:
     """Warning print: plots warning string in yellow.
 
     In distributed training, only the main process (rank 0) prints.
-    Set `distributed` to True to print from all processes.
+    Set `dist_print` to True to print from all processes.
     """
-    cprint(msg, text_color="yellow", dist_print=distributed)
+    cprint(msg, text_color="yellow", dist_print=dist_print)
 
 
-def eprint(msg: Any, distributed=False) -> None:
+def eprint(msg: Any, dist_print=False) -> None:
     """Error print: plots error string in red.
 
     In distributed training, only the main process (rank 0) prints.
-    Set `distributed` to True to print from all processes.
+    Set `dist_print` to True to print from all processes.
     """
-    cprint(msg, text_color="red", dist_print=distributed)
+    cprint(msg, text_color="red", dist_print=dist_print)
 
 
 def cprint(
@@ -175,11 +175,13 @@ def cprint(
     dist_print: bool = False,
 ) -> None:
     """Prints a message with optional text and background color in the terminal."""
-    # Only print if this is the main process in distributed training
+    global GLOBAL_RANK
     if not dist_print:
-        global GLOBAL_RANK
+        # DDP, only print on rank 0
         if GLOBAL_RANK != 0:
             return
+    else:
+        msg = f"[Rank {GLOBAL_RANK}] {msg}"
 
     global GLOB_COLORAMA_INITIALIZED
     if not GLOB_COLORAMA_INITIALIZED:

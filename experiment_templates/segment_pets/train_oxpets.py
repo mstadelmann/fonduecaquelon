@@ -17,8 +17,7 @@ def fdq_train(experiment: fdqExperiment) -> None:
     model = experiment.models["ccUNET"]
 
     for epoch in range(experiment.start_epoch, experiment.nb_epochs):
-        experiment.current_epoch = epoch
-        iprint(f"\nEpoch: {epoch + 1} / {experiment.nb_epochs}")
+        experiment.on_epoch_start(epoch=epoch)
 
         train_loss_sum = 0.0
         val_loss_sum = 0.0
@@ -75,7 +74,7 @@ def fdq_train(experiment: fdqExperiment) -> None:
             {"name": "target", "data": targets, "dataformats": "NCHW"},
         ]
 
-        experiment.finalize_epoch(log_images_wandb=img, log_images_tensorboard=img)
+        experiment.on_epoch_end(log_images_wandb=img, log_images_tensorboard=img)
 
         if experiment.check_early_stop():
             break

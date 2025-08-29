@@ -19,8 +19,7 @@ def fdq_train(experiment: fdqExperiment) -> None:
     device_type = "cuda" if experiment.device == torch.device("cuda") else "cpu"
 
     for epoch in range(experiment.start_epoch, experiment.nb_epochs):
-        experiment.current_epoch = epoch
-        iprint(f"\nEpoch: {epoch + 1} / {experiment.nb_epochs}")
+        experiment.on_epoch_start(epoch=epoch)
 
         train_loss_sum = 0.0
         val_loss_sum = 0.0
@@ -93,7 +92,7 @@ def fdq_train(experiment: fdqExperiment) -> None:
             "captions": captions[:max_log_size],
         }
 
-        experiment.finalize_epoch(
+        experiment.on_epoch_end(
             log_images_wandb=imgs_wandb,
             log_images_tensorboard=imgs_tb,
             log_text_tensorboard=log_txt,

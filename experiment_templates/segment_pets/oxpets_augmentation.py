@@ -27,7 +27,7 @@ def augment(sample, experiment=None):
         sample["image"], sample["mask"]
     )
 
-    # random_vertical_flip_sync is defined in 'experiment_templates/segment_pets/segment_pets.json'
+    # random_vertical_flip_sync is defined in 'experiment_templates/segment_pets/segment_pets_01.json'
     # This function applies a synchronized vertical flip to both the image and mask tensors.
     # You can of course define your own operations directly in this script, or add additional transformations in the JSON file.
     # See 'src/fdq/transformers.py' for all available predefined transformations.
