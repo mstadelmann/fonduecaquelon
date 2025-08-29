@@ -181,8 +181,7 @@ def cprint(
         if GLOBAL_RANK != 0:
             return
     else:
-        if GLOBAL_RANK != 0:
-            msg = f"[Rank {GLOBAL_RANK}] : {msg}"
+        msg = f"[Rank {GLOBAL_RANK}] {msg}"
 
     global GLOB_COLORAMA_INITIALIZED
     if not GLOB_COLORAMA_INITIALIZED:
