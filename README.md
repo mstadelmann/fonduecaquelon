@@ -5,7 +5,6 @@ A fonduecaquelon is the heavy pot that keeps cheeses (e.g. 50% Gruyère and 50% 
 - [GitHub Repository](https://github.com/mstadelmann/fonduecaquelon)
 - [PyPI Package](https://pypi.org/project/fdq/)
 
----
 
 ## 🚀 Features
 
@@ -21,7 +20,6 @@ A fonduecaquelon is the heavy pot that keeps cheeses (e.g. 50% Gruyère and 50% 
 - **Model Compilation:** JIT tracing/scripting and torch.compile support for optimized model execution.
 - **Interactive Model Dumping:** Easy-to-use interface for exporting and optimizing trained models.
 
----
 
 ## 🛠️ Installation
 
@@ -44,7 +42,6 @@ cd fonduecaquelon
 pip install -e .[dev,gpu]
 ```
 
----
 
 ## 📖 Usage
 
@@ -113,8 +110,6 @@ fdq <config_file.json> -p
 fdq <config_file.json> -rp /path/to/checkpoint
 ```
 
----
-
 ## 🚄 Model Export & Deployment
 
 FDQ provides comprehensive model export and optimization capabilities for deployment:
@@ -141,7 +136,6 @@ FDQ provides comprehensive model export and optimization capabilities for deploy
 - **Memory Optimization:** Dynamic batch sizing and memory-efficient engine building
 - **Cross-Platform:** Works on various GPU architectures and CUDA versions
 
----
 
 ## ⚙️ Configuration Overview
 
@@ -209,11 +203,10 @@ def fdq_test(experiment: fdqExperiment):
 
 See [oxpets_test.py](experiment_templates/segment_pets/oxpets_test.py) for an example.
 
----
 
 ## 💾 Dataset Caching
 
-FDQ provides a powerful dataset caching system that can significantly speed up training by caching preprocessed data to disk and loading it into RAM for fast access during training.
+FDQ provides a powerful dataset caching system that can significantly speed up training by caching preprocessed data to disk and loading it into RAM for fast access during training (see [segment_pets_05_cached.json](experiment_templates/segment_pets/segment_pets_05_cached.json) for an example experiment).
 
 ### How It Works
 
@@ -280,17 +273,27 @@ Reference the augmentation script in your config:
 }
 ```
 
-### Key Features
+## 🖧 Distributed Training
+To run your training in [PyTorch DDP](https://docs.pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html), its sufficient to add the following parameters to your config file:
 
-- **Configuration Hash Validation:** Cache files are automatically invalidated when dataset configurations change
-- **Faster Training:** Eliminate repeated preprocessing computations
-- **Reduced I/O:** Minimize disk access during training
-- **Reproducible Experiments:** Deterministic preprocessing with controllable randomness
-- **Storage Efficiency:** HDF5 compression reduces disk space usage
-- **Flexible Augmentation:** Combine cached preprocessing with dynamic augmentation
+```json
+"slurm_cluster": {
+    "world_size": 2,
+    "cpus_per_task": 16,
+    "gres": "gpu:h200sxm:2",
+}
+```
+See [segment_pets_03_distributed_w2.json](experiment_templates/segment_pets/segment_pets_03_distributed_w2.json) for a full example.
 
+You must assign the same number of GPUs to your job as your world size. Also, DDP will require more CPU cores and more memory, as multiple dataloaders will be launched. Keep in mind that DDP is only beneficial if you are dealing with large models, as this will create a significant overhead.
 
----
+As an example, the "segment pets" test-experiment on trained H200SXM GPUs shows the following speedup:
+
+| Experiment |                                                                               Time per epoch [s] | 
+|--------------------------------------------------------------------------------------------------------|------|
+| [segment pets default](experiment_templates/segment_pets/segment_pets_01.json)                         | 170  |
+| [segment pets DDP with 2 GPUs](experiment_templates/segment_pets/segment_pets_03_distributed_w2.json)  | 100  |
+| [segment pets DDP with 4 GPUs](experiment_templates/segment_pets/segment_pets_04_distributed_w4.json)  | 60   |
 
 ## 📦 Installing Additional Python Packages in your managed SLURM Environment
 
@@ -309,7 +312,6 @@ Example:
 }
 ```
 
----
 
 ## 🐛 Debugging
 
@@ -349,7 +351,6 @@ pip install -e .
 3. Debug/test your code.
 
 
----
 
 ## 📝 Tips
 
@@ -358,20 +359,20 @@ pip install -e .
 - **Cluster Submission:** The `fdq_submit.py` utility handles SLURM job script generation and submission, including environment setup and result copying.
 - **Model Export:** Use `-d` or `--dump` to interactively export and optimize trained models for deployment.
 
----
 
 ## 📚 Resources
 
 - [Experiment Templates](experiment_templates/)
-- [Example Configs](experiment_templates/mnist/)
 - [Chuchichaestli Models](https://github.com/CAIIVS/chuchichaestli)
 
----
 
 ## 🤝 Contributing
 
 Contributions are welcome! Please open issues or pull requests on [GitHub](https://github.com/mstadelmann/fonduecaquelon).
 
----
 
 ## 🧀 Enjoy your fondue!
+
+<p align="center">
+  <img src="assets/fdq_logo.jpg" alt="FDQ Logo" width="300"/>
+</p>

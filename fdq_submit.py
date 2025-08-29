@@ -266,7 +266,7 @@ if [ "$RUN_TRAIN" == True ]; then
 
     # Start training process
     if [ "$RESUME_CHPT_PATH" == None ]; then
-        echo "Starting training from scratch..."
+        echo "Starting training from beginning..."
         fdq "$EXP_FILE_PATH" &
     elif [ -f "$RESUME_CHPT_PATH" ]; then
         echo "Resuming training from checkpoint: $RESUME_CHPT_PATH"
@@ -284,7 +284,7 @@ if [ "$RUN_TRAIN" == True ]; then
 
     echo -----------------------------------------------------------
     echo "TRAINING COMPLETED (exit code: $RETVALUE)"
-    echo "Copying results back to storage..."
+    echo "Copying results back to "$RESULTS_PATH"
     echo -----------------------------------------------------------
     
     copy_start=$(date +%s.%N)

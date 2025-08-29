@@ -1,8 +1,10 @@
 {
     "globals": {
-        "project": "Segment OXPET segmentation",
+        "project": "Segment OXPET",
         "author": "Marc",
-        "parent": "segment_pets_keys.json"
+        "parent": "segment_pets_00_large.json",
+        "_parent": "segment_pets_00_small.json",
+        "comment": "change the parent to segment_pets_01_large.json / segment_pets_00_small.json depending on what you want to test."
     },
     "transforms": {
         "resize_and_pad_bilinear": [
@@ -33,8 +35,8 @@
                 "pin_memory": true,
                 "num_workers": 4,
                 "prefetch_factor": 2,
-                "train_batch_size": 48,
-                "val_batch_size": 48,
+                "train_batch_size": 16,
+                "val_batch_size": 16,
                 "test_batch_size": 1,
                 "shuffle_train": true,
                 "shuffle_val": false,
@@ -42,46 +44,10 @@
             }
         }
     },
-    "models": {
-        "ccUNET": {
-            "class_name": "chuchichaestli.models.unet.unet.UNet",
-            "args": {
-                "dimensions": 2,
-                "in_channels": 3,
-                "out_channels": 3,
-                "down_block_types": [
-                    "DownBlock",
-                    "DownBlock"
-                ],
-                "up_block_types": [
-                    "UpBlock",
-                    "UpBlock"
-                ],
-                "block_out_channel_mults": [
-                    1,
-                    2
-                ],
-                "time_embedding": false
-            },
-            "optimizer": {
-                "class_name": "torch.optim.Adam",
-                "args": {
-                    "lr": 0.001
-                }
-            },
-            "lr_scheduler": {
-                "class_name": "torch.optim.lr_scheduler.StepLR",
-                "args": {
-                    "step_size": 2,
-                    "gamma": 0.95
-                }
-            }
-        }
-    },
     "train": {
         "path": "~/dev/fonduecaquelon/experiment_templates/segment_pets/train_oxpets.py",
         "args": {
-            "epochs": 30,
+            "epochs": 10,
             "use_GPU": true,
             "use_AMP": false,
             "accumulate_grad_batches": 1,
@@ -104,9 +70,9 @@
         "save_last_model": true,
         "save_best_val_model": true,
         "save_best_train_model": true,
-        "checkpoint_frequency": 2,
-        "use_tensorboard": true,
-        "use_wandb": true,
+        "checkpoint_frequency": 10,
+        "use_tensorboard": false,
+        "use_wandb": false,
         "wandb_project": "ox_pet_test",
         "wandb_entity": "stmd"
     },
@@ -124,18 +90,19 @@
         "fdq_version": "0.0.65",
         "python_env_module": "python/3.12.4",
         "uv_env_module": "uv/0.6.12",
+        "cuda_env_module": "cuda/12.8.0",
         "scratch_results_path": "/scratch/fdq_results/",
         "scratch_data_path": "/scratch/fdq_data/",
         "log_path": "~/dev/fonduecaquelon/slurm_log",
-        "job_time": 15,
+        "job_time": 60,
         "stop_grace_time": 3,
         "cpus_per_task": 8,
         "cpus_per_task_test": 8,
-        "gres": "gpu:1",
+        "gres": "gpu:h200sxm:1",
         "gres_test": "gpu:1",
-        "mem": "20G",
-        "mem_test": "20G",
-        "partition": "gpu",
+        "mem": "120G",
+        "mem_test": "120G",
+        "partition": "gpu_top",
         "account": "cai_ivs",
         "run_train": true,
         "run_test": true,
