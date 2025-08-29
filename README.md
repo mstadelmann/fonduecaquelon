@@ -1,25 +1,24 @@
 # FDQ | Fonduecaquelon
 
-A fonduecaquelon is the heavy pot that keeps cheeses (e.g. 50% Gruyère and 50% Vacherin) melting smoothly into a perfectly blended whole — and FDQ does the same for deep learning. It keeps models, data loaders, training loops, and tools at a steady “temperature” so everything works seamlessly together, streamlining PyTorch workflows by automating repetitive tasks and providing a flexible, extensible framework for experiment management. Built for ML engineers who want to focus on experiments instead of boilerplate, FDQ frees you to spend more time innovating and less time setting up.
+A *fonduecaquelon* is the heavy pot that keeps cheeses (e.g. 50% Gruyère and 50% Vacherin) melting smoothly into a perfectly blended whole — and FDQ does the same for deep learning. It keeps models, data loaders, training loops, and tools at a steady “temperature” so everything works seamlessly together, streamlining PyTorch workflows by automating repetitive tasks and providing a flexible, extensible framework for experiment management. Built for ML engineers who want to focus on experiments rather than boilerplate, FDQ lets you spend more time innovating and less time setting up.
 
-- [GitHub Repository](https://github.com/mstadelmann/fonduecaquelon)
-- [PyPI Package](https://pypi.org/project/fdq/)
-
+* [GitHub Repository](https://github.com/mstadelmann/fonduecaquelon)
+* [PyPI Package](https://pypi.org/project/fdq/)
 
 ## 🚀 Features
 
-- **Minimal Boilerplate:** Define only what matters — FDQ handles the rest.
-- **Flexible Experiment Configuration:** Use JSON config files with inheritance support for easy experiment management.
-- **Multi-Model Support:** Seamlessly manage multiple models, losses, and data loaders.
-- **Cluster Ready:** Effortlessly submit jobs to SLURM clusters with built-in utilities.
-- **Extensible:** Easily integrate custom models, data loaders, and training/testing loops.
-- **Automatic Dependency Management:** Install additional pip packages per experiment.
-- **Distributed Training:** Out-of-the-box support for distributed training using PyTorch DDP.
-- **Model Export & Optimization:** Export trained models to ONNX format with optimization options.
-- **High-Performance Inference:** TensorRT integration for GPU-accelerated inference with up to 10x speedup.
-- **Model Compilation:** JIT tracing/scripting and torch.compile support for optimized model execution.
-- **Interactive Model Dumping:** Easy-to-use interface for exporting and optimizing trained models.
-
+* **Minimal Boilerplate:** Define only what matters — FDQ handles the rest.
+* **Flexible Experiment Configuration:** Use JSON config files with inheritance support for easy experiment management.
+* **Multi-Model Support:** Seamlessly manage multiple models, losses, and data loaders.
+* **Cluster Ready:** Submit jobs to SLURM clusters with ease using built-in utilities such as automatic job resubmission.
+* **Extensible:** Easily integrate custom models, data loaders, and training/testing loops.
+* **Automatic Dependency Management:** Install additional pip packages per experiment.
+* **Distributed Training:** Out-of-the-box support for PyTorch DDP.
+* **Model Export & Optimization:** Export trained models to ONNX with optimization options.
+* **High-Performance Inference:** TensorRT integration for GPU-accelerated inference with up to 10x speedup.
+* **Model Compilation:** JIT tracing/scripting and `torch.compile` support for optimized execution.
+* **Interactive Model Dumping:** Intuitive interface for exporting and optimizing trained models.
+* **Monitoring Tools:** Built-in support for [Weights & Biases](https://wandb.a) and [TensorBoard](https://www.tensorflow.org/tensorboard).
 
 ## 🛠️ Installation
 
@@ -29,12 +28,13 @@ Install the latest release from PyPI:
 pip install fdq
 ```
 
-If you have an Nvidia GPU and want to run inference, additionally install the GPU dependencies:
+If you have an NVIDIA GPU and want to run inference, install GPU dependencies:
+
 ```bash
 pip install fdq[gpu]
 ```
 
-Or, for development and the latest features, clone the repository:
+For development and the latest features, clone the repository:
 
 ```bash
 git clone https://github.com/mstadelmann/fonduecaquelon.git
@@ -42,14 +42,13 @@ cd fonduecaquelon
 pip install -e .[dev,gpu]
 ```
 
-
 ## 📖 Usage
 
 ### Local Experiments
 
 All experiment parameters are defined in a [config file](experiment_templates/mnist/mnist_class_dense.json). Config files can inherit from a [parent file](experiment_templates/mnist/mnist_parent.json) for easy reuse and organization.
 
-To run an experiment locally:
+Run an experiment locally:
 
 ```bash
 fdq <path_to_config_file.json>
@@ -59,7 +58,7 @@ fdq <path_to_config_file.json>
 
 To run experiments on a SLURM cluster, add a `slurm_cluster` section to your config. See [this example](experiment_templates/segment_pets/segment_pets_01.json).
 
-Submit your experiment to the cluster:
+Submit your experiment:
 
 ```bash
 python <path_to>/fdq_submit.py <path_to_config_file.json>
@@ -67,7 +66,7 @@ python <path_to>/fdq_submit.py <path_to_config_file.json>
 
 ### Model Export and Optimization
 
-After training, export and optimize your models for deployment:
+After training, export and optimize models for deployment:
 
 ```bash
 # Interactive model dumping with export options
@@ -75,23 +74,24 @@ fdq <path_to_config_file.json> -nt -d
 ```
 
 This launches an interactive interface where you can:
-- **Export to ONNX:** Convert PyTorch models to ONNX format with Dynamo or TorchScript
-- **JIT Compilation:** Trace or script models using PyTorch JIT
-- **TensorRT Optimization:** Compile models for GPU inference with precision options (FP32, FP16, INT8)
-- **Performance Benchmarking:** Compare optimized vs. original model performance
+
+* **Export to ONNX:** Convert PyTorch models to ONNX format using Dynamo or TorchScript
+* **JIT Compilation:** Trace or script models with PyTorch JIT
+* **TensorRT Optimization:** Compile models for GPU inference with FP32, FP16, or INT8 precision
+* **Performance Benchmarking:** Compare optimized vs. original model performance
 
 ### Additional CLI Options
 
-FDQ supports several command-line options for different workflows:
+FDQ provides multiple command-line options:
 
 ```bash
-# Run only training (default)
+# Run training (default)
 fdq <config_file.json>
 
-# Skip training to run other tasks
+# Skip training
 fdq <config_file.json> -nt
 
-# Run training and automatic testing
+# Train and test automatically
 fdq <config_file.json> -ta
 
 # Interactive testing
@@ -100,50 +100,52 @@ fdq <config_file.json> -nt -ti
 # Export and optimize models
 fdq <config_file.json> -nt -d
 
-# Run inference tests on trained models
+# Run inference tests
 fdq <config_file.json> -nt -i
 
 # Print model architecture before training
 fdq <config_file.json> -p
 
-# Resume training from checkpoint
+# Resume from checkpoint
 fdq <config_file.json> -rp /path/to/checkpoint
 ```
 
 ## 🚄 Model Export & Deployment
 
-FDQ provides comprehensive model export and optimization capabilities for deployment:
+FDQ offers full model export and optimization support for deployment:
 
 ### Export Options
 
-- **ONNX Export:** Convert models to ONNX format for cross-platform deployment
-  - Dynamo-based export for latest PyTorch features
-  - TorchScript export for broader compatibility
-  - Automatic model optimization and file size reporting
+* **ONNX Export:** Convert models to ONNX for cross-platform use
 
-- **JIT Compilation:** PyTorch JIT tracing and scripting for optimized execution
-  - Trace models for static computation graphs
-  - Script models to preserve control flow
-  - Automatic performance comparison with original models
+  * Dynamo-based export for the latest PyTorch features
+  * TorchScript export for broad compatibility
+  * Automatic optimization and file size reporting
 
-- **TensorRT Integration:** GPU-accelerated inference with NVIDIA TensorRT
-  - FP32, FP16, and INT8 precision modes
-  - Automatic engine building and caching
+* **JIT Compilation:** PyTorch JIT tracing and scripting
+
+  * Trace models for static graphs
+  * Script models to preserve control flow
+  * Automatic performance comparison with original models
+
+* **TensorRT Integration:** GPU-accelerated inference with NVIDIA TensorRT
+
+  * FP32, FP16, and INT8 precision
+  * Automatic engine building and caching
 
 ### Performance Features
 
-- **Automatic Benchmarking:** Built-in performance testing with statistical analysis
-- **Memory Optimization:** Dynamic batch sizing and memory-efficient engine building
-- **Cross-Platform:** Works on various GPU architectures and CUDA versions
-
+* **Automatic Benchmarking:** Built-in performance testing with statistics
+* **Memory Optimization:** Dynamic batch sizing and memory-efficient engines
+* **Cross-Platform:** Compatible with various GPU architectures and CUDA versions
 
 ## ⚙️ Configuration Overview
 
-FDQ uses JSON configuration files to define experiments. These files specify models, data loaders, training/testing scripts, and cluster settings.
+FDQ uses JSON config files to define experiments. These specify models, data loaders, training/testing scripts, and cluster settings.
 
 ### Models
 
-Models are defined as dictionaries. You can use pre-installed models (e.g., [Chuchichaestli](https://github.com/CAIIVS/chuchichaestli)) or your own. Example:
+Models are defined as dictionaries. You can use pre-installed ones (e.g. [Chuchichaestli](https://github.com/CAIIVS/chuchichaestli)) or your own. Example:
 
 ```json
 "models": {
@@ -153,11 +155,11 @@ Models are defined as dictionaries. You can use pre-installed models (e.g., [Chu
 }
 ```
 
-Access models in your training loop via `experiment.models["ccUNET"]`. The same structure applies to losses and data loaders.
+Access models in training via `experiment.models["ccUNET"]`. The same structure applies to losses and data loaders.
 
 ### Data Loaders
 
-Your data loader class must implement a `create_datasets(experiment, args)` function, returning a dictionary like:
+Your data loader class must implement `create_datasets(experiment, args)`, returning:
 
 ```python
 return {
@@ -173,17 +175,17 @@ return {
 }
 ```
 
-These values are accessible from your training loop as `experiment.data["<name>"].<key>`.
+These values are available as `experiment.data["<name>"].<key>`.
 
 ### Training Loop
 
-Specify the path to your training script in the config. FDQ expects a function:
+Define a function in your training script:
 
 ```python
 def fdq_train(experiment: fdqExperiment):
 ```
 
-Within this function, you can access all experiment components:
+Within it, you can access components:
 
 ```python
 nb_epochs = experiment.exp_def.train.args.epochs
@@ -191,34 +193,30 @@ data_loader = experiment.data["OXPET"].train_data_loader
 model = experiment.models["ccUNET"]
 ```
 
-See [train_oxpets.py](experiment_templates/segment_pets/train_oxpets.py) for a full example.
+See [train\_oxpets.py](experiment_templates/segment_pets/train_oxpets.py) for an example.
 
 ### Testing Loop
 
-Testing works similarly. Define a function:
+Testing is similar. Define:
 
 ```python
 def fdq_test(experiment: fdqExperiment):
 ```
 
-See [oxpets_test.py](experiment_templates/segment_pets/oxpets_test.py) for an example.
-
+See [oxpets\_test.py](experiment_templates/segment_pets/oxpets_test.py) for reference.
 
 ## 💾 Dataset Caching
 
-FDQ provides a powerful dataset caching system that can significantly speed up training by caching preprocessed data to disk and loading it into RAM for fast access during training (see [segment_pets_05_cached.json](experiment_templates/segment_pets/segment_pets_05_cached.json) for an example experiment).
+FDQ includes a dataset caching system to speed up training by caching preprocessed data to disk and loading it into RAM. See [segment\_pets\_05\_cached.json](experiment_templates/segment_pets/segment_pets_05_cached.json) for an example.
 
 ### How It Works
 
-The caching system operates in two stages:
-
-1. **Deterministic Preprocessing & Caching:** Expensive, deterministic transformations (like resizing, normalization, data loading) are applied once and cached to HDF5 files on disk.
-
-2. **On-the-fly Augmentation:** Fast, random augmentations (like flips, rotations) are applied dynamically during training for data variety.
+1. **Deterministic Preprocessing & Caching:** Expensive transformations (resizing, normalization, data loading) are applied once and cached as HDF5 files.
+2. **On-the-fly Augmentation:** Fast, random augmentations (e.g. flips, rotations) are applied during training.
 
 ### Configuration
 
-Enable caching in your experiment configuration by adding a `caching` section to your data loader:
+Enable caching in your config:
 
 ```json
 "data": {
@@ -240,28 +238,19 @@ Enable caching in your experiment configuration by adding a `caching` section to
 
 ### Custom Augmentations
 
-Create a custom augmentation script for on-the-fly transformations:
+Define augmentations:
 
 ```python
 # oxpets_augmentation.py
 def augment(sample, transformers=None):
-    """Apply custom augmentations to cached dataset samples.
-    
-    Args:
-        sample (dict): Cached sample with keys like "image", "mask"
-        transformers (dict): Dictionary of transformation functions
-        
-    Returns:
-        dict: Augmented sample
-    """
-    # Apply synchronized random transformations
+    """Apply custom augmentations to cached dataset samples."""
     sample["image"], sample["mask"] = transformers["random_vflip_sync"](
         sample["image"], sample["mask"]
     )
     return sample
 ```
 
-Reference the augmentation script in your config:
+Reference in your config:
 
 ```json
 "data": {
@@ -274,7 +263,8 @@ Reference the augmentation script in your config:
 ```
 
 ## 🖧 Distributed Training
-To run your training in [PyTorch DDP](https://docs.pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html), its sufficient to add the following parameters to your config file:
+
+To run with [PyTorch DDP](https://docs.pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html), add:
 
 ```json
 "slurm_cluster": {
@@ -283,21 +273,22 @@ To run your training in [PyTorch DDP](https://docs.pytorch.org/docs/stable/gener
     "gres": "gpu:h200sxm:2",
 }
 ```
-See [segment_pets_03_distributed_w2.json](experiment_templates/segment_pets/segment_pets_03_distributed_w2.json) for a full example.
 
-You must assign the same number of GPUs to your job as your world size. Also, DDP will require more CPU cores and more memory, as multiple dataloaders will be launched. Keep in mind that DDP is only beneficial if you are dealing with large models, as this will create a significant overhead.
+See [segment\_pets\_03\_distributed\_w2.json](experiment_templates/segment_pets/segment_pets_03_distributed_w2.json).
 
-As an example, the "segment pets" test-experiment on trained H200SXM GPUs shows the following speedup:
+Use the same number of GPUs as your world size. DDP requires more CPU cores and memory, since multiple data loaders run in parallel. It’s most beneficial for large models, as overhead is significant.
 
-| Experiment |                                                                               Time per epoch [s] | 
-|--------------------------------------------------------------------------------------------------------|------|
-| [segment pets default](experiment_templates/segment_pets/segment_pets_01.json)                         | 170  |
-| [segment pets DDP with 2 GPUs](experiment_templates/segment_pets/segment_pets_03_distributed_w2.json)  | 100  |
-| [segment pets DDP with 4 GPUs](experiment_templates/segment_pets/segment_pets_04_distributed_w4.json)  | 60   |
+Example speedup on H200SXM GPUs:
 
-## 📦 Installing Additional Python Packages in your managed SLURM Environment
+| Experiment                                                                               | Time per epoch \[s] |
+| ---------------------------------------------------------------------------------------- | ------------------- |
+| [segment pets default](experiment_templates/segment_pets/segment_pets_01.json)           | 170                 |
+| [DDP with 2 GPUs](experiment_templates/segment_pets/segment_pets_03_distributed_w2.json) | 100                 |
+| [DDP with 4 GPUs](experiment_templates/segment_pets/segment_pets_04_distributed_w4.json) | 60                  |
 
-If your experiment requires extra Python packages, specify them in your config under `additional_pip_packages`. FDQ will install them automatically before running your experiment.
+## 📦 Installing Additional Python Packages in SLURM
+
+If your experiment requires extra packages, specify them in `additional_pip_packages`. FDQ installs them before execution.
 
 Example:
 
@@ -312,12 +303,9 @@ Example:
 }
 ```
 
-
 ## 🐛 Debugging
 
-To debug an FDQ experiment, you'll need to install FDQ in development mode on your local or remote machine.
-
-### Setup for Debugging
+For debugging, install FDQ in development mode:
 
 ```bash
 git clone https://github.com/mstadelmann/fonduecaquelon.git
@@ -325,10 +313,10 @@ cd fonduecaquelon
 pip install -e .
 ```
 
-### VS Code Debugging Configuration
+### VS Code Setup
 
-1. Open your project in VS Code
-2. Create or update your debugger configuration (`.vscode/launch.json`) to launch `run_experiment.py` with the corresponding parameters:
+1. Open your project in VS Code.
+2. Add or update `.vscode/launch.json` to run `run_experiment.py`:
 
 ```json
 {
@@ -350,26 +338,21 @@ pip install -e .
 
 3. Debug/test your code.
 
-
-
 ## 📝 Tips
 
-- **Config Inheritance:** Use the `parent` key in your config to inherit settings from another file, reducing duplication.
-- **Multiple Models/Losses:** FDQ supports multiple models and losses per experiment — just add them to the config dictionaries.
-- **Cluster Submission:** The `fdq_submit.py` utility handles SLURM job script generation and submission, including environment setup and result copying.
-- **Model Export:** Use `-d` or `--dump` to interactively export and optimize trained models for deployment.
-
+* **Config Inheritance:** Use the `parent` key to inherit from another config and reduce duplication.
+* **Multiple Models/Losses:** Add multiple models and losses to config dictionaries as needed.
+* **Cluster Submission:** `fdq_submit.py` handles SLURM job script generation, submission, environment setup, and result copying.
+* **Model Export:** Use `-d` or `--dump` for interactive model export and optimization.
 
 ## 📚 Resources
 
-- [Experiment Templates](experiment_templates/)
-- [Chuchichaestli Models](https://github.com/CAIIVS/chuchichaestli)
-
+* [Experiment Templates](experiment_templates/)
+* [Chuchichaestli Models](https://github.com/CAIIVS/chuchichaestli)
 
 ## 🤝 Contributing
 
 Contributions are welcome! Please open issues or pull requests on [GitHub](https://github.com/mstadelmann/fonduecaquelon).
-
 
 ## 🧀 Enjoy your fondue!
 
