@@ -377,7 +377,7 @@ class fdqExperiment:
                 self.models[model_name] = cls(**model_def.args.to_dict()).to(self.device)
                 iprint(
                     f"Model {model_name} instantiated on rank {self.rank}.",
-                    distributed=True,
+                    dist_print=True,
                 )
 
             if model_name in self.models:
@@ -391,7 +391,7 @@ class fdqExperiment:
                     )
                     iprint(
                         f"Model {model_name} wrapped in DDP on rank {self.rank}. ",
-                        distributed=True,
+                        dist_print=True,
                     )
                     self.models_no_ddp[model_name] = self.models[model_name].module
                 else:

@@ -235,12 +235,12 @@ def cache_datasets_ddp_handler(experiment, processor, data_name, data_source):
     data = None
     if experiment.is_main_process():
         if experiment.is_distributed():
-            print(f"DDP training: caching data on rank {experiment.rank}")
+            iprint(f"DDP training: caching data on rank {experiment.rank}", dist_print=True)  # cleanup!
         data = cache_datasets(experiment, processor, data_name, data_source)
     experiment.dist_barrier()
 
     if experiment.is_child_process():
-        print(f"DDP training: loading cached data on rank {experiment.rank}")
+        iprint(f"DDP training: loading cached data on rank {experiment.rank}", dist_print=True)
         data = cache_datasets(experiment, processor, data_name, data_source)
     experiment.dist_barrier()
 
