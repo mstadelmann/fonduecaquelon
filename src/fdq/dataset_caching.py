@@ -485,7 +485,7 @@ def reconfig_orig_dataloader(dataloader):
     """
     if dataloader.num_workers != 0:
         wprint(
-            f"WARNING: num_workers is set to {dataloader.num_workers}. If you encounter issues during data caching, try to set it to 0."
+            f"WARNING: num_workers is set to {dataloader.num_workers}. If you encounter issues during data caching, try setting it to 0."
         )
     return DataLoader(
         dataset=dataloader.dataset,
