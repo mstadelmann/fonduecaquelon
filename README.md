@@ -354,7 +354,7 @@ pip install -e .
 
 Contributions are welcome! Please open issues or pull requests on [GitHub](https://github.com/mstadelmann/fonduecaquelon).
 
-## 🧀 Enjoy your fondue!
+## 🧀 Enjoy your Fondue!
 
 <p align="center">
   <img src="assets/fdq_logo.jpg" alt="FDQ Logo" width="300"/>
