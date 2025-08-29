@@ -67,6 +67,9 @@ class MockExperiment:
     def is_child_process(self):
         return not self._is_main
 
+    def is_distributed(self):
+        return not self._is_main
+
     def dist_barrier(self):
         self.barrier_calls += 1
 
