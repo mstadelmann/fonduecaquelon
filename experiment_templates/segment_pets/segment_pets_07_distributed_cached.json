@@ -1,6 +1,6 @@
 {
     "globals": {
-        "project": "Segment OXPET segmentation",
+        "project": "Segment OXPET",
         "author": "Marc",
         "parent": "segment_pets_05_cached.json",
         "comment": "Same experiment as segment_pets_05_cached.json, but with DDP enabled over 2 GPUs."
@@ -8,7 +8,8 @@
     "slurm_cluster": {
         "world_size": 2,
         "cpus_per_task": 16,
-        "gres": "gpu:2",
-        "mem": "60G"
+        "gres": "gpu:h200sxm:2",
+        "mem": "200G",
+        "mem_test": "200G"
     }
 }

@@ -1,6 +1,6 @@
 {
     "globals": {
-        "project": "Segment OXPET segmentation",
+        "project": "Segment OXPET",
         "author": "Marc"
     },
     "store": {

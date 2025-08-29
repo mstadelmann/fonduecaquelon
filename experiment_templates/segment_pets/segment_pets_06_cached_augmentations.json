@@ -1,0 +1,26 @@
+{
+    "globals": {
+        "project": "Segment OXPET",
+        "author": "Marc",
+        "parent": "segment_pets_05_cached.json",
+        "comment": "Same experiment as segment_pets_05_cached.json, but with additional non-deterministic transformations (augmentations). This brings the advantage that you can split your data transformations into deterministic (which are cached) and random (computed on the fly)."
+    },
+    "transforms": {
+        "random_vertical_flip_sync": [
+            {
+                "SynchronizedRandomVerticalFlip": {
+                    "p": 0.5
+                }
+            }
+        ]
+    },
+    "data": {
+        "OXPET": {
+            "caching": {
+                "nondeterministic_transforms": {
+                    "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxpets_augmentation.py"
+                }
+            }
+        }
+    }
+}
