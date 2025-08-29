@@ -472,7 +472,7 @@ def _save_sample_to_group(sample, group, compression):
 def reconfig_orig_dataloader(dataloader):
     """Create a new DataLoader with modified parameters.
 
-    - num_workers = 0 to avoid CUDA issues.
+    - num_workers = recommended 0 to avoid CUDA issues.
     - batch size = 1 to avoid missing samples (drop last)
     - shuffle = False to ensure consistent ordering in cache file.
     - drop_last = False (no influence with batch size = 1)
@@ -481,8 +481,12 @@ def reconfig_orig_dataloader(dataloader):
         dataloader: PyTorch DataLoader to modify
 
     Returns:
-        DataLoader: New DataLoader with num_workers=0 and all other parameters preserved
+        DataLoader: New DataLoader shuffle=False and BatchSize=1
     """
+    if dataloader.num_workers != 0:
+        wprint(
+            f"WARNING: num_workers is set to {dataloader.num_workers}. If you encounter issues during data caching, try to set it to 0."
+        )
     return DataLoader(
         dataset=dataloader.dataset,
         batch_size=1,
@@ -490,7 +494,7 @@ def reconfig_orig_dataloader(dataloader):
         # sampler=dataloader.sampler,
         # batch_sampler=dataloader.batch_sampler,
         # batch_sampler option is mutually exclusive with batch_size, shuffle, sampler, and drop_last
-        num_workers=0,
+        num_workers=dataloader.num_workers,
         collate_fn=None,
         pin_memory=False,
         drop_last=False,
