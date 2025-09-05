@@ -284,7 +284,7 @@ if [ "$RUN_TRAIN" == True ]; then
 
     echo -----------------------------------------------------------
     echo "TRAINING COMPLETED (exit code: $RETVALUE)"
-    echo "Copying results back to "$RESULTS_PATH"
+    echo "Copying results back to $RESULTS_PATH"
     echo -----------------------------------------------------------
     
     copy_start=$(date +%s.%N)
