@@ -262,6 +262,17 @@ Reference in your config:
 }
 ```
 
+## 🧮 Mixed precision
+
+Leveraging torch.amp for mixed precision training can dramatically accelerate your training workflow. For a practical implementation, see [this](experiment_templates/segment_pets/train_oxpets.py) example.
+
+Observed speedup on H200sxm GPUs:
+
+| Experiment                                                                               | Time per epoch \[s] |
+| ---------------------------------------------------------------------------------------- | ------------------- |
+| [segment pets with AMP](experiment_templates/segment_pets/segment_pets_01.json)          | 100                 |
+| [segment pets without AMP](experiment_templates/segment_pets/segment_pets_01_noAMP.json) | 170                 |
+
 ## 🖧 Distributed Training
 
 To run with [PyTorch DDP](https://docs.pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html), add:
@@ -278,13 +289,15 @@ See [segment\_pets\_03\_distributed\_w2.json](experiment_templates/segment_pets/
 
 Use the same number of GPUs as your world size. DDP requires more CPU cores and memory, since multiple data loaders run in parallel. It’s most beneficial for large models, as overhead is significant.
 
-Example speedup on H200SXM GPUs:
+Observed speedup on H200sxm GPUs:
 
-| Experiment                                                                               | Time per epoch \[s] |
-| ---------------------------------------------------------------------------------------- | ------------------- |
-| [segment pets default](experiment_templates/segment_pets/segment_pets_01.json)           | 170                 |
-| [DDP with 2 GPUs](experiment_templates/segment_pets/segment_pets_03_distributed_w2.json) | 100                 |
-| [DDP with 4 GPUs](experiment_templates/segment_pets/segment_pets_04_distributed_w4.json) | 60                  |
+| Experiment                                                                               | Time per ep. w/o AMP \[s] | with AMP \[s] | 
+| ---------------------------------------------------------------------------------------- | ------------------------- | ------------- |
+| [segment pets default](experiment_templates/segment_pets/segment_pets_01.json)           | 170                       | 100           |
+| [DDP with 2 GPUs](experiment_templates/segment_pets/segment_pets_03_distributed_w2.json) | 100                       | 165           |
+| [DDP with 4 GPUs](experiment_templates/segment_pets/segment_pets_04_distributed_w4.json) | 60                        | 45            |
+
+By toggling mixed precision, you can directly observe how more intensive workloads see greater speedups when using DDP.
 
 ## 📦 Installing Additional Python Packages in SLURM
 

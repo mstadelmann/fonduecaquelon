@@ -12,6 +12,7 @@ submit_job() {
 submit_job experiment_templates/mnist/mnist_class_dense.json
 
 submit_job experiment_templates/segment_pets/segment_pets_01.json
+submit_job experiment_templates/segment_pets/segment_pets_01_noAMP.json
 submit_job experiment_templates/segment_pets/segment_pets_02_no_scratch.json
 submit_job experiment_templates/segment_pets/segment_pets_03_distributed_w2.json
 submit_job experiment_templates/segment_pets/segment_pets_04_distributed_w4.json
