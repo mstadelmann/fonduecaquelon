@@ -294,7 +294,7 @@ Observed speedup on H200sxm GPUs:
 | Experiment                                                                               | Time per ep. w/o AMP \[s] | with AMP \[s] | 
 | ---------------------------------------------------------------------------------------- | ------------------------- | ------------- |
 | [segment pets default](experiment_templates/segment_pets/segment_pets_01.json)           | 170                       | 100           |
-| [DDP with 2 GPUs](experiment_templates/segment_pets/segment_pets_03_distributed_w2.json) | 100                       | 165           |
+| [DDP with 2 GPUs](experiment_templates/segment_pets/segment_pets_03_distributed_w2.json) | 100                       | 65           |
 | [DDP with 4 GPUs](experiment_templates/segment_pets/segment_pets_04_distributed_w4.json) | 60                        | 45            |
 
 By toggling mixed precision, you can directly observe how more intensive workloads see greater speedups when using DDP.
