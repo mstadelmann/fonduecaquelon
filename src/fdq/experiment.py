@@ -853,7 +853,7 @@ class fdqExperiment:
                 f"{self.total_run_time.seconds % 3600 / 60.0:.0f} minutes | "
                 f"current epoch: {int(current_ep_time.total_seconds() // 60)} minutes {int(current_ep_time.total_seconds() % 60)} seconds"
             )
-        except (AttributeError, ValueError):
+        except (AttributeError, ValueError, TypeError):
             iprint("Error calculating epoch time - skipping.")
 
         store_processing_infos(self)
