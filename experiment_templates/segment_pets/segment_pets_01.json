@@ -49,7 +49,7 @@
         "args": {
             "epochs": 10,
             "use_GPU": true,
-            "use_AMP": false,
+            "use_AMP": true,
             "accumulate_grad_batches": 1,
             "early_stop_val_loss": 500,
             "early_stop_train_loss": 500,

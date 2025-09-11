@@ -1,0 +1,12 @@
+{
+    "globals": {
+        "project": "Segment OXPET",
+        "author": "Marc",
+        "parent": "segment_pets_01"
+    },
+    "train": {
+        "args": {
+            "use_AMP": false
+        }
+    }
+}
