@@ -810,6 +810,15 @@ class fdqExperiment:
 
         iprint(f"\nEpoch: {self.current_epoch + 1} / {self.nb_epochs}")
 
+        if self.is_distributed():
+            # necessary to make shuffling work properly
+            for data_name, _ in self.exp_def.data.items():
+                if self.data[data_name] is not None:
+                    if self.data[data_name].train_sampler is not None:
+                        self.data[data_name].train_sampler.set_epoch(epoch)
+                    if self.data[data_name].val_sampler is not None:
+                        self.data[data_name].val_sampler.set_epoch(epoch)
+
     def on_epoch_end(
         self,
         log_scalars: dict[str, float] | None = None,
