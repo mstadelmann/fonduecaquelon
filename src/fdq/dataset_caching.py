@@ -521,55 +521,59 @@ def cache_dataloader(dataloader, split_name):
 
     # Iterate through the entire dataset and cache it
     for batch in tqdm(reconfig_orig_dataloader(dataloader), desc=f"Caching {split_name} dataset"):
-        # Store each sample in the batch individually
         if isinstance(batch, dict):
-            # Handle dict-style batches (common for complex datasets)
             batch_size = len(next(iter(batch.values())))
             for i in range(batch_size):
                 sample = {}
                 for key, value in batch.items():
-                    # Convert tensor to numpy array for efficient storage
                     if torch.is_tensor(value):
-                        # Move to CPU first, then convert to numpy
                         tensor = value[i].cpu()
                         if not tensor.is_contiguous():
                             tensor = tensor.contiguous()
-                        # Convert to numpy array
                         sample[key] = tensor.numpy()
                     else:
                         sample[key] = value[i]
                 cached_samples.append(sample)
+        elif isinstance(batch, list):
+            new_elt = []
+            for item in batch:
+                if torch.is_tensor(item):
+                    item = item.cpu()
+                    if not item.is_contiguous():
+                        item = item.contiguous()
+                    item = item.numpy()
+                    new_elt.append(item)
+            cached_samples.append(new_elt)
+        elif isinstance(batch, torch.Tensor):
+            batch = batch.cpu()
+            if not batch.is_contiguous():
+                batch = batch.contiguous()
+            batch = batch.numpy()
+            cached_samples.append(batch)
         else:
-            # Handle tuple/list-style batches
-            if isinstance(batch, list | tuple) and len(batch) == 2:
-                inputs, targets = batch
-                batch_size = len(inputs)
-                for i in range(batch_size):
-                    # Convert tensors to numpy arrays
-                    inp = inputs[i]
-                    tgt = targets[i]
+            raise ValueError(f"Catching for batch type: {type(batch)} is currently not implemented!")
+        # else:
+        #     # Handle tuple/list-style batches
+        #     if isinstance(batch, list | tuple) and len(batch) == 2:
+        #         inputs, targets = batch
+        #         batch_size = len(inputs)
+        #         for i in range(batch_size):
+        #             # Convert tensors to numpy arrays
+        #             inp = inputs[i]
+        #             tgt = targets[i]
 
-                    if torch.is_tensor(inp):
-                        inp = inp.cpu()
-                        if not inp.is_contiguous():
-                            inp = inp.contiguous()
-                        inp = inp.numpy()
+        #             if torch.is_tensor(inp):
+        #                 inp = inp.cpu()
+        #                 if not inp.is_contiguous():
+        #                     inp = inp.contiguous()
+        #                 inp = inp.numpy()
 
-                    if torch.is_tensor(tgt):
-                        tgt = tgt.cpu()
-                        if not tgt.is_contiguous():
-                            tgt = tgt.contiguous()
-                        tgt = tgt.numpy()
+        #             if torch.is_tensor(tgt):
+        #                 tgt = tgt.cpu()
+        #                 if not tgt.is_contiguous():
+        #                     tgt = tgt.contiguous()
+        #                 tgt = tgt.numpy()
 
-                    cached_samples.append((inp, tgt))
-            else:
-                # Handle single tensor batches
-                for item in batch:
-                    if torch.is_tensor(item):
-                        item = item.cpu()
-                        if not item.is_contiguous():
-                            item = item.contiguous()
-                        item = item.numpy()
-                    cached_samples.append(item)
+        #             cached_samples.append((inp, tgt))
 
     return cached_samples
