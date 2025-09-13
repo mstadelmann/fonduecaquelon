@@ -45,7 +45,6 @@ def print_cache_summary(cache_paths, data_name):
             size_mb = get_file_size_mb(file_path)
             total_size_mb += size_mb
 
-            # Get number of samples from HDF5 file
             try:
                 with h5py.File(file_path, "r") as f:
                     num_samples = f.attrs.get("num_samples", 0)
@@ -83,16 +82,14 @@ class CachedDataset(Dataset):
             self.augmenter = None
 
         self.cache_file_path = cache_file_path
-        # Load the data into memory for fast access
         with h5py.File(cache_file_path, "r") as f:
-            # Load metadata from attributes
             if "num_samples" in f.attrs:
                 self.num_samples = f.attrs["num_samples"]
             else:
                 # Fallback: count groups
-                self.num_samples = len([k for k in f.keys() if k.startswith("sample_")])
+                # self.num_samples = len([k for k in f.keys() if k.startswith("sample_")])
+                raise ValueError("Cache file is missing 'num_samples' attribute!")
 
-            # Pre-load all data into memory
             self.cached_data = []
             for i in range(self.num_samples):
                 sample_group = f[f"sample_{i}"]
@@ -110,10 +107,8 @@ class CachedDataset(Dataset):
                     if key.endswith("_data"):
                         original_key = key[:-5]  # Remove '_data' suffix
                         value = group[key][:]
-                        # Convert back to tensor
                         sample[original_key] = torch.from_numpy(value)
 
-                # Load non-array attributes
                 for attr_name in group.attrs.keys():
                     if attr_name != "type":
                         sample[attr_name] = group.attrs[attr_name]
@@ -121,14 +116,12 @@ class CachedDataset(Dataset):
 
             elif sample_type == "tuple":
                 items = []
-                # Get the number of items from attributes
                 num_items = group.attrs.get("num_items", 0)
                 for i in range(num_items):
                     if f"item_{i}_data" in group:
                         value = group[f"item_{i}_data"][:]
                         items.append(torch.from_numpy(value))
                     else:
-                        # Get scalar value from attributes
                         attr_name = f"item_{i}_value"
                         if attr_name in group.attrs:
                             items.append(group.attrs[attr_name])
@@ -136,14 +129,12 @@ class CachedDataset(Dataset):
 
             elif sample_type == "list":
                 items = []
-                # Get the number of items from attributes
                 num_items = group.attrs.get("num_items", 0)
                 for i in range(num_items):
                     if f"item_{i}_data" in group:
                         value = group[f"item_{i}_data"][:]
                         items.append(torch.from_numpy(value))
                     else:
-                        # Get scalar value from attributes
                         attr_name = f"item_{i}_value"
                         if attr_name in group.attrs:
                             items.append(group.attrs[attr_name])
@@ -154,7 +145,6 @@ class CachedDataset(Dataset):
                 return torch.from_numpy(value)
 
             elif sample_type == "other":
-                # Get the value from attributes
                 return group.attrs.get("value", None)
 
         # Fallback for older format or unknown type
@@ -179,9 +169,7 @@ class CachedDataset(Dataset):
 
 def hash_conf(conf):
     """Create a hash from a dictionary."""
-    # Convert dict to JSON string with sorted keys for consistency
     dict_string = json.dumps(conf.to_dict(), sort_keys=True, ensure_ascii=True)
-    # Create hash
     return hashlib.md5(dict_string.encode()).hexdigest()
 
 
@@ -197,7 +185,6 @@ def find_valid_cache_file(cache_dir, data_name, split_name, expected_hash):
     Returns:
         str or None: Path to valid cache file or None if not found
     """
-    # Look for files matching the pattern with any timestamp
     pattern = os.path.join(cache_dir, f"{data_name}_{split_name}_*.h5")
     candidate_files = glob.glob(pattern)
 
@@ -208,7 +195,6 @@ def find_valid_cache_file(cache_dir, data_name, split_name, expected_hash):
                 if stored_hash == expected_hash:
                     return file_path
         except Exception:
-            # Skip corrupted or unreadable files
             continue
 
     return None
@@ -282,14 +268,12 @@ def cache_datasets(experiment, processor, data_name, data_source):
 
     os.makedirs(data_source.caching.cache_dir, exist_ok=True)
 
-    # Try to find existing cache files with correct hash or create new paths
     cache_paths = {}
     for split_name in ["train", "val", "test"]:
         existing_file = find_valid_cache_file(data_source.caching.cache_dir, data_name, split_name, data_hash)
         if existing_file:
             cache_paths[split_name] = existing_file
         else:
-            # Create new filename with datetime stamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             cache_paths[split_name] = os.path.join(
                 data_source.caching.cache_dir, f"{data_name}_{split_name}_{timestamp}.h5"
@@ -300,7 +284,6 @@ def cache_datasets(experiment, processor, data_name, data_source):
     cached_loaders = {}
     total_cache_size_mb = 0.0
 
-    # Cache each split
     for split_name, orig_dataloader in loaders_to_cache.items():
         if orig_dataloader is None:
             wprint(f"No '{split_name}' dataloader found/required for this run, skipping...")
@@ -308,7 +291,6 @@ def cache_datasets(experiment, processor, data_name, data_source):
 
         # Check if cache with correct hash already exists
         if os.path.exists(cache_paths[split_name]):
-            # Verify the hash matches
             try:
                 with h5py.File(cache_paths[split_name], "r") as f:
                     stored_hash = f.attrs.get(FDQ_CACHE_HASH_KEY, "")
@@ -332,7 +314,6 @@ def cache_datasets(experiment, processor, data_name, data_source):
             iprint(f"Caching {split_name} dataset to {cache_paths[split_name]}...")
             cached_samples = cache_dataloader(orig_dataloader, split_name)
 
-            # Save cached data to disk
             _save_samples_to_hdf5(
                 samples=cached_samples,
                 file_path=cache_paths[split_name],
@@ -340,7 +321,6 @@ def cache_datasets(experiment, processor, data_name, data_source):
                 compression=data_source.caching.get("compress_cache", True),
             )
 
-            # Calculate and print file size
             file_size_mb = get_file_size_mb(cache_paths[split_name])
             iprint(
                 f"{split_name.capitalize()} dataset cached successfully! {len(cached_samples)} samples saved. Cache file size: {file_size_mb:.2f} MB"
@@ -425,13 +405,10 @@ def _save_sample_to_group(sample, group, compression):
         group.attrs["type"] = "dict"
         for key, value in sample.items():
             if isinstance(value, np.ndarray):
-                # Save numpy array directly
                 group.create_dataset(f"{key}_data", data=value, compression=compression_algo)
             elif isinstance(value, int | float | str | bool | np.integer | np.floating):
-                # Save scalar values as attributes
                 group.attrs[key] = value
             else:
-                # For complex types, convert to string representation
                 group.attrs[key] = str(value)
 
     elif isinstance(sample, tuple):
@@ -461,7 +438,6 @@ def _save_sample_to_group(sample, group, compression):
         group.create_dataset("data", data=sample, compression=compression_algo)
 
     else:
-        # For other types, store as attributes
         group.attrs["type"] = "other"
         if isinstance(sample, int | float | str | bool | np.integer | np.floating):
             group.attrs["value"] = sample
@@ -541,15 +517,19 @@ def cache_dataloader(dataloader, split_name):
                     item = item.cpu()
                     if not item.is_contiguous():
                         item = item.contiguous()
+                    item = item.squeeze(0)  # remove batch dimension
                     item = item.numpy()
                     new_elt.append(item)
+                else:
+                    raise ValueError(f"Catching for list item type: {type(item)} is currently not implemented!")
             cached_samples.append(new_elt)
-        elif isinstance(batch, torch.Tensor):
-            batch = batch.cpu()
-            if not batch.is_contiguous():
-                batch = batch.contiguous()
-            batch = batch.numpy()
-            cached_samples.append(batch)
+            # cached_samples.extend(new_elt)
+        # elif isinstance(batch, torch.Tensor):
+        #     batch = batch.cpu()
+        #     if not batch.is_contiguous():
+        #         batch = batch.contiguous()
+        #     batch = batch.numpy()
+        #     cached_samples.append(batch)
         else:
             raise ValueError(f"Catching for batch type: {type(batch)} is currently not implemented!")
         # else:
