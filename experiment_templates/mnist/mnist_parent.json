@@ -57,7 +57,8 @@
         }
     },
     "slurm_cluster": {
-        "fdq_version": "0.0.67",
+        "fdq_test_repo": false,
+        "fdq_version": "0.0.69",
         "python_env_module": "python/3.12.4",
         "uv_env_module": "uv/0.6.12",
         "cuda_env_module": "cuda/12.8.0",

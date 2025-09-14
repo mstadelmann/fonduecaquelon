@@ -195,6 +195,30 @@ model = experiment.models["ccUNET"]
 
 See [train\_oxpets.py](experiment_templates/segment_pets/train_oxpets.py) for an example.
 
+At the beginning of each epoch call `experiment.on_epoch_start()` and at the end call `experiment.on_epoch_end(...)`. These hooks reset per‑epoch timers/counters, aggregate metrics, and perform logging (TensorBoard / Weights & Biases) and any scheduling/checkpoint logic tied to epoch boundaries.
+
+Minimal pattern:
+
+```python
+def fdq_train(experiment: fdqExperiment):
+    nb_epochs = experiment.exp_def.train.args.epochs
+    train_loader = experiment.data["OXPET"].train_data_loader
+
+    for epoch in range(nb_epochs):
+        experiment.on_epoch_start()
+
+        running_loss = 0.0
+        for batch in train_loader:
+            # forward / loss / backward / optimizer step ...
+            pass
+
+        # Example scalar logging
+        scalars = {"train/loss": running_loss / max(1, len(train_loader))}
+        experiment.on_epoch_end(log_scalars=scalars)
+```
+
+See the full implementation in [train_oxpets.py](experiment_templates/segment_pets/train_oxpets.py) for a richer example (images, text, or additional metrics).
+
 ### Testing Loop
 
 Testing is similar. Define:
