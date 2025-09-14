@@ -57,9 +57,10 @@ def print_cache_summary(cache_paths, data_name):
         else:
             iprint(f"  {split_name:>5}: File not found")
 
-    iprint(f"  {'Total':>5}: {total_size_mb:>8.2f} MB")
     if total_size_mb > 1024:
         iprint(f"  {'Total':>5}: {total_size_mb / 1024:>8.2f} GB")
+    else:
+        iprint(f"  {'Total':>5}: {total_size_mb:>8.2f} MB")
     iprint("=" * 40)
 
 
@@ -523,13 +524,13 @@ def cache_dataloader(dataloader, split_name):
                 else:
                     raise ValueError(f"Catching for list item type: {type(item)} is currently not implemented!")
             cached_samples.append(new_elt)
-            # cached_samples.extend(new_elt)
-        # elif isinstance(batch, torch.Tensor):
-        #     batch = batch.cpu()
-        #     if not batch.is_contiguous():
-        #         batch = batch.contiguous()
-        #     batch = batch.numpy()
-        #     cached_samples.append(batch)
+        elif isinstance(batch, torch.Tensor):
+            batch = batch.cpu()
+            if not batch.is_contiguous():
+                batch = batch.contiguous()
+            batch = batch.squeeze(0)  # remove batch dimension
+            batch = batch.numpy()
+            cached_samples.append(batch)
         else:
             raise ValueError(f"Catching for batch type: {type(batch)} is currently not implemented!")
         # else:
