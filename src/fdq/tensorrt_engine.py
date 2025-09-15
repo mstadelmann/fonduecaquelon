@@ -3,8 +3,6 @@ import numpy as np
 import time
 import tensorrt as trt
 from typing import Any
-import pycuda.driver as cuda
-import pycuda.autoinit  # noqa: F401
 
 
 class TensorRTInference:
@@ -18,6 +16,10 @@ class TensorRTInference:
             engine_path: Path to save/load TensorRT engine (optional)
             precision: Precision mode - "fp32", "fp16", or "int8"
         """
+        # Import here to avoid dependency if not used
+        import pycuda.driver as cuda
+        import pycuda.autoinit  # noqa: F401
+
         self.onnx_path = onnx_path
         self.engine_path = engine_path or onnx_path.replace(".onnx", f"_{precision}.trt")
         self.precision = precision
