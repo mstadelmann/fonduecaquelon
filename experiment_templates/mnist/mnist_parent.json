@@ -2,7 +2,7 @@
     "globals": {
         "project": "MNIST classifier - parent",
         "author": "Marc",
-        "parent": "mnist_keys.json",
+        "parent": "../wandb_keys.json",
         "set_random_seed": 22
     },
     "transforms": {

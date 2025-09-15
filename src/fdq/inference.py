@@ -6,7 +6,6 @@ from fdq.ui_functions import getIntInput, save_images
 from typing import Any
 from fdq.misc import iprint
 from fdq.testing import find_model_path
-from fdq.tensorrt_engine import TensorRTInference
 from fdq.dump import get_example_tensor
 
 
@@ -101,6 +100,8 @@ def run_tensorrt_inference(onnx_model_path: str, precision: str = "fp32", experi
 
     try:
         # Create TensorRT inference object
+        from fdq.tensorrt_engine import TensorRTInference
+
         trt_inference = TensorRTInference(onnx_model_path, precision=precision)
 
         # Print model information

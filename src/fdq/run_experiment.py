@@ -1,6 +1,7 @@
 import argparse
 import random
 import sys
+import os
 from typing import Any
 
 import numpy as np
@@ -99,14 +100,19 @@ def start(rank: int, args: argparse.Namespace) -> None:
 def main():
     """Main function to parse arguments, load configuration, and run the FDQ experiment."""
     inargs = parse_args()
+    use_GPU = load_conf_file(inargs.experimentfile).train.args.use_GPU
+
+    world_size = 1
 
     if inargs.train_model:
-        world_size = load_conf_file(inargs.experimentfile).get("slurm_cluster", {}).get("world_size", 1)
-    else:
-        world_size = 1
+        # DDP only on cluster, and only if GPU enabled
+        if os.getenv("SLURM_JOB_ID") is not None and use_GPU:
+            world_size = load_conf_file(inargs.experimentfile).get("slurm_cluster", {}).get("world_size", 1)
 
-    if world_size > torch.cuda.device_count():
-        raise ValueError(f"ERROR, world size {world_size} is larger than available GPUs: {torch.cuda.device_count()}")
+            if world_size > torch.cuda.device_count():
+                raise ValueError(
+                    f"ERROR, world size {world_size} is larger than available GPUs: {torch.cuda.device_count()}"
+                )
 
     if world_size == 1:
         # No need for multiprocessing

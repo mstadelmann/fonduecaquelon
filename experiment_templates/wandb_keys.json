@@ -1,6 +1,6 @@
 {
     "globals": {
-        "project": "MNIST classifier - keys",
+        "project": "WANDB Keys",
         "author": "Marc"
     },
     "store": {

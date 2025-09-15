@@ -1,9 +1,0 @@
-{
-    "globals": {
-        "project": "Segment OXPET",
-        "author": "Marc"
-    },
-    "store": {
-        "wandb_key": "..."
-    }
-}
