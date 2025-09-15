@@ -2,7 +2,7 @@
     "globals": {
         "project": "Segment OXPET",
         "author": "Marc",
-        "parent": "segment_pets_00_keys.json",
+        "parent": "../wandb_keys.json",
         "comment": "Small model to demonstrate workflow."
     },
     "models": {

@@ -1,9 +1,0 @@
-{
-    "globals": {
-        "project": "MNIST classifier - keys",
-        "author": "Marc"
-    },
-    "store": {
-        "wandb_key": "..."
-    }
-}
