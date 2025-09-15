@@ -331,7 +331,7 @@ Example:
 
 ```json
 "slurm_cluster": {
-    "fdq_version": "0.0.72",
+    "fdq_version": "0.0.73",
     "...": "...",
     "additional_pip_packages": [
         "monai==1.4.0",
