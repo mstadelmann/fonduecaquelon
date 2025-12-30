@@ -14,6 +14,7 @@ classifiers = [
   "Operating System :: OS Independent",
 ]
 dependencies = [
+  "hydra-core>=1.3.2",
   "einops==0.8.1",
   "torch==2.7.0",
   "torch_tensorrt==2.7.0",
