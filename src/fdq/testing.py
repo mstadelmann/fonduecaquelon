@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from fdq.ui_functions import iprint, wprint, getIntInput
+from fdq.misc import get_parent_config_paths
 
 
 def get_nb_exp_epochs(path: str) -> int:
@@ -22,11 +23,11 @@ def find_experiment_result_dirs(experiment: Any) -> tuple[str, list[str]]:
     """Finds and returns the experiment result directory and its subfolders for the given experiment."""
     if experiment.is_slurm and experiment.inargs.train_model:
         wprint("WARNING: This is a slurm TRAINING session - looking only for results in scratch_results_path!")
-        outbasepath: str | None = experiment.exp_def.get("slurm_cluster", {}).get("scratch_results_path")
+        outbasepath: str | None = experiment.exp_def.get("slurm_cluster", {}).get("scratch_results_path")  # TODO
 
     elif experiment.is_slurm and not experiment.mode.op_mode.train:
         wprint("WARNING: This is a slurm INFERENCE session - looking for results in regular path!")
-        outbasepath = experiment.exp_def.get("store", {}).get("results_path")
+        outbasepath = experiment.exp_def.get("store", {}).get("results_path")  # TODO
 
         if outbasepath[0] == "~":
             outbasepath = os.path.expanduser(outbasepath)
@@ -36,7 +37,7 @@ def find_experiment_result_dirs(experiment: Any) -> tuple[str, list[str]]:
 
     else:
         # regular local use
-        outbasepath = experiment.exp_def.get("store", {}).get("results_path")
+        outbasepath = experiment.cfg.get("store", {}).get("results_path")
         outbasepath = os.path.expanduser(outbasepath)
 
     if outbasepath is None:
@@ -185,11 +186,11 @@ def _set_test_mode(experiment: Any) -> None:
     if experiment.mode.op_mode.unittest:
         experiment.mode.last()
 
-    elif experiment.inargs.test_model_auto:
-        if experiment.exp_def.test.test_model == "best_val":
+    elif experiment.cfg.mode.run_test_auto:
+        if experiment.cfg.test.test_model == "best_val":
             iprint("Auto test: Loading best validation model.")
             experiment.mode.best_val()
-        elif experiment.exp_def.test.test_model == "best_train":
+        elif experiment.cfg.test.test_model == "best_train":
             iprint("Auto test: Loading best train model.")
             experiment.mode.best_train()
         else:
@@ -213,12 +214,12 @@ def run_test(experiment: Any) -> None:
 
     _set_test_mode(experiment)
 
-    if experiment.exp_def.models is not None:
+    if experiment.cfg.get("models") is not None:
         experiment.load_trained_models()
 
-    experiment.copy_files_to_test_dir(experiment.experiment_file_path)
-    for p in experiment.exp_def.globals.parent_hierarchy:
-        experiment.copy_files_to_test_dir(file_path=p)
+    experiment.cp_to_test_dir(experiment.experiment_file_path)
+    for p in get_parent_config_paths():
+        experiment.cp_to_test_dir(file_path=p)
 
     save_test_info(
         experiment,

@@ -2,7 +2,10 @@ import argparse
 import random
 import sys
 import os
+import hydra
 from typing import Any
+from omegaconf import DictConfig
+from omegaconf import OmegaConf
 
 import numpy as np
 import torch
@@ -15,51 +18,11 @@ from fdq.dump import dump_model
 from fdq.inference import inference_model
 
 
-def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments for configuring and running an FDQ experiment.
-
-    Returns:
-    -------
-    argparse.Namespace
-        Parsed command-line arguments.
-    """
-    parser: argparse.ArgumentParser = argparse.ArgumentParser(description="FCQ deep learning framework.")
-    parser.add_argument("experimentfile", type=str, help="Path to experiment definition file.")
-    parser.add_argument("-nt", "-notrain", dest="train_model", default=True, action="store_false")
-    parser.add_argument(
-        "-ti",
-        "-test_interactive",
-        dest="test_model_ia",
-        default=False,
-        action="store_true",
-    )
-    parser.add_argument(
-        "-ta",
-        "-test_auto",
-        dest="test_model_auto",
-        default=False,
-        action="store_true",
-    )
-    parser.add_argument("-d", "-dump", dest="dump_model", default=False, action="store_true")
-    parser.add_argument("-i", "-inference", dest="inference_model", default=False, action="store_true")
-    parser.add_argument("-p", "-printmodel", dest="print_model", default=False, action="store_true")
-    parser.add_argument(
-        "-rp",
-        "-resume_path",
-        dest="resume_path",
-        type=str,
-        default=None,
-        help="Path to checkpoint.",
-    )
-
-    return parser.parse_args()
-
-
-def start(rank: int, args: argparse.Namespace) -> None:
+def start(rank: int, cfg: DictConfig) -> None:
     """Main entry point for running an FDQ experiment based on command-line arguments."""
-    experiment: fdqExperiment = fdqExperiment(args, rank=rank)
+    experiment: fdqExperiment = fdqExperiment(cfg, rank=rank)
 
-    random_seed: Any = experiment.exp_def.globals.set_random_seed
+    random_seed: Any = experiment.cfg.globals.set_random_seed
     if random_seed is not None:
         if not isinstance(random_seed, int):
             raise ValueError("ERROR, random seed must be integer number!")
@@ -68,21 +31,21 @@ def start(rank: int, args: argparse.Namespace) -> None:
         np.random.seed(random_seed)
         torch.manual_seed(random_seed)
 
-    if experiment.inargs.print_model:
+    if experiment.cfg.mode.print_model_summary:
         experiment.print_model()
 
-    if experiment.inargs.train_model:
+    if experiment.cfg.mode.run_train:
         experiment.prepareTraining()
         experiment.trainer.fdq_train(experiment)
         experiment.clean_up_train()
 
-    if experiment.inargs.test_model_auto or experiment.inargs.test_model_ia:
+    if experiment.cfg.mode.run_test_auto or experiment.cfg.mode.run_test_interactive:
         run_test(experiment)
 
-    if experiment.inargs.dump_model:
+    if experiment.cfg.mode.dump_model:
         dump_model(experiment)
 
-    if experiment.inargs.inference_model:
+    if experiment.cfg.mode.run_inference:
         inference_model(experiment)
 
     experiment.clean_up_distributed()
@@ -97,17 +60,37 @@ def start(rank: int, args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
-def main():
+def expand_paths(cfg):
+    # convert to container (dict/list), walk recursively
+    def _expand(v):
+        if isinstance(v, str) and v.startswith("~"):
+            return os.path.expanduser(v)
+        elif isinstance(v, list):
+            return [_expand(x) for x in v]
+        elif isinstance(v, dict):
+            return {k: _expand(val) for k, val in v.items()}
+        else:
+            return v
+
+    return OmegaConf.create(_expand(OmegaConf.to_container(cfg, resolve=True)))
+
+
+@hydra.main(
+    version_base=None,
+    config_path="/home/marc/dev/fonduecaquelon/experiment_templates/mnist",
+    config_name="mnist_class_dense",
+)
+def main(cfg: DictConfig) -> None:
     """Main function to parse arguments, load configuration, and run the FDQ experiment."""
-    inargs = parse_args()
-    use_GPU = load_conf_file(inargs.experimentfile).train.args.use_GPU
+    cfg = expand_paths(cfg)
+    use_GPU = cfg.train.args.use_GPU
 
     world_size = 1
 
-    if inargs.train_model:
+    if cfg.mode.run_train:
         # DDP only on cluster, and only if GPU enabled
         if os.getenv("SLURM_JOB_ID") is not None and use_GPU:
-            world_size = load_conf_file(inargs.experimentfile).get("slurm_cluster", {}).get("world_size", 1)
+            world_size = cfg.slurm_cluster.get("world_size", 1)
 
             if world_size > torch.cuda.device_count():
                 raise ValueError(
@@ -116,9 +99,9 @@ def main():
 
     if world_size == 1:
         # No need for multiprocessing
-        start(0, inargs)
+        start(0, cfg)
     else:
-        mp.spawn(start, args=(inargs,), nprocs=world_size, join=True)
+        mp.spawn(start, args=(cfg,), nprocs=world_size, join=True)
 
 
 if __name__ == "__main__":

@@ -6,15 +6,17 @@ import random
 from datetime import datetime
 from typing import Any
 from collections.abc import Callable, Iterator
+from omegaconf import OmegaConf
 
 import cv2
 import torch
+import wandb
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from torch.utils.data import random_split
 from torch.utils.tensorboard import SummaryWriter
-import wandb
+from hydra.core.hydra_config import HydraConfig
 
 from fdq.ui_functions import iprint, wprint, eprint
 
@@ -276,9 +278,9 @@ def collect_processing_infos(experiment: Any | None = None) -> dict:
     if experiment.is_slurm:
         data["slurm_job_id"] = experiment.slurm_job_id
 
-    if experiment.inargs.resume_path is not None:
+    if experiment.cfg.mode.get("resume_path") is not None:
         data["job_continuation"] = True
-        data["job_continuation_chpt_path"] = experiment.inargs.resume_path
+        data["job_continuation_chpt_path"] = experiment.cfg.mode.get("resume_path")
         data["start_epoch"] = experiment.start_epoch
     else:
         data["job_continuation"] = False
@@ -434,7 +436,7 @@ def add_graph(experiment: Any) -> None:
         elif isinstance(sample, dict):
             dummy_input = next(iter(sample.values()))
 
-        for model_name, _ in experiment.exp_def.models:
+        for model_name, _ in experiment.cfg.models.items():
             experiment.tb_writer.add_graph(experiment.models[model_name], dummy_input.to(experiment.device))
             experiment.tb_graph_stored = True
     except (StopIteration, AttributeError, KeyError, TypeError):
@@ -506,11 +508,11 @@ def save_tensorboard(
 
 def init_wandb(experiment: Any) -> bool:
     """Initialize weights and biases."""
-    if experiment.exp_def.store.wandb_project is None:
+    if experiment.cfg.store.wandb_project is None:
         raise ValueError("Wandb project name is not set. Please set it in the experiment definition.")
-    if experiment.exp_def.store.wandb_entity is None:
+    if experiment.cfg.store.wandb_entity is None:
         raise ValueError("Wandb entity name is not set. Please set it in the experiment definition.")
-    if experiment.exp_def.store.wandb_key is None:
+    if experiment.cfg.store.wandb_key is None:
         raise ValueError("Wandb key is not set. Please set it in the experiment definition.")
 
     slurm_str = ""
@@ -537,12 +539,12 @@ def init_wandb(experiment: Any) -> bool:
             wandb_name = f"test__{dt_string}__{experiment.experimentName[:30]}{slurm_str}"
 
     try:
-        wandb.login(key=experiment.exp_def.store.wandb_key)
+        wandb.login(key=experiment.cfg.store.wandb_key)
         wandb.init(
-            project=experiment.exp_def.store.wandb_project,
-            entity=experiment.exp_def.store.wandb_entity,
+            project=experiment.cfg.store.wandb_project,
+            entity=experiment.cfg.store.wandb_entity,
             name=wandb_name,
-            config=experiment.exp_def.to_dict(),
+            config=experiment.cfg.to_dict(),
         )
         experiment.wandb_initialized = True
         iprint(f"Init Wandb -  log path: {wandb.run.dir}")
@@ -688,3 +690,40 @@ def load_conf_file(path) -> dict:
     replace_tilde_with_abs_path(conf)
 
     return DictToObj(conf)
+
+
+def get_parent_config_paths() -> list[str]:
+    """Return absolute paths of all parent configs from the active Hydra config (recursively)."""
+    hc = HydraConfig.get()
+    base_dir = next(src.path for src in hc.runtime.config_sources if src.schema == "file")
+    root_cfg_path = os.path.join(base_dir, f"{hc.job.config_name}.yaml")
+
+    parents: list[str] = []
+    seen: set[str] = set()
+
+    def collect(cfg_path: str) -> None:
+        try:
+            cfg = OmegaConf.load(cfg_path)
+        except Exception:
+            return
+
+        defaults = cfg.get("defaults", []) or []
+        for item in defaults:
+            name = None
+            if isinstance(item, str):
+                name = item
+            elif isinstance(item, dict) and len(item) == 1:
+                k, v = next(iter(item.items()))
+                name = v if isinstance(v, str) else k
+
+            if not name or name == "_self_":
+                continue
+
+            parent_path = os.path.join(base_dir, f"{name}.yaml")
+            if os.path.exists(parent_path) and parent_path not in seen:
+                seen.add(parent_path)
+                parents.append(parent_path)
+                collect(parent_path)  # recurse
+
+    collect(root_cfg_path)
+    return parents

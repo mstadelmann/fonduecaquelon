@@ -8,6 +8,8 @@ import subprocess
 from datetime import datetime, timedelta
 from typing import Any
 import git
+from omegaconf import DictConfig
+from hydra.core.hydra_config import HydraConfig
 
 import torch
 import funkybob
@@ -33,6 +35,7 @@ from fdq.misc import (
     save_tensorboard,
     save_wandb,
     load_conf_file,
+    get_parent_config_paths,
 )
 from fdq.dataset_caching import cache_datasets_ddp_handler
 
@@ -43,30 +46,29 @@ class fdqExperiment:
     It manages the setup, training, evaluation, and management of machine learning experiments.
     """
 
-    def __init__(self, inargs: argparse.Namespace, rank: int) -> None:
+    def __init__(self, cfg: DictConfig, rank: int) -> None:
         """Initialize the fdqExperiment class with the provided arguments.
 
         Args:
             inargs (argparse.Namespace): The input arguments containing experiment configurations.
             rank (int): The rank of the current process in distributed training.
         """
-        self.inargs: argparse.Namespace = inargs
-        self.experiment_file_path = self.inargs.experimentfile
-        self.exp_def = load_conf_file(self.experiment_file_path)
-        self.globals = self.exp_def.globals
-        self.project: str = self.exp_def.globals.project.replace(" ", "_")
-        self.experimentName: str = self.experiment_file_path.split("/")[-1].split(".json")[0]
+        self.cfg: DictConfig = cfg
+        self.experiment_file_path = self.get_config_file_path()
+        self.globals = self.cfg.globals
+        self.project: str = self.cfg.globals.project.replace(" ", "_")
+        self.experimentName: str = HydraConfig.get().job.config_name
         self.funky_name: str | None = None
-        self.checkpoint_frequency: int = self.exp_def.store.checkpoint_frequency
+        self.checkpoint_frequency: int = cfg.store.checkpoint_frequency
         self.mode: FCQmode = FCQmode()
         self.creation_time: datetime = datetime.now()
         self.current_ep_start_time: datetime | None = None
         self.finish_time: datetime | None = None
         self.total_run_time: timedelta | None = None
         self.run_info: dict[str, Any] = {}
-        self.gradacc_iter: int = self.exp_def.train.args.get("accumulate_grad_batches", default=1)
-        self.useAMP: bool = bool(self.exp_def.train.args.use_AMP)
-        self.nb_epochs: int = self.exp_def.train.args.epochs
+        self.gradacc_iter: int = cfg.train.args.get("accumulate_grad_batches", 1)
+        self.useAMP: bool = cfg.train.args.use_AMP
+        self.nb_epochs: int = cfg.train.args.epochs
         self.current_epoch: int = 0
         self.start_epoch: int = 0
         self.data: dict[str, Any] = {}
@@ -100,15 +102,15 @@ class fdqExperiment:
         self.early_stop_detected: bool = False
         self.early_stop_reason: str = ""
         self.processing_log_dict: dict[str, Any] = {}
-        self.useTensorboard: bool = self.exp_def.store.use_tensorboard
+        self.useTensorboard: bool = cfg.store.use_tensorboard
         self.tb_writer: Any | None = None
-        self.useWandb: bool = self.exp_def.store.use_wandb
+        self.useWandb: bool = cfg.store.use_wandb
         self.wandb_initialized: bool = False
         slurm_job_id: str | None = os.getenv("SLURM_JOB_ID")
         if isinstance(slurm_job_id, str) and slurm_job_id.isdigit():
             self.is_slurm: bool = True
             self.slurm_job_id: str = slurm_job_id
-            self.scratch_data_path: str | None = self.exp_def.get("slurm_cluster", {}).get("scratch_data_path")
+            self.scratch_data_path: str | None = cfg.get("slurm_cluster", {}).get("scratch_data_path")
         else:
             self.is_slurm = False
             self.slurm_job_id = None
@@ -116,16 +118,16 @@ class fdqExperiment:
         # distributed training
         set_global_rank(rank)
         self.rank: int = rank
-        if not self.inargs.train_model:
+        if not cfg.mode.run_train:
             self.world_size = 1
         else:
-            self.world_size: int = self.exp_def.get("slurm_cluster", {}).get("world_size", 1)
-        self.master_port: int = self.exp_def.get("slurm_cluster", {}).get("master_port")
-        self.ddp_rdvz_path: int = self.exp_def.get("slurm_cluster", {}).get("ddp_rdvz_path", "/scratch/")
+            self.world_size: int = cfg.get("slurm_cluster", {}).get("world_size", 1)
+        self.master_port: int = cfg.get("slurm_cluster", {}).get("master_port")
+        self.ddp_rdvz_path: int = cfg.get("slurm_cluster", {}).get("ddp_rdvz_path", "/scratch/")
         self.init_distributed_mode()
 
         self.previous_slurm_job_id: str | None = None
-        if torch.cuda.is_available() and bool(self.exp_def.train.args.use_GPU):
+        if torch.cuda.is_available() and bool(cfg.train.args.use_GPU):
             torch.cuda.empty_cache()
             self.device: torch.device = torch.device("cuda", self.rank)
             self.is_cuda: bool = True
@@ -151,12 +153,12 @@ class fdqExperiment:
 
             if self.is_slurm:
                 folder_name += f"__{self.slurm_job_id}"
-                res_base_path = self.exp_def.get("slurm_cluster", {}).get("scratch_results_path")
+                res_base_path = self.cfg.get("slurm_cluster", {}).get("scratch_results_path")
                 if res_base_path is None:
                     raise ValueError("Error, scratch_results_path was not defined.")
 
             else:
-                res_base_path = self.exp_def.get("store", {}).get("results_path", None)
+                res_base_path = self.cfg.get("store", {}).get("results_path", None)
                 if res_base_path is None:
                     raise ValueError("Error, result path was not defined.")
 
@@ -271,6 +273,18 @@ class fdqExperiment:
         print(f"Distributed mode initialized on rank {self.rank}.")
         self.dist_barrier()
 
+    def get_config_file_path(self) -> str:
+        hc = HydraConfig.get()
+        config_name = hc.job.config_name
+        for src in hc.runtime.config_sources:
+            if src.schema == "file":
+                base_dir = src.path
+                break
+        else:
+            raise RuntimeError("No file-based config source found")
+        cfg_path = os.path.join(base_dir, f"{config_name}.yaml")
+        return cfg_path
+
     def store_experiment_git_hash(self):
         """Check if the experiment directory is a git repository and store the current git hash."""
         exp_path = os.path.abspath(self.experiment_file_path)
@@ -346,7 +360,7 @@ class fdqExperiment:
         if self.models:
             return
 
-        for model_name, model_def in self.exp_def.models:
+        for model_name, model_def in self.cfg.models.items():
             if model_def.path is not None:
                 if os.path.exists(model_def.path):
                     cls = self.instantiate_class(file_path=model_def.path, class_name=model_def.class_name)
@@ -369,12 +383,12 @@ class fdqExperiment:
                 self.models[model_name] = self.load_model_from_path(self.trained_model_paths[model_name])
 
             # load trained model from path defined in exp file
-            elif model_def.trained_model_path is not None:
+            elif model_def.get("trained_model_path") is not None:
                 self.models[model_name] = self.load_model_from_path(model_def.trained_model_path)
 
             # or instantiate new model with random weights
             elif instantiate:
-                self.models[model_name] = cls(**model_def.args.to_dict()).to(self.device)
+                self.models[model_name] = cls(**model_def.args).to(self.device)
                 iprint(
                     f"Model {model_name} instantiated on rank {self.rank}.",
                     dist_print=True,
@@ -398,7 +412,7 @@ class fdqExperiment:
                     self.models_no_ddp[model_name] = self.models[model_name]
 
                 # frozen model? disable gradient tracking
-                if model_def.freeze:
+                if model_def.get("freeze"):
                     iprint(f"Freezing model {model_name} parameters.")
                     for param in self.models[model_name].parameters():
                         param.requires_grad = False
@@ -411,7 +425,7 @@ class fdqExperiment:
         """
         if not self.is_main_process():
             return
-        for model_name, _ in self.exp_def.models:
+        for model_name, _ in self.cfg.models.items():
             if self.mode.test_mode.custom_path:
                 while True:
                     model_path = input(f"Enter path to model for '{model_name}' (or 'q' to quit).")
@@ -427,10 +441,10 @@ class fdqExperiment:
             self.trained_model_paths[model_name] = model_path
 
         self.init_models(instantiate=False)
-        [self.models[model_name].eval() for model_name, _ in self.exp_def.models]
+        [self.models[model_name].eval() for model_name, _ in self.cfg.models.items()]
 
     def setupData(self) -> None:
-        if self.exp_def.data is None:
+        if self.cfg.data is None:
             wprint(
                 "No data section found in the experiment file. Data setup must be handled manually in the training loop."
             )
@@ -441,11 +455,11 @@ class fdqExperiment:
 
         self.copy_data_to_scratch()
 
-        for data_name, data_source in self.exp_def.data.items():
+        for data_name, data_source in self.cfg.data.items():
             processor = self.import_class(file_path=data_source.processor)
 
-            if data_source.caching is None:
-                self.data[data_name] = DictToObj(processor.create_datasets(self, self.exp_def.data.get(data_name).args))
+            if data_source.get("caching") is None:
+                self.data[data_name] = DictToObj(processor.create_datasets(self, self.cfg.data.get(data_name).args))
             else:
                 self.data[data_name] = DictToObj(cache_datasets_ddp_handler(self, processor, data_name, data_source))
 
@@ -460,14 +474,14 @@ class fdqExperiment:
             # only the main process saves the checkpoint
             return
 
-        for model_name, model_def in self.exp_def.models:
-            if model_def.freeze:
+        for model_name, model_def in self.cfg.models.items():
+            if model_def.get("freeze"):
                 # skip frozen models
                 continue
 
             model = self.models_no_ddp[model_name]
 
-            if self.exp_def.store.get("save_last_model", False):
+            if self.cfg.store.get("save_last_model", False):
                 remove_file(self.last_model_path.get(model_name))
                 self.last_model_path[model_name] = os.path.join(
                     self.results_dir,
@@ -476,7 +490,7 @@ class fdqExperiment:
                 torch.save(model, self.last_model_path[model_name])
 
             # new best val loss (default!)
-            if self.exp_def.store.get("save_best_val_model", False) and self.new_best_val_loss:
+            if self.cfg.store.get("save_best_val_model", False) and self.new_best_val_loss:
                 best_model_path = os.path.join(
                     self.results_dir,
                     f"best_val_{model_name}_e{self.current_epoch}.fdqm",
@@ -488,7 +502,7 @@ class fdqExperiment:
             # save best model according to train loss
             if (
                 self.current_epoch == self.start_epoch
-                or self.exp_def.store.get("save_best_train_model", False)
+                or self.cfg.store.get("save_best_train_model", False)
                 and self.new_best_train_loss
             ):
                 best_train_model_path = os.path.join(
@@ -516,9 +530,9 @@ class fdqExperiment:
     def prepareTraining(self) -> None:
         self.mode.train()
         self.setupData()
-        self.trainer = self.import_class(file_path=self.exp_def.train.path)
+        self.trainer = self.import_class(file_path=self.cfg.train.path)
         self.createLosses()
-        if self.exp_def.models is not None:
+        if self.cfg.models is not None:
             self.init_models()
             self.print_nb_weights()
             self.createOptimizer()
@@ -531,21 +545,21 @@ class fdqExperiment:
         if self.useAMP:
             self.scaler = torch.amp.GradScaler(device=self.device, enabled=True)
 
-        if self.inargs.resume_path is not None:
+        if self.cfg.mode.resume_path is not None:
             iprint("-----------------------------------------------------------")
-            iprint(f"Loading checkpoint: {self.inargs.resume_path}")
+            iprint(f"Loading checkpoint: {self.cfg.mode.resume_path}")
 
-            self.load_checkpoint(self.inargs.resume_path)
+            self.load_checkpoint(self.cfg.mode.resume_path)
 
         self.cp_to_res_dir(file_path=self.experiment_file_path)
-        for p in self.exp_def.globals.parent_hierarchy:
-            self.cp_to_res_dir(file_path=p)
+        for p in get_parent_config_paths():
+            self.cp_to_test_dir(file_path=p)
 
         store_processing_infos(self)
         self.dist_barrier()
 
     def createOptimizer(self) -> None:
-        for model_name, margs in self.exp_def.models:
+        for model_name, margs in self.cfg.models.items():
             if margs.optimizer is None:
                 iprint(f"No optimizer defined for model {model_name}")
                 # -> either its frozen, or manually defined within train loop
@@ -556,7 +570,7 @@ class fdqExperiment:
 
             optimizer = cls(
                 self.models[model_name].parameters(),
-                **margs.optimizer.args.to_dict(),
+                **margs.optimizer.args,
             )
 
             if optimizer is not None:
@@ -568,7 +582,7 @@ class fdqExperiment:
         # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
         # https://towardsdatascience.com/a-visual-guide-to-learning-rate-schedulers-in-pytorch-24bbb262c863
 
-        for model_name, margs in self.exp_def.models:
+        for model_name, margs in self.cfg.models.items():
             if self.optimizers[model_name] is None:
                 # no optimizer defined for this model
                 self.lr_schedulers[model_name] = None
@@ -585,21 +599,21 @@ class fdqExperiment:
 
             cls = self.instantiate_class(lr_scheduler_module)
 
-            self.lr_schedulers[model_name] = cls(self.optimizers[model_name], **margs.lr_scheduler.args.to_dict())
+            self.lr_schedulers[model_name] = cls(self.optimizers[model_name], **margs.lr_scheduler.args)
 
     def createLosses(self) -> None:
-        if self.exp_def.losses is None:
+        if self.cfg.losses is None:
             wprint("No losses defined in the experiment file. Losses must be defined in the training loop.")
             return
-        for loss_name, largs in self.exp_def.losses:
-            if largs.path is not None:
+        for loss_name, largs in dict(self.cfg.losses).items():
+            if "path" in largs and largs.path is not None:
                 cls = self.instantiate_class(file_path=largs.path, class_name=largs.class_name)
-            elif largs.class_name is not None:
+            elif "class_name" in largs and largs.class_name is not None:
                 cls = self.instantiate_class(class_path=largs.class_name)
             else:
                 raise ValueError(f"Error, loss {loss_name} must have a path or class name defined.")
             if largs.args is not None:
-                self.losses[loss_name] = cls(**largs.args.to_dict())
+                self.losses[loss_name] = cls(**largs.args)
             else:
                 self.losses[loss_name] = cls()
 
@@ -628,7 +642,7 @@ class fdqExperiment:
                 f"Error, checkpoint epoch {self.start_epoch + 1} already reached defined nb epochs ({self.nb_epochs})."
             )
 
-        for model_name, model_def in self.exp_def.models:
+        for model_name, model_def in self.cfg.models:
             if model_def.freeze:
                 iprint(f"Skipping loading of frozen model {model_name}.")
                 continue
@@ -666,8 +680,8 @@ class fdqExperiment:
                     optimizer_state[optim_name] = optim.state_dict()
 
         model_state = {}
-        for model_name, model_def in self.exp_def.models:
-            if model_def.freeze:
+        for model_name, model_def in self.cfg.models.items():
+            if model_def.get("freeze"):
                 model_state[model_name] = "FROZEN"
             else:
                 # we save only the non-ddp wrapped model in the rank 0 process
@@ -705,7 +719,7 @@ class fdqExperiment:
 
     def print_dataset_infos(self) -> None:
         iprint("-----------------------------------------------------------")
-        for data_name, data_source in self.exp_def.data.items():
+        for data_name, data_source in self.cfg.data.items():
             iprint(f"Dataset: {data_name}")
             iprint(f"Train batch size: {data_source.args.train_batch_size}")
             iprint(f"Validation batch size: {data_source.args.val_batch_size}")
@@ -741,9 +755,9 @@ class fdqExperiment:
 
         2) Stop training if the loss is NaN for N epochs.
         """
-        e_stop_nan = self.exp_def.train.args.early_stop_nan
-        e_stop_val = self.exp_def.train.args.early_stop_val_loss
-        e_stop_train = self.exp_def.train.args.early_stop_train_loss
+        e_stop_nan = self.cfg.train.args.early_stop_nan
+        e_stop_val = self.cfg.train.args.early_stop_val_loss
+        e_stop_train = self.cfg.train.args.early_stop_train_loss
 
         # early stop NaN ?
         if e_stop_nan is not None:
@@ -812,7 +826,7 @@ class fdqExperiment:
 
         if self.is_distributed():
             # necessary to make shuffling work properly
-            for data_name, _ in self.exp_def.data.items():
+            for data_name, _ in self.cfg.data.items():
                 if self.data[data_name] is not None:
                     if self.data[data_name].train_sampler is not None:
                         self.data[data_name].train_sampler.set_epoch(epoch)
@@ -881,13 +895,13 @@ class fdqExperiment:
         iprint(f"Saving {fn} to {self.results_dir}...")
         shutil.copyfile(file_path, f"{self.results_dir}/{fn}")
 
-    def copy_files_to_test_dir(self, file_path: str) -> None:
+    def cp_to_test_dir(self, file_path: str) -> None:
         fn = file_path.split("/")[-1]
         iprint(f"Saving {fn} to {self.test_dir}...")
         shutil.copyfile(file_path, f"{self.test_dir}/{fn}")
 
     def runEvaluator(self) -> Any:
-        evaluator_path = self.exp_def.test.processor
+        evaluator_path = self.cfg.test.processor
 
         if not os.path.exists(evaluator_path):
             raise FileNotFoundError(f"Evaluator file not found: {evaluator_path}")
@@ -913,7 +927,7 @@ class fdqExperiment:
         iprint("Copy datasets to temporary scratch location...")
         iprint("-----------------------------------------------------------")
 
-        for data_name, data_source in self.exp_def.data.items():
+        for data_name, data_source in self.cfg.data.items():
             dargs = data_source.args
 
             if dargs.base_path is not None:
@@ -979,13 +993,16 @@ class fdqExperiment:
 
     def prepare_transformers(self) -> None:
         """Prepare transformers for the experiment."""
-        if self.exp_def.transforms is None:
+        if self.cfg.transforms is None:
             return
-        if not isinstance(self.exp_def.to_dict().get("transforms"), dict):
-            raise ValueError("Error, transforms must be a dictionary with transform names as keys.")
 
-        for transformer_name, transformer_def in self.exp_def.transforms.items():
-            self.transformers[transformer_name] = get_transformers(t_defs=transformer_def)
+        try:
+            for transformer_name, transformer_def in self.cfg.transforms.items():
+                self.transformers[transformer_name] = get_transformers(t_defs=transformer_def)
+        except Exception as exc:
+            raise ValueError(
+                f"Error creating transformers for experiment {self.experimentName}. Transforms must be a dictionary with transform names as keys."
+            ) from exc
 
     def print_model(self) -> None:
         if not self.is_main_process():

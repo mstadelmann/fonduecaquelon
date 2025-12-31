@@ -5,7 +5,7 @@ globals:
 mode:
   run_train: true
   run_test_interactive: false
-  run_test_auto: false
+  run_test_auto: true
   dump_model: false
   run_inference: false
   print_model_summary: false
@@ -20,7 +20,7 @@ data:
   MNIST:
     processor: "~/dev/fonduecaquelon/experiment_templates/mnist/mnist_preparator.py"
     args:
-      base_path: "~/data/ML_data/mnist_from_torchvision/"
+      base_path: "~/data_ML/mnist_from_torchvision/"
       subset_train: 0.2
       subset_test: 0.2
       val_ratio: 0.2
@@ -33,14 +33,14 @@ data:
       shuffle_val: false
       shuffle_test: false
 store:
-  results_path: "~/data/ML_data/results"
+  results_path: "~/data_ML/results"
   img_exp_nb: 4
   save_last_model: true
   save_best_val_model: true
   save_best_train_model: true
   checkpoint_frequency: 2
   use_tensorboard: true
-  use_wandb: true
+  use_wandb: false
   wandb_project: "mnist_test"
   wandb_entity: "stmd"
 test:

@@ -28,7 +28,7 @@
         "OXPET": {
             "processor": "~/dev/fonduecaquelon/experiment_templates/segment_pets/oxfordpet_preparator.py",
             "args": {
-                "base_path": "~/data/ML_data/oxford_pets/",
+                "base_path": "~/data/data_ML/oxford_pets/",
                 "subset_train": 1.0,
                 "subset_val": 1.0,
                 "subset_test": 1.0,
@@ -65,7 +65,7 @@
         }
     },
     "store": {
-        "results_path": "~/data/ML_data/results",
+        "results_path": "~/data/data_ML/results",
         "img_exp_nb": 4,
         "save_last_model": true,
         "save_best_val_model": true,

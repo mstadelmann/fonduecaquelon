@@ -129,10 +129,10 @@ def fdq_test(experiment):
 
     accuracy = None
 
-    if experiment.exp_def.data.MNIST.args.test_batch_size != 1:
+    if experiment.cfg.data.MNIST.args.test_batch_size != 1:
         raise ValueError("Error: Test batch size must be 1 for this experiment. Please change the experiment file.")
 
-    if experiment.mode.op_mode.unittest or experiment.inargs.test_model_auto:
+    if experiment.mode.op_mode.unittest or experiment.cfg.mode.run_test_auto:
         # no interactive for test experiments
         tmode = 2
 
