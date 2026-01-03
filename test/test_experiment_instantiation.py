@@ -4,10 +4,11 @@ This module contains simple tests to verify that fdqExperiment objects
 can be instantiated without errors.
 """
 
-import argparse
 import os
 import unittest
-
+from omegaconf import DictConfig
+from hydra import compose
+from hydra import initialize_config_dir
 from fdq.experiment import fdqExperiment
 
 
@@ -16,12 +17,16 @@ class TestFdqExperimentInstantiation(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures before each test method."""
-        # Use the CI config file which should have relative paths
-        self.config_file = os.path.join(os.path.dirname(__file__), "test_experiment", "mnist_testexp_dense.json")
-        self.assertTrue(
-            os.path.exists(self.config_file),
-            f"Config file {self.config_file} not found",
-        )
+
+        os.environ["FDQ_UNITTEST"] = "1"
+        os.environ["FDQ_UNITTEST_DIR"] = "1"
+        os.environ["FDQ_UNITTEST_CONF"] = "1"
+
+        self.config_dir = os.path.join(os.path.dirname(__file__), "test_experiment")
+        self.conf_name = "mnist_testexp_dense_ci" if os.getenv("GITHUB_ACTIONS") else "mnist_testexp_dense"
+
+        os.environ["FDQ_UNITTEST_DIR"] = self.config_dir
+        os.environ["FDQ_UNITTEST_CONF"] = self.conf_name
 
         workspace_root = os.getenv("GITHUB_WORKSPACE", os.getcwd())
         print("--------------------------------------------")
@@ -29,85 +34,50 @@ class TestFdqExperimentInstantiation(unittest.TestCase):
         print(f"current file path: {os.path.abspath(__file__)}")
         print("--------------------------------------------")
 
-    def test_experiment_instantiation(self):
-        """Test that fdqExperiment can be instantiated without error."""
-        # Create minimal arguments needed for instantiation
-        args = argparse.Namespace(
-            experimentfile=self.config_file,
-            train_model=False,  # Don't actually train
-            test_model_ia=False,
-            test_model_auto=False,
-            dump_model=False,
-            print_model=False,
-            resume_path=None,
-        )
-
-        # Test instantiation with rank 0 (single process)
+    def _compose_cfg(self) -> DictConfig:
+        """Compose Hydra config without changing CWD (like run_experiment)."""
         try:
-            experiment = fdqExperiment(args, rank=0)
+            with initialize_config_dir(version_base=None, config_dir=self.config_dir):
+                cfg: DictConfig = compose(
+                    config_name=self.conf_name,
+                    overrides=["hydra.run.dir=.", "hydra.job.chdir=False"],
+                )
+        except Exception:
+            # Fallback: relative path init (older Hydra)
+            from hydra import initialize
 
-            # Basic assertions to verify the object was created properly
-            self.assertIsNotNone(experiment)
-            self.assertEqual(experiment.rank, 0)
-            self.assertIsNotNone(experiment.project)
-            self.assertIsNotNone(experiment.experimentName)
-            self.assertIsInstance(experiment.inargs, argparse.Namespace)
+            conf_rel = os.path.relpath(self.config_dir, os.getcwd())
+            with initialize(version_base=None, config_path=conf_rel):
+                cfg = compose(
+                    config_name=self.conf_name,
+                    overrides=["hydra.run.dir=.", "hydra.job.chdir=False"],
+                )
+        return cfg
 
-            # Check that basic attributes are set
-            self.assertEqual(experiment.inargs.experimentfile, self.config_file)
-            self.assertFalse(experiment.inargs.train_model)
+    def test_experiment_instantiation(self) -> None:
+        """fdqExperiment can be instantiated from Hydra DictConfig."""
+        cfg = self._compose_cfg()
+        experiment = fdqExperiment(cfg, rank=0)
 
-            print("✓ Successfully instantiated fdqExperiment")
-            print(f"  Project: {experiment.project}")
-            print(f"  Experiment name: {experiment.experimentName}")
-            print(f"  Rank: {experiment.rank}")
-            print(f"  Device: {experiment.device}")
-
-        except (ImportError, ValueError, FileNotFoundError, AttributeError) as e:
-            self.fail(f"Failed to instantiate fdqExperiment: {e}")
+        self.assertIsNotNone(experiment)
+        self.assertEqual(experiment.rank, 0)
+        self.assertIsNotNone(experiment.project)
+        self.assertIsNotNone(experiment.experimentName)
 
     def test_experiment_with_different_ranks(self):
-        """Test that fdqExperiment can be instantiated with different ranks."""
-        args = argparse.Namespace(
-            experimentfile=self.config_file,
-            train_model=False,
-            test_model_ia=False,
-            test_model_auto=False,
-            dump_model=False,
-            print_model=False,
-            resume_path=None,
-        )
-
-        # Test with rank 0 and rank 1 (but not distributed mode)
+        """Instantiate with different ranks (non-distributed)."""
+        cfg = self._compose_cfg()
         for rank in [0, 1]:
             with self.subTest(rank=rank):
-                try:
-                    experiment = fdqExperiment(args, rank=rank)
-                    self.assertEqual(experiment.rank, rank)
-                    self.assertIsNotNone(experiment)
-                except (
-                    ImportError,
-                    ValueError,
-                    FileNotFoundError,
-                    AttributeError,
-                ) as e:
-                    self.fail(f"Failed to instantiate fdqExperiment with rank {rank}: {e}")
+                experiment = fdqExperiment(cfg, rank=rank)
+                self.assertEqual(experiment.rank, rank)
+                self.assertIsNotNone(experiment)
 
     def test_experiment_attributes_after_instantiation(self):
-        """Test that key attributes are properly set after instantiation."""
-        args = argparse.Namespace(
-            experimentfile=self.config_file,
-            train_model=False,
-            test_model_ia=False,
-            test_model_auto=False,
-            dump_model=False,
-            print_model=False,
-            resume_path=None,
-        )
+        """Essential attributes exist after instantiation."""
+        cfg = self._compose_cfg()
+        experiment = fdqExperiment(cfg, rank=0)
 
-        experiment = fdqExperiment(args, rank=0)
-
-        # Test that essential attributes exist
         essential_attributes = [
             "rank",
             "project",
@@ -122,7 +92,6 @@ class TestFdqExperimentInstantiation(unittest.TestCase):
             "optimizers",
             "losses",
         ]
-
         for attr in essential_attributes:
             with self.subTest(attribute=attr):
                 self.assertTrue(
@@ -131,6 +100,5 @@ class TestFdqExperimentInstantiation(unittest.TestCase):
                 )
 
 
-# Removed the unnecessary tearDown method.
 if __name__ == "__main__":
     unittest.main()

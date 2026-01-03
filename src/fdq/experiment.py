@@ -57,7 +57,7 @@ class fdqExperiment:
         self.experiment_file_path = self.get_config_file_path()
         self.globals = self.cfg.globals
         self.project: str = self.cfg.globals.project.replace(" ", "_")
-        self.experimentName: str = HydraConfig.get().job.config_name
+        self.experimentName: str = self.get_config_name()
         self.funky_name: str | None = None
         self.checkpoint_frequency: int = cfg.store.checkpoint_frequency
         self.mode: FCQmode = FCQmode()
@@ -102,9 +102,9 @@ class fdqExperiment:
         self.early_stop_detected: bool = False
         self.early_stop_reason: str = ""
         self.processing_log_dict: dict[str, Any] = {}
-        self.useTensorboard: bool = cfg.store.use_tensorboard
+        self.useTensorboard: bool = cfg.store.get("use_tensorboard", False)
         self.tb_writer: Any | None = None
-        self.useWandb: bool = cfg.store.use_wandb
+        self.useWandb: bool = cfg.store.get("use_wandb", False)
         self.wandb_initialized: bool = False
         slurm_job_id: str | None = os.getenv("SLURM_JOB_ID")
         slurm_defined = cfg.get("slurm_cluster") is not None
@@ -139,6 +139,13 @@ class fdqExperiment:
             self.is_cuda = False
         self.prepare_transformers()
         self.store_experiment_git_hash()
+
+    def get_config_name(self) -> str:
+        if self.is_running_under_tests():
+            return os.getenv("FDQ_UNITTEST_CONF", "unknown_config")
+        else:
+            hc = HydraConfig.get()
+            return hc.job.config_name
 
     @property
     def results_dir(self) -> str:
@@ -223,6 +230,11 @@ class fdqExperiment:
                 self.new_best_train_loss = True
                 self.new_best_train_loss_ep_id = self.current_epoch
 
+    def is_running_under_tests(self) -> bool:
+        if os.getenv("FDQ_UNITTEST") == "1":
+            return True
+        return False
+
     def is_main_process(self) -> bool:
         """Check if the current process is the main process in a distributed setup."""
         if not self.is_distributed():
@@ -275,16 +287,23 @@ class fdqExperiment:
         self.dist_barrier()
 
     def get_config_file_path(self) -> str:
-        hc = HydraConfig.get()
-        config_name = hc.job.config_name
-        for src in hc.runtime.config_sources:
-            if src.schema == "file":
-                base_dir = src.path
-                break
+        if self.is_running_under_tests():
+            config_dir = os.getenv("FDQ_UNITTEST_DIR")
+            config_name = os.getenv("FDQ_UNITTEST_CONF")
+            if config_dir is None or config_name is None:
+                raise RuntimeError("FDQ_UNITTEST_DIR and FDQ_UNITTEST_CONF must be set when running under tests.")
+            return os.path.join(config_dir, f"{config_name}.yaml")
         else:
-            raise RuntimeError("No file-based config source found")
-        cfg_path = os.path.join(base_dir, f"{config_name}.yaml")
-        return cfg_path
+            hc = HydraConfig.get()
+            config_name = hc.job.config_name
+            for src in hc.runtime.config_sources:
+                if src.schema == "file":
+                    base_dir = src.path
+                    break
+            else:
+                raise RuntimeError("No file-based config source found")
+            cfg_path = os.path.join(base_dir, f"{config_name}.yaml")
+            return cfg_path
 
     def store_experiment_git_hash(self):
         """Check if the experiment directory is a git repository and store the current git hash."""
