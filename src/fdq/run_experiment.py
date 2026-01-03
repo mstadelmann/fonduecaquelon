@@ -77,19 +77,22 @@ def expand_paths(cfg):
 
 @hydra.main(
     version_base=None,
+    # Uncomment for easy debugging
     # config_path="/home/marc/dev/fonduecaquelon/experiment_templates/mnist",
-    # config_name="mnist_class_dense",
+    config_path="/cluster/home/stmd/dev/fonduecaquelon/experiment_templates/mnist/",
+    config_name="mnist_class_dense",
 )
 def main(cfg: DictConfig) -> None:
     """Main function to parse arguments, load configuration, and run the FDQ experiment."""
     cfg = expand_paths(cfg)
     use_GPU = cfg.train.args.use_GPU
+    use_slurm_cluster = cfg.get("slurm_cluster") is not None and os.getenv("SLURM_JOB_ID") is not None
 
     world_size = 1
 
     if cfg.mode.run_train:
         # DDP only on cluster, and only if GPU enabled
-        if os.getenv("SLURM_JOB_ID") is not None and use_GPU:
+        if use_slurm_cluster and use_GPU:
             world_size = cfg.slurm_cluster.get("world_size", 1)
 
             if world_size > torch.cuda.device_count():

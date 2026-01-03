@@ -107,7 +107,8 @@ class fdqExperiment:
         self.useWandb: bool = cfg.store.use_wandb
         self.wandb_initialized: bool = False
         slurm_job_id: str | None = os.getenv("SLURM_JOB_ID")
-        if isinstance(slurm_job_id, str) and slurm_job_id.isdigit():
+        slurm_defined = cfg.get("slurm_cluster") is not None
+        if slurm_defined and isinstance(slurm_job_id, str) and slurm_job_id.isdigit():
             self.is_slurm: bool = True
             self.slurm_job_id: str = slurm_job_id
             self.scratch_data_path: str | None = cfg.get("slurm_cluster", {}).get("scratch_data_path")
