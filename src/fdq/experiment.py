@@ -50,7 +50,7 @@ class fdqExperiment:
         """Initialize the fdqExperiment class with the provided arguments.
 
         Args:
-            inargs (argparse.Namespace): The input arguments containing experiment configurations.
+            cfg (DictConfig): The input arguments containing experiment configurations.
             rank (int): The rank of the current process in distributed training.
         """
         self.cfg: DictConfig = cfg

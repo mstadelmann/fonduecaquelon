@@ -244,8 +244,8 @@ def get_loaders_to_cache(experiment, data):
     Returns:
         dict: Dictionary mapping split names to dataloaders or None if not needed
     """
-    is_train = experiment.inargs.train_model
-    is_test = experiment.inargs.test_model_auto or experiment.inargs.test_model_ia
+    is_train = experiment.cfg.mode.run_train
+    is_test = experiment.cfg.mode.run_test_auto or experiment.cfg.mode.run_test_interactive
     return {
         "train": data.train_data_loader if hasattr(data, "train_data_loader") and is_train else None,
         "val": data.val_data_loader if hasattr(data, "val_data_loader") and is_train else None,

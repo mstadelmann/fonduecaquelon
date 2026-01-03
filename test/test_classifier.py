@@ -9,50 +9,67 @@ import json
 import os
 import unittest
 import glob
-
+from omegaconf import DictConfig
+from hydra import compose
+from hydra import initialize_config_dir
 from fdq.experiment import fdqExperiment
 from fdq.testing import run_test, find_model_path
+from fdq.run_experiment import expand_paths
 
 
 class TestMNISTClassifier(unittest.TestCase):
     """Unit tests for the MNIST classifier experiment."""
 
+    def setUp(self):
+        """Set up test fixtures before each test method."""
+
+        os.environ["FDQ_UNITTEST"] = "1"
+        os.environ["FDQ_UNITTEST_DIR"] = "1"
+        os.environ["FDQ_UNITTEST_CONF"] = "1"
+
+        self.config_dir = os.path.join(os.path.dirname(__file__), "test_experiment")
+        self.conf_name = "mnist_testexp_dense_ci" if os.getenv("GITHUB_ACTIONS") else "mnist_testexp_dense"
+
+        os.environ["FDQ_UNITTEST_DIR"] = self.config_dir
+        os.environ["FDQ_UNITTEST_CONF"] = self.conf_name
+
+        workspace_root = os.getenv("GITHUB_WORKSPACE", os.getcwd())
+        print("--------------------------------------------")
+        print(f"Using workspace root: {workspace_root}")
+        print(f"current file path: {os.path.abspath(__file__)}")
+        print("--------------------------------------------")
+
+    def _compose_cfg(self) -> DictConfig:
+        """Compose Hydra config without changing CWD (like run_experiment)."""
+        try:
+            with initialize_config_dir(version_base=None, config_dir=self.config_dir):
+                cfg: DictConfig = compose(
+                    config_name=self.conf_name,
+                    overrides=["hydra.run.dir=.", "hydra.job.chdir=False"],
+                )
+        except Exception:
+            # Fallback: relative path init (older Hydra)
+            from hydra import initialize
+
+            conf_rel = os.path.relpath(self.config_dir, os.getcwd())
+            with initialize(version_base=None, config_path=conf_rel):
+                cfg = compose(
+                    config_name=self.conf_name,
+                    overrides=["hydra.run.dir=.", "hydra.job.chdir=False"],
+                )
+        return cfg
+
     def test_run_train(self):
         """Test the training process and result validation for the MNIST classifier experiment."""
-        # Use different config file for CI vs local testing
-        if os.getenv("GITHUB_ACTIONS"):
-            workspace_root = os.getenv("GITHUB_WORKSPACE", os.getcwd())
-            print("--------------------------------------------")
-            print(f"Using workspace root: {workspace_root}")
-            print(f"current file path: {os.path.abspath(__file__)}")
-            print("--------------------------------------------")
-            conf_file = "mnist_testexp_dense_ci.json"
 
-        else:
-            conf_file = "mnist_testexp_dense.json"
-
-        exp_path = os.path.join(
-            os.path.split(os.path.abspath(__file__))[0],
-            "test_experiment",
-            conf_file,
-        )
-
-        args = argparse.Namespace(
-            experimentfile=exp_path,
-            train_model=True,
-            test_model_ia=False,
-            test_model_auto=False,
-            dump_model=False,
-            print_model=False,
-            resume_path=None,
-        )
-
-        experiment = fdqExperiment(args, rank=0)
+        cfg = self._compose_cfg()
+        cfg = expand_paths(cfg)
+        experiment = fdqExperiment(cfg, rank=0)
         # Set to unittest mode (suppress lint error for dynamic method)
         getattr(experiment.mode, "unittest")()  # Set to unittest mode
 
         # Store temp config path for cleanup if created
-        temp_config_path = exp_path if os.getenv("GITHUB_ACTIONS") else None
+        # temp_config_path = exp_path if os.getenv("GITHUB_ACTIONS") else None
         experiment.prepareTraining()
         experiment.trainer.fdq_train(experiment)
 
@@ -84,11 +101,11 @@ class TestMNISTClassifier(unittest.TestCase):
             self.assertTrue(testres["test results"] > 0.2)
 
         # Cleanup temporary config file if created for CI
-        if temp_config_path and os.path.exists(temp_config_path):
-            try:
-                os.unlink(temp_config_path)
-            except OSError:
-                pass  # Ignore cleanup errors
+        # if temp_config_path and os.path.exists(temp_config_path):
+        #     try:
+        #         os.unlink(temp_config_path)
+        #     except OSError:
+        #         pass  # Ignore cleanup errors
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@ def get_nb_exp_epochs(path: str) -> int:
 
 def find_experiment_result_dirs(experiment: Any) -> tuple[str, list[str]]:
     """Finds and returns the experiment result directory and its subfolders for the given experiment."""
-    if experiment.is_slurm and experiment.inargs.train_model:
+    if experiment.is_slurm and experiment.cfg.mode.run_train:
         wprint("WARNING: This is a slurm TRAINING session - looking only for results in scratch_results_path!")
         outbasepath: str | None = experiment.cfg.get("slurm_cluster", {}).get("scratch_results_path")  # TODO
 

@@ -694,6 +694,8 @@ def load_conf_file(path) -> dict:
 
 def get_parent_config_paths() -> list[str]:
     """Return absolute paths of all parent configs from the active Hydra config (recursively)."""
+    if os.getenv("FDQ_UNITTEST") == "1":
+        return []
     hc = HydraConfig.get()
     base_dir = next(src.path for src in hc.runtime.config_sources if src.schema == "file")
     root_cfg_path = os.path.join(base_dir, f"{hc.job.config_name}.yaml")
