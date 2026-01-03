@@ -190,7 +190,7 @@ def fdq_train(experiment: fdqExperiment):
 Within it, you can access components:
 
 ```python
-nb_epochs = experiment.exp_def.train.args.epochs # todo
+nb_epochs = experiment.cfg.train.args.epochs
 data_loader = experiment.data["OXPET"].train_data_loader
 model = experiment.models["ccUNET"]
 ```
@@ -203,7 +203,7 @@ Minimal pattern:
 
 ```python
 def fdq_train(experiment: fdqExperiment):
-    nb_epochs = experiment.exp_def.train.args.epochs # todo
+    nb_epochs = experiment.cfg.train.args.epochs
     train_loader = experiment.data["OXPET"].train_data_loader
 
     for epoch in range(nb_epochs):

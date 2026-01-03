@@ -362,7 +362,7 @@ class fdqExperiment:
             return
 
         for model_name, model_def in self.cfg.models.items():
-            if model_def.path is not None:
+            if model_def.get("path") is not None:
                 if os.path.exists(model_def.path):
                     cls = self.instantiate_class(file_path=model_def.path, class_name=model_def.class_name)
                 else:
@@ -372,7 +372,7 @@ class fdqExperiment:
                     model_path = os.path.join(networks_dir, model_def.path)
                     cls = self.instantiate_class(file_path=model_path, class_name=model_def.class_name)
 
-            elif model_def.class_name is not None:
+            elif model_def.get("class_name") is not None:
                 # model is an installed pip package
                 cls = self.instantiate_class(class_path=model_def.class_name)
             else:

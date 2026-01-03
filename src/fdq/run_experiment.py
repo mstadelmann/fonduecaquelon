@@ -22,7 +22,7 @@ def start(rank: int, cfg: DictConfig) -> None:
     """Main entry point for running an FDQ experiment based on command-line arguments."""
     experiment: fdqExperiment = fdqExperiment(cfg, rank=rank)
 
-    random_seed: Any = experiment.cfg.globals.set_random_seed
+    random_seed: Any = experiment.cfg.globals.get("set_random_seed")
     if random_seed is not None:
         if not isinstance(random_seed, int):
             raise ValueError("ERROR, random seed must be integer number!")
@@ -79,8 +79,10 @@ def expand_paths(cfg):
     version_base=None,
     # Uncomment for easy debugging
     # config_path="/home/marc/dev/fonduecaquelon/experiment_templates/mnist",
-    config_path="/cluster/home/stmd/dev/fonduecaquelon/experiment_templates/mnist/",
-    config_name="mnist_class_dense",
+    # config_path="/cluster/home/stmd/dev/fonduecaquelon/experiment_templates/mnist/",
+    config_path="/cluster/home/stmd/dev/fonduecaquelon/experiment_templates/segment_pets",
+    # config_name="mnist_class_dense",
+    config_name="segment_pets_01",
 )
 def main(cfg: DictConfig) -> None:
     """Main function to parse arguments, load configuration, and run the FDQ experiment."""

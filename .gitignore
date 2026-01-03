@@ -11,7 +11,7 @@ wandb
 slurm_log/
 /experiment_templates/dummy
 test/test_data
-**/**_keys_orig.json
+**/**_keys_orig.yaml
 
 # Distribution / packaging
 dist/

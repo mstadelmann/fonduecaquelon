@@ -3,6 +3,7 @@
 # ------------------------------
 defaults:
   - mnist_parent
+  - wandb_keys
   - _self_
 globals:
   project: "MNIST classifier"

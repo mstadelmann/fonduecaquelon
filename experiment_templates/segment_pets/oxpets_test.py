@@ -8,7 +8,7 @@ def fdq_test(experiment):
     """This is a very simple example evaluating the experiment on the OXPET test dataset and returning the mean loss as accuracy."""
     test_loader = experiment.data["OXPET"].test_data_loader
 
-    targs = experiment.exp_def.test.args  # TODO
+    targs = experiment.cfg.test.args
     nb_test_samples = targs.get("nb_test_samples", 50)
 
     losses = []

@@ -23,11 +23,11 @@ def find_experiment_result_dirs(experiment: Any) -> tuple[str, list[str]]:
     """Finds and returns the experiment result directory and its subfolders for the given experiment."""
     if experiment.is_slurm and experiment.inargs.train_model:
         wprint("WARNING: This is a slurm TRAINING session - looking only for results in scratch_results_path!")
-        outbasepath: str | None = experiment.exp_def.get("slurm_cluster", {}).get("scratch_results_path")  # TODO
+        outbasepath: str | None = experiment.cfg.get("slurm_cluster", {}).get("scratch_results_path")  # TODO
 
     elif experiment.is_slurm and not experiment.mode.op_mode.train:
         wprint("WARNING: This is a slurm INFERENCE session - looking for results in regular path!")
-        outbasepath = experiment.exp_def.get("store", {}).get("results_path")  # TODO
+        outbasepath = experiment.cfg.get("store", {}).get("results_path")  # TODO
 
         if outbasepath[0] == "~":
             outbasepath = os.path.expanduser(outbasepath)
