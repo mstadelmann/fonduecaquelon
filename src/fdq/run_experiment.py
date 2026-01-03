@@ -77,8 +77,8 @@ def expand_paths(cfg):
 
 @hydra.main(
     version_base=None,
-    config_path="/home/marc/dev/fonduecaquelon/experiment_templates/mnist",
-    config_name="mnist_class_dense",
+    # config_path="/home/marc/dev/fonduecaquelon/experiment_templates/mnist",
+    # config_name="mnist_class_dense",
 )
 def main(cfg: DictConfig) -> None:
     """Main function to parse arguments, load configuration, and run the FDQ experiment."""

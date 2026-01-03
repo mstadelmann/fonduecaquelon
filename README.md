@@ -51,7 +51,9 @@ All experiment parameters are defined in a [config file](experiment_templates/mn
 Run an experiment locally:
 
 ```bash
-fdq <path_to_config_file.json>
+fdq --config-path <path_to_config_files> --config-name <name_of_config_file>
+# e.g.
+fdq --config-path /home/marc/dev/fonduecaquelon/experiment_templates/mnist --config-name mnist_class_dense
 ```
 
 ### SLURM Cluster Execution
@@ -188,7 +190,7 @@ def fdq_train(experiment: fdqExperiment):
 Within it, you can access components:
 
 ```python
-nb_epochs = experiment.exp_def.train.args.epochs
+nb_epochs = experiment.exp_def.train.args.epochs # todo
 data_loader = experiment.data["OXPET"].train_data_loader
 model = experiment.models["ccUNET"]
 ```
@@ -201,7 +203,7 @@ Minimal pattern:
 
 ```python
 def fdq_train(experiment: fdqExperiment):
-    nb_epochs = experiment.exp_def.train.args.epochs
+    nb_epochs = experiment.exp_def.train.args.epochs # todo
     train_loader = experiment.data["OXPET"].train_data_loader
 
     for epoch in range(nb_epochs):
@@ -315,10 +317,10 @@ Use the same number of GPUs as your world size. DDP requires more CPU cores and 
 
 Observed speedup on H200sxm GPUs:
 
-| Experiment                                                                               | Time per ep. w/o AMP \[s] | with AMP \[s] | 
+| Experiment                                                                               | Time per ep. w/o AMP \[s] | with AMP \[s] |
 | ---------------------------------------------------------------------------------------- | ------------------------- | ------------- |
 | [segment pets default](experiment_templates/segment_pets/segment_pets_01.json)           | 170                       | 100           |
-| [DDP with 2 GPUs](experiment_templates/segment_pets/segment_pets_03_distributed_w2.json) | 100                       | 65           |
+| [DDP with 2 GPUs](experiment_templates/segment_pets/segment_pets_03_distributed_w2.json) | 100                       | 65            |
 | [DDP with 4 GPUs](experiment_templates/segment_pets/segment_pets_04_distributed_w4.json) | 60                        | 45            |
 
 By toggling mixed precision, you can directly observe how more intensive workloads see greater speedups when using DDP.
