@@ -759,6 +759,7 @@ class fdqExperiment:
 
             if self.wandb_initialized:
                 wandb.finish()
+                self.wandb_initialized = False
 
             store_processing_infos(self)
 
