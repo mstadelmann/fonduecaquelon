@@ -302,7 +302,7 @@ class fdqExperiment:
                     break
             else:
                 raise RuntimeError("No file-based config source found")
-            cfg_path = os.path.join(base_dir, f"{config_name}.yaml")
+            cfg_path = os.path.join(base_dir, f"{config_name}")
             return cfg_path
 
     def store_experiment_git_hash(self):
