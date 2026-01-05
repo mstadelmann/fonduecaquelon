@@ -10,7 +10,7 @@ mode:
   dump_model: false
   run_inference: false
   print_model_summary: false
-  resume_path: null
+  resume_chpt_path: null
 
 transforms:
   resize_norm_inp:

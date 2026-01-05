@@ -3,12 +3,13 @@
 import sys
 import os
 import re
-import json
+import yaml
 import copy
 import getpass
 import subprocess
 from datetime import datetime
 from typing import Any
+from pathlib import Path
 
 
 class FDQSubmitError(Exception):
@@ -61,7 +62,7 @@ def get_template() -> str:
     """Return the SLURM job submission script template as a string."""
     return """#!/bin/bash
 #SBATCH --time=#job_time#
-#SBATCH --job-name=fdq-#job_name#
+#SBATCH --job-name=fdq-#config_name#
 #SBATCH --ntasks=#ntasks#
 #SBATCH --cpus-per-task=#cpus_per_task#
 #SBATCH --nodes=#nodes#
@@ -71,8 +72,8 @@ def get_template() -> str:
 #SBATCH --partition=#partition#
 #SBATCH --account=#account#
 #SBATCH --mail-user=#user#@zhaw.ch
-#SBATCH --output=#log_path#/%j_%N__#job_name##job_tag#.out
-#SBATCH --error=#log_path#/%j_%N__#job_name##job_tag#.err
+#SBATCH --output=#log_path#/%j_%N__#config_name##job_tag#.out
+#SBATCH --error=#log_path#/%j_%N__#config_name##job_tag#.err
 #SBATCH --signal=B:SIGUSR1@#stop_grace_time#
 
 script_start=$(date +%s.%N)
@@ -86,7 +87,8 @@ MEM_TEST=#mem_test#
 CPUS_TEST=#cpus_per_task_test#
 AUTO_RESUBMIT=#auto_resubmit# # resubmit the job if stopped due to time constraints
 RESUME_CHPT_PATH=#resume_chpt_path# # path to checkpoint file to resume training
-EXP_FILE_PATH=#exp_file_path#
+CONF_PATH=#config_path#
+CONF_NAME=#config_name#.yaml
 SCRATCH_RESULTS_PATH=#scratch_results_path#
 SCRATCH_DATA_PATH=#scratch_data_path#
 RESULTS_PATH=#results_path#
@@ -129,7 +131,8 @@ echo "RUN_TEST: $RUN_TEST"
 echo "IS_TEST: $IS_TEST"
 echo "AUTO_RESUBMIT: $AUTO_RESUBMIT"
 echo "RESUME_CHPT_PATH: $RESUME_CHPT_PATH"
-echo "EXP_FILE_PATH: $EXP_FILE_PATH"
+echo "CONF_PATH: $CONF_PATH"
+echo "CONF_NAME: $CONF_NAME"
 echo "SCRATCH_RESULTS_PATH: $SCRATCH_RESULTS_PATH"
 echo "SCRATCH_DATA_PATH: $SCRATCH_DATA_PATH"
 echo "RESULTS_PATH: $RESULTS_PATH"
@@ -208,7 +211,7 @@ sig_handler_USR1()
 {
     echo "++++++++++++++++++++++++++++++++++++++"
     echo "SLURM STOP SIGNAL DETECTED - $(date)"
-    echo "Experiment file: $EXP_FILE_PATH"
+    echo "Experiment file: $CONF_PATH"/"$CONF_NAME"
     echo "++++++++++++++++++++++++++++++++++++++"
 
     echo "Copying files from $SCRATCH_RESULTS_PATH to $RESULTS_PATH..."
@@ -244,7 +247,7 @@ sig_handler_USR2()
 {
     echo "++++++++++++++++++++++++++++++++++++++"
     echo "USR2 - MANUAL STOP DETECTED - $(date)"
-    echo "Experiment file: $EXP_FILE_PATH"
+    echo "Experiment file: $CONF_PATH"/"$CONF_NAME"
     echo "Copying files and stopping..."
     echo "++++++++++++++++++++++++++++++++++++++"
 
@@ -267,10 +270,10 @@ if [ "$RUN_TRAIN" == True ]; then
     # Start training process
     if [ "$RESUME_CHPT_PATH" == None ]; then
         echo "Starting training from beginning..."
-        fdq "$EXP_FILE_PATH" &
+        fdq --config-path "$CONF_PATH" --config-name "$CONFIG_NAME" &
     elif [ -f "$RESUME_CHPT_PATH" ]; then
         echo "Resuming training from checkpoint: $RESUME_CHPT_PATH"
-        fdq "$EXP_FILE_PATH" -rp "$RESUME_CHPT_PATH" &
+        fdq "$CONF_PATH" -rp "$RESUME_CHPT_PATH" & # TODO
     else
         echo "ERROR: Checkpoint path does not exist: $RESUME_CHPT_PATH"
         exit 1
@@ -310,7 +313,7 @@ if [ "$IS_TEST" == True ]; then
     echo -----------------------------------------------------------
     
     test_start=$(date +%s.%N)
-    fdq "$EXP_FILE_PATH" -nt -ta
+    fdq "$CONF_PATH" -nt -ta # TODO
     test_retval=$?
     test_stop=$(date +%s.%N)
     test_time=$(echo "$test_stop - $test_start" | bc)
@@ -380,68 +383,11 @@ def recursive_dict_update(d_parent: dict, d_child: dict) -> dict:
     return result
 
 
-def load_json(path: str) -> dict:
-    """Load a JSON file and return its content as a dictionary.
-
-    Args:
-        path: Path to the JSON file
-
-    Returns:
-        Dictionary containing the JSON data
-
-    Raises:
-        FDQSubmitError: If file cannot be loaded or parsed
-    """
-    try:
-        validated_path = validate_file_path(path, "JSON configuration file")
-        with open(validated_path, encoding="utf8") as fp:
-            data = json.load(fp)
-    except json.JSONDecodeError as exc:
-        raise FDQSubmitError(
-            f"Invalid JSON syntax in {path}: {exc.msg} at line {exc.lineno}, column {exc.colno}"
-        ) from exc
-    except OSError as exc:
-        raise FDQSubmitError(f"Cannot read file {path}: {exc}") from exc
-
-    if not isinstance(data, dict):
-        raise FDQSubmitError(f"JSON file {path} must contain a dictionary at root level")
-
-    if data.get("globals") is None:
-        raise FDQSubmitError(f"Experiment config {path} missing required 'globals' section")
-
-    return data
-
-
-def get_parent_path(path: str, exp_file_path: str) -> str:
-    """Return the absolute path to the parent configuration file.
-
-    Args:
-        path: The path to the parent configuration file (absolute or relative)
-        exp_file_path: The path to the current experiment file
-
-    Returns:
-        The absolute path to the parent configuration file
-
-    Raises:
-        FDQSubmitError: If parent path cannot be resolved
-    """
-    try:
-        if os.path.isabs(path):
-            return validate_file_path(path, "Parent configuration file")
-
-        # Resolve relative path
-        base_dir = os.path.dirname(exp_file_path)
-        full_path = os.path.join(base_dir, path)
-        return validate_file_path(full_path, "Parent configuration file")
-    except Exception as exc:
-        raise FDQSubmitError(f"Cannot resolve parent path '{path}': {exc}") from exc
-
-
 def load_conf_file(path: str) -> "DictToObj":
     """Load an experiment configuration file with recursive parent merging.
 
     Args:
-        path: Path to the experiment configuration JSON file
+        path: Path to the experiment configuration YAML file
 
     Returns:
         The merged configuration as a DictToObj instance
@@ -450,40 +396,15 @@ def load_conf_file(path: str) -> "DictToObj":
         FDQSubmitError: If configuration cannot be loaded or is invalid
     """
     try:
-        validated_path = validate_file_path(path, "Experiment configuration file")
-        conf = load_json(validated_path)
-        parent_conf = conf.copy()
-        parent = conf.get("globals", {}).get("parent", {})
-        conf["globals"]["parent_hierarchy"] = []
+        p = Path(path)
+        with p.open("r", encoding="utf-8") as f:
+            conf = yaml.safe_load(f)
+        if not isinstance(conf, dict):
+            raise ValueError("YAML root must be a mapping/dict")
 
-        # Track processed files to prevent infinite loops
-        processed_files = {os.path.abspath(validated_path)}
-        max_depth = 10  # Prevent infinite recursion
-        depth = 0
-
-        while parent and depth < max_depth:
-            depth += 1
-            parent_path = get_parent_path(parent, validated_path)
-
-            # Check for circular references
-            abs_parent_path = os.path.abspath(parent_path)
-            if abs_parent_path in processed_files:
-                raise FDQSubmitError(f"Circular reference detected in parent hierarchy: {parent_path}")
-            processed_files.add(abs_parent_path)
-
-            log_info(f"Loading parent configuration: {parent_path}")
-            conf["globals"]["parent_hierarchy"].append(parent_path)
-            parent_conf = load_json(parent_path)
-            conf = recursive_dict_update(d_parent=parent_conf, d_child=conf)
-            parent = parent_conf.get("globals", {}).get("parent", {})
-
-        if depth >= max_depth:
-            raise FDQSubmitError(f"Maximum parent hierarchy depth ({max_depth}) exceeded")
-
+        return conf
         return DictToObj(conf)
 
-    except FDQSubmitError:
-        raise
     except Exception as exc:
         raise FDQSubmitError(f"Failed to load configuration from {path}: {exc}") from exc
 
@@ -540,7 +461,7 @@ class DictToObj:
         return res
 
 
-def get_default_config(slurm_conf: Any) -> dict[str, Any]:
+def get_default_config(slurm_conf: Any, mode_config: Any) -> dict[str, Any]:
     """Return a job configuration dictionary with defaults, updated from the given SLURM config.
 
     Args:
@@ -550,7 +471,6 @@ def get_default_config(slurm_conf: Any) -> dict[str, Any]:
         dict: Job configuration dictionary with updated values.
     """
     job_config: dict[str, Any] = {
-        "job_name": None,
         "user": None,
         "job_time": None,
         "ntasks": 1,
@@ -577,7 +497,8 @@ def get_default_config(slurm_conf: Any) -> dict[str, Any]:
         "cuda_env_module": None,
         "fdq_version": None,
         "fdq_test_repo": False,
-        "exp_file_path": None,
+        "config_path": None,
+        "config_name": None,
         "scratch_results_path": "/scratch/fdq_results/",
         "scratch_data_path": "/scratch/fdq_data/",
         "results_path": None,
@@ -588,6 +509,18 @@ def get_default_config(slurm_conf: Any) -> dict[str, Any]:
         val = slurm_conf.get(key)
         if val is not None:
             job_config[key] = val
+
+    job_config["run_train"] = mode_config.get("run_train", False)
+    job_config["run_test"] = mode_config.get("run_test_auto", False)
+    job_config["resume_chpt_path"] = mode_config.get("resume_chpt_path", "")
+    if mode_config.get("run_test_interactive"):
+        raise FDQSubmitError("Interactive test mode is not supported for SLURM job submission")
+    if mode_config.get("dump_model"):
+        raise FDQSubmitError("Model dumping is currently not supported for SLURM job submission")
+    if mode_config.get("run_inference"):
+        raise FDQSubmitError("Inference mode is currently not supported for SLURM job submission")
+    if mode_config.get("print_model_summary"):
+        raise FDQSubmitError("Printing model summary is not supported for SLURM job submission")
 
     # manually set test parameters if not set
     for param in ["gres_test", "mem_test", "cpus_per_task_test"]:
@@ -697,15 +630,14 @@ def create_submit_file(job_config: dict[str, Any], slurm_conf: Any, submit_path:
         template_content = template_content.replace("//", "/")
 
         # Handle additional pip packages
-        if slurm_conf.additional_pip_packages is None:
+        add_packages = slurm_conf.get("additional_pip_packages")
+        if add_packages is None:
             template_content = template_content.replace("#additional_pip_packages#", "")
-        elif isinstance(slurm_conf.additional_pip_packages, list):
-            if slurm_conf.additional_pip_packages:  # Only if list is not empty
-                packages_cmd = "\n".join(f"uv pip install '{pkg}'" for pkg in slurm_conf.additional_pip_packages)
-                log_info(f"Adding {len(slurm_conf.additional_pip_packages)} additional pip packages")
-                template_content = template_content.replace("#additional_pip_packages#", packages_cmd)
-            else:
-                template_content = template_content.replace("#additional_pip_packages#", "")
+        elif isinstance(add_packages, list) and len(add_packages) > 0:
+            packages_cmd = "\n".join(f"uv pip install '{pkg}'" for pkg in add_packages)
+            log_info(f"Adding {len(add_packages)} additional pip packages")
+            template_content = template_content.replace("#additional_pip_packages#", packages_cmd)
+
         else:
             raise FDQSubmitError(
                 f"additional_pip_packages must be a list of strings, got {type(slurm_conf.additional_pip_packages)}"
@@ -748,9 +680,8 @@ def parse_arguments() -> str:
 
     config_path = sys.argv[1]
 
-    # Basic validation
-    if not config_path.endswith(".json"):
-        log_warning("Configuration file doesn't have .json extension")
+    if not config_path.endswith(".yaml"):
+        log_warning("Configuration file doesn't have .yaml extension")
 
     return validate_file_path(config_path, "Experiment configuration file")
 
@@ -805,34 +736,35 @@ def submit_slurm_job(submit_path: str) -> str:
 def main() -> None:
     """Main entry point for submitting a job to SLURM."""
     try:
-        # Parse arguments
-        exp_file_path = parse_arguments()
-        log_info(f"Loading experiment configuration: {exp_file_path}")
+        full_config_path = parse_arguments()
 
-        # Load and validate configuration
-        exp_config = load_conf_file(exp_file_path)
-        slurm_conf = exp_config.slurm_cluster
+        log_info(f"Loading experiment configuration: {full_config_path}")
 
-        if slurm_conf is None:
+        exp_config = load_conf_file(full_config_path)
+        slurm_conf = exp_config.get("slurm_cluster")
+        mode_config = exp_config.get("mode")
+
+        if slurm_conf is None or mode_config is None:
             raise FDQSubmitError(
-                "Missing 'slurm_cluster' section in configuration file. "
-                "This section is required for SLURM job submission."
+                "Missing 'slurm_cluster' or 'mode' section in configuration file. "
+                "These sections are required for SLURM job submission."
             )
 
+        config_path = os.path.dirname(full_config_path)
+        config_name = os.path.basename(full_config_path).replace(".yaml", "")
+
         # Setup job configuration
-        job_config = get_default_config(slurm_conf)
+        job_config = get_default_config(slurm_conf, mode_config)
 
         # Set paths and basic info
-        job_config["exp_file_path"] = exp_file_path
-        exp_name = os.path.splitext(os.path.basename(exp_file_path))[0]
-        job_config["job_name"] = exp_name[:30].replace(" ", "_")
+        job_config["config_path"] = config_path
+        job_config["config_name"] = config_name[:30].replace(" ", "_")
         job_config["user"] = getpass.getuser()
 
-        # Validate required paths
-        if not hasattr(exp_config, "store") or not hasattr(exp_config.store, "results_path"):
+        job_config["results_path"] = exp_config.get("store", {}).get("results_path")
+        # validate results path
+        if job_config["results_path"] is None:
             raise FDQSubmitError("Configuration missing 'store.results_path' setting")
-
-        job_config["results_path"] = exp_config.store.results_path
 
         # Setup submit file path
         base_path = os.path.join(
@@ -842,7 +774,7 @@ def main() -> None:
         os.makedirs(base_path, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        submit_filename = f"{timestamp}__{exp_name.replace(' ', '_')}.submit"
+        submit_filename = f"{timestamp}__{config_name.replace(' ', '_')}.submit"
         submit_path = os.path.join(base_path, submit_filename)
         job_config["submit_file_path"] = submit_path
 
@@ -870,7 +802,7 @@ def main() -> None:
         print(f"{'=' * 60}")
         print(f"SLURM Job ID:    {job_id}")
         print(f"Submit File:     {submit_path}")
-        print(f"Experiment:      {exp_name}")
+        print(f"Experiment:      {config_name}")
         print(f"Results Path:    {job_config['results_path']}")
         print(f"Log Path:        {job_config['log_path']}")
         print(f"{'=' * 60}")

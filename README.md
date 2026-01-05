@@ -60,6 +60,8 @@ fdq --config-path /home/marc/dev/fonduecaquelon/experiment_templates/mnist --con
 
 To run experiments on a SLURM cluster, add a `slurm_cluster` section to your config. See [this example](experiment_templates/segment_pets/segment_pets_01.json).
 
+Important: When using chained config files, the `slurm_cluster` and `store` sections must be defined in the child config file!
+
 Submit your experiment:
 
 ```bash

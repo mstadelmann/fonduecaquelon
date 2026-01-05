@@ -10,13 +10,13 @@ globals:
   author: Marc
 
 mode:
-  run_train: false
+  run_train: true
   run_test_interactive: false
-  run_test_auto: true
+  run_test_auto: false
   dump_model: false
   run_inference: false
   print_model_summary: false
-  resume_path: null
+  resume_chpt_path: null
 
 transforms:
   resize_and_pad_bilinear:
@@ -82,29 +82,26 @@ test:
     metrics:
       nb_test_samples: "10"
 
-# slurm_cluster:
-#   fdq_test_repo: false
-#   fdq_version: 0.0.73
-#   python_env_module: python/3.12.4
-#   uv_env_module: uv/0.6.12
-#   cuda_env_module: cuda/12.8.0
-#   scratch_results_path: /scratch/fdq_results/
-#   scratch_data_path: /scratch/fdq_data/
-#   log_path: ~/dev/fonduecaquelon/slurm_log
-#   job_time: 60
-#   stop_grace_time: 3
-#   cpus_per_task: 8
-#   cpus_per_task_test: 8
-#   gres: gpu:h200sxm:1
-#   gres_test: gpu:1
-#   mem: 120G
-#   mem_test: 120G
-#   partition: gpu_top
-#   account: cai_ivs
-#   run_train: true
-#   run_test: true
-#   auto_resubmit: true
-#   world_size: 1
-#   resume_chpt_path: null
-#   additional_pip_packages:
-#     - chuchichaestli==0.2.14
+slurm_cluster:
+  fdq_test_repo: true
+  fdq_version: 0.0.73
+  python_env_module: python/3.12.4
+  uv_env_module: uv/0.6.12
+  cuda_env_module: cuda/12.8.0
+  scratch_results_path: /scratch/fdq_results/
+  scratch_data_path: /scratch/fdq_data/
+  log_path: ~/dev/fonduecaquelon/slurm_log
+  job_time: 60
+  stop_grace_time: 3
+  cpus_per_task: 8
+  cpus_per_task_test: 8
+  gres: gpu:1
+  gres_test: gpu:1
+  mem: 120G
+  mem_test: 120G
+  partition: gpu_top
+  account: cai_ivs
+  auto_resubmit: true
+  world_size: 1
+  additional_pip_packages:
+    - chuchichaestli==0.2.14

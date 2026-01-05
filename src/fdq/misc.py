@@ -278,9 +278,9 @@ def collect_processing_infos(experiment: Any | None = None) -> dict:
     if experiment.is_slurm:
         data["slurm_job_id"] = experiment.slurm_job_id
 
-    if experiment.cfg.mode.get("resume_path") is not None:
+    if experiment.cfg.mode.get("resume_chpt_path") is not None:
         data["job_continuation"] = True
-        data["job_continuation_chpt_path"] = experiment.cfg.mode.get("resume_path")
+        data["job_continuation_chpt_path"] = experiment.cfg.mode.get("resume_chpt_path")
         data["start_epoch"] = experiment.start_epoch
     else:
         data["job_continuation"] = False

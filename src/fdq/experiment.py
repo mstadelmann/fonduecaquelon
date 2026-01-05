@@ -565,11 +565,11 @@ class fdqExperiment:
         if self.useAMP:
             self.scaler = torch.amp.GradScaler(device=self.device, enabled=True)
 
-        if self.cfg.mode.resume_path is not None:
+        if self.cfg.mode.resume_chpt_path is not None:
             iprint("-----------------------------------------------------------")
-            iprint(f"Loading checkpoint: {self.cfg.mode.resume_path}")
+            iprint(f"Loading checkpoint: {self.cfg.mode.resume_chpt_path}")
 
-            self.load_checkpoint(self.cfg.mode.resume_path)
+            self.load_checkpoint(self.cfg.mode.resume_chpt_path)
 
         self.cp_to_res_dir(file_path=self.experiment_file_path)
         for p in get_parent_config_paths():
