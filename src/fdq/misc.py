@@ -722,7 +722,9 @@ def get_parent_config_paths() -> list[str]:
                 continue
 
             parent_path = os.path.join(base_dir, f"{name}.yaml")
-            if os.path.exists(parent_path) and parent_path not in seen:
+            if "keys" in name:
+                iprint(f"Skipping copying key files to results dir: {name}")
+            elif os.path.exists(parent_path) and parent_path not in seen:
                 seen.add(parent_path)
                 parents.append(parent_path)
                 collect(parent_path)  # recurse
