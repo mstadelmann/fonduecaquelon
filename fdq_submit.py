@@ -33,31 +33,6 @@ def log_warning(message: str) -> None:
     print(f"[WARNING] {message}")
 
 
-def validate_file_path(path: str, description: str) -> str:
-    """Validate that a file exists and return its absolute path.
-
-    Args:
-        path: File path to validate
-        description: Description of the file for error messages
-
-    Returns:
-        Absolute path to the file
-
-    Raises:
-        FDQSubmitError: If file doesn't exist
-    """
-    expanded_path = os.path.expanduser(path)
-    abs_path = os.path.abspath(expanded_path)
-
-    if not os.path.exists(abs_path):
-        raise FDQSubmitError(f"{description} not found: {abs_path}")
-
-    if not os.path.isfile(abs_path):
-        raise FDQSubmitError(f"{description} is not a file: {abs_path}")
-
-    return abs_path
-
-
 def get_template() -> str:
     """Return the SLURM job submission script template as a string."""
     return """#!/bin/bash
@@ -620,7 +595,7 @@ def create_submit_file(job_config: dict[str, Any], slurm_conf: Any, submit_path:
         raise FDQSubmitError(f"Failed to create submit file: {exc}") from exc
 
 
-def parse_arguments() -> str:
+def get_config_path() -> str:
     """Parse and validate command line arguments.
 
     Returns:
@@ -636,11 +611,19 @@ def parse_arguments() -> str:
         )
 
     config_path = sys.argv[1]
+    expanded_path = os.path.expanduser(config_path)
+    abs_path = os.path.abspath(expanded_path)
 
-    if not config_path.endswith(".yaml"):
-        log_warning("Configuration file doesn't have .yaml extension")
+    if not os.path.exists(abs_path):
+        raise FDQSubmitError(f"Experiment configuration file not found: {abs_path}")
 
-    return validate_file_path(config_path, "Experiment configuration file")
+    if not os.path.isfile(abs_path):
+        raise FDQSubmitError(f"Experiment configuration file is not a file: {abs_path}")
+
+    if not abs_path.endswith(".yaml"):
+        raise FDQSubmitError(f"Experiment configuration file must have a .yaml or .yml extension: {abs_path}")
+
+    return abs_path
 
 
 def submit_slurm_job(submit_path: str) -> str:
@@ -693,7 +676,7 @@ def submit_slurm_job(submit_path: str) -> str:
 def main() -> None:
     """Main entry point for submitting a job to SLURM."""
     try:
-        full_config_path = parse_arguments()
+        full_config_path = get_config_path()
 
         log_info(f"Loading experiment configuration: {full_config_path}")
 
