@@ -274,7 +274,7 @@ if [ "$RUN_TRAIN" == True ]; then
         fdq --config-path "$CONFIG_PATH" --config-name "$CONFIG_NAME"  mode.run_test_auto=false &
     elif [ -f "$RESUME_CHPT_PATH" ]; then
         echo "Resuming training from checkpoint: $RESUME_CHPT_PATH"
-        fdq "$CONFIG_PATH" -rp "$RESUME_CHPT_PATH" & # TODO
+        fdq --config-path "$CONFIG_PATH" --config-name "$CONFIG_NAME"  mode.resume_chpt_path="$RESUME_CHPT_PATH" mode.run_test_auto=false &
     else
         echo "ERROR: Checkpoint path does not exist: $RESUME_CHPT_PATH"
         exit 1

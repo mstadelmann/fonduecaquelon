@@ -302,7 +302,7 @@ class fdqExperiment:
                     break
             else:
                 raise RuntimeError("No file-based config source found")
-            cfg_path = os.path.join(base_dir, f"{config_name}")
+            cfg_path = os.path.join(base_dir, f"{config_name}.yaml")
             return cfg_path
 
     def store_experiment_git_hash(self):
@@ -662,8 +662,8 @@ class fdqExperiment:
                 f"Error, checkpoint epoch {self.start_epoch + 1} already reached defined nb epochs ({self.nb_epochs})."
             )
 
-        for model_name, model_def in self.cfg.models:
-            if model_def.freeze:
+        for model_name, model_def in self.cfg.models.items():
+            if model_def.get("freeze"):
                 iprint(f"Skipping loading of frozen model {model_name}.")
                 continue
             self.models_no_ddp[model_name].load_state_dict(checkpoint["model_state_dict"][model_name])
