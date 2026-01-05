@@ -87,8 +87,8 @@ MEM_TEST=#mem_test#
 CPUS_TEST=#cpus_per_task_test#
 AUTO_RESUBMIT=#auto_resubmit# # resubmit the job if stopped due to time constraints
 RESUME_CHPT_PATH=#resume_chpt_path# # path to checkpoint file to resume training
-CONF_PATH=#config_path#
-CONF_NAME=#config_name#.yaml
+CONFIG_PATH=#config_path#
+CONFIG_NAME=#config_name#.yaml
 SCRATCH_RESULTS_PATH=#scratch_results_path#
 SCRATCH_DATA_PATH=#scratch_data_path#
 RESULTS_PATH=#results_path#
@@ -131,8 +131,8 @@ echo "RUN_TEST: $RUN_TEST"
 echo "IS_TEST: $IS_TEST"
 echo "AUTO_RESUBMIT: $AUTO_RESUBMIT"
 echo "RESUME_CHPT_PATH: $RESUME_CHPT_PATH"
-echo "CONF_PATH: $CONF_PATH"
-echo "CONF_NAME: $CONF_NAME"
+echo "CONFIG_PATH: $CONFIG_PATH"
+echo "CONFIG_NAME: $CONFIG_NAME"
 echo "SCRATCH_RESULTS_PATH: $SCRATCH_RESULTS_PATH"
 echo "SCRATCH_DATA_PATH: $SCRATCH_DATA_PATH"
 echo "RESULTS_PATH: $RESULTS_PATH"
@@ -211,7 +211,7 @@ sig_handler_USR1()
 {
     echo "++++++++++++++++++++++++++++++++++++++"
     echo "SLURM STOP SIGNAL DETECTED - $(date)"
-    echo "Experiment file: $CONF_PATH"/"$CONF_NAME"
+    echo "Experiment file: $CONFIG_PATH"/"$CONFIG_NAME"
     echo "++++++++++++++++++++++++++++++++++++++"
 
     echo "Copying files from $SCRATCH_RESULTS_PATH to $RESULTS_PATH..."
@@ -247,7 +247,7 @@ sig_handler_USR2()
 {
     echo "++++++++++++++++++++++++++++++++++++++"
     echo "USR2 - MANUAL STOP DETECTED - $(date)"
-    echo "Experiment file: $CONF_PATH"/"$CONF_NAME"
+    echo "Experiment file: $CONFIG_PATH"/"$CONFIG_NAME"
     echo "Copying files and stopping..."
     echo "++++++++++++++++++++++++++++++++++++++"
 
@@ -270,10 +270,10 @@ if [ "$RUN_TRAIN" == True ]; then
     # Start training process
     if [ "$RESUME_CHPT_PATH" == None ]; then
         echo "Starting training from beginning..."
-        fdq --config-path "$CONF_PATH" --config-name "$CONFIG_NAME" &
+        fdq --config-path "$CONFIG_PATH" --config-name "$CONFIG_NAME"  mode.run_test_auto=false &
     elif [ -f "$RESUME_CHPT_PATH" ]; then
         echo "Resuming training from checkpoint: $RESUME_CHPT_PATH"
-        fdq "$CONF_PATH" -rp "$RESUME_CHPT_PATH" & # TODO
+        fdq "$CONFIG_PATH" -rp "$RESUME_CHPT_PATH" & # TODO
     else
         echo "ERROR: Checkpoint path does not exist: $RESUME_CHPT_PATH"
         exit 1
@@ -312,8 +312,8 @@ if [ "$IS_TEST" == True ]; then
     echo "RUNNING TEST"
     echo -----------------------------------------------------------
     
-    test_start=$(date +%s.%N)
-    fdq "$CONF_PATH" -nt -ta # TODO
+    test_start=$(date +%s.%N)    
+    fdq --config-path "$CONFIG_PATH" --config-name "$CONFIG_NAME" mode.run_train=false mode.run_test_auto=true &
     test_retval=$?
     test_stop=$(date +%s.%N)
     test_time=$(echo "$test_stop - $test_start" | bc)
@@ -802,7 +802,8 @@ def main() -> None:
         print(f"{'=' * 60}")
         print(f"SLURM Job ID:    {job_id}")
         print(f"Submit File:     {submit_path}")
-        print(f"Experiment:      {config_name}")
+        print(f"Experiment Name: {config_name}")
+        print(f"Experiment Path: {config_path}")
         print(f"Results Path:    {job_config['results_path']}")
         print(f"Log Path:        {job_config['log_path']}")
         print(f"{'=' * 60}")

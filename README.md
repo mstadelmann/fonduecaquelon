@@ -400,3 +400,7 @@ Contributions are welcome! Please open issues or pull requests on [GitHub](https
 <p align="center">
   <img src="assets/fdq_logo.jpg" alt="FDQ Logo" width="300"/>
 </p>
+
+## 🧾 Changelog
+
+- 0.0.74: Configuration files switched from JSON to YAML, using Hydra in the backend for composition and runtime overrides.

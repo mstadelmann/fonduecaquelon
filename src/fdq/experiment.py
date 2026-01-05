@@ -145,7 +145,7 @@ class fdqExperiment:
             return os.getenv("FDQ_UNITTEST_CONF", "unknown_config")
         else:
             hc = HydraConfig.get()
-            return hc.job.config_name
+            return hc.job.config_name.replace(".yaml", "")
 
     @property
     def results_dir(self) -> str:

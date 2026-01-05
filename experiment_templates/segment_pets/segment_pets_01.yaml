@@ -32,7 +32,7 @@ data:
   OXPET:
     processor: ~/dev/fonduecaquelon/experiment_templates/segment_pets/oxfordpet_preparator.py
     args:
-      base_path: ~/data/data_ML/oxford_pets/
+      base_path: ~/data_ML/oxford_pets/
       subset_train: 1.0
       subset_val: 1.0
       subset_test: 1.0
@@ -64,7 +64,7 @@ losses:
       reduction: mean
 
 store:
-  results_path: ~/data/data_ML/results
+  results_path: ~/data_ML/results
   img_exp_nb: 4
   save_last_model: true
   save_best_val_model: true
@@ -84,7 +84,7 @@ test:
 
 slurm_cluster:
   fdq_test_repo: true
-  fdq_version: 0.0.73
+  fdq_version: 0.0.73.dev1
   python_env_module: python/3.12.4
   uv_env_module: uv/0.6.12
   cuda_env_module: cuda/12.8.0
