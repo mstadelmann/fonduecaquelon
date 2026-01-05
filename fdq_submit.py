@@ -269,7 +269,8 @@ if [ "$RUN_TRAIN" == True ]; then
 
     # Start training process
     if [ "$RESUME_CHPT_PATH" == None ]; then
-        echo "Starting training from beginning..."
+        echo "Starting training from beginning with command:"
+        echo "fdq --config-path \"$CONFIG_PATH\" --config-name \"$CONFIG_NAME\"  mode.run_test_auto=false &"
         fdq --config-path "$CONFIG_PATH" --config-name "$CONFIG_NAME"  mode.run_test_auto=false &
     elif [ -f "$RESUME_CHPT_PATH" ]; then
         echo "Resuming training from checkpoint: $RESUME_CHPT_PATH"
@@ -312,8 +313,13 @@ if [ "$IS_TEST" == True ]; then
     echo "RUNNING TEST"
     echo -----------------------------------------------------------
     
-    test_start=$(date +%s.%N)    
+    test_start=$(date +%s.%N)
+    echo "Starting test with command:"
+    echo "fdq --config-path \"$CONFIG_PATH\" --config-name \"$CONFIG_NAME\" mode.run_train=false mode.run_test_auto=true &"
     fdq --config-path "$CONFIG_PATH" --config-name "$CONFIG_NAME" mode.run_train=false mode.run_test_auto=true &
+    fdq_pid=$!
+    echo "Testing process started with PID: $fdq_pid"
+    wait $fdq_pid
     test_retval=$?
     test_stop=$(date +%s.%N)
     test_time=$(echo "$test_stop - $test_start" | bc)
@@ -332,7 +338,7 @@ fi
 # -----------------------------------------------------------
 if [ "$RUN_TEST" == True ] && [ $RETVALUE -eq 0 ] && [ "$IS_TEST" == False ]; then
     echo -----------------------------------------------------------
-    echo "Launching test job..."
+    echo "Submit test in new job..."
     echo -----------------------------------------------------------
     
     # Extract test-specific resource requirements
@@ -344,11 +350,15 @@ if [ "$RUN_TEST" == True ] && [ $RETVALUE -eq 0 ] && [ "$IS_TEST" == False ]; th
     sed -e "s|IS_TEST=False|IS_TEST=True|g" \
         -e "s|RUN_TRAIN=True|RUN_TRAIN=False|g" \
         -e "s|RUN_TEST=True|RUN_TEST=False|g" \
-        -e "s|_train.|_test.|g" \
+        -e "s|job_config[\"job_tag\"] = \"_train\"|job_config[\"job_tag\"] = \"_test\"|g" \
         -e "s|^#SBATCH --gres=.*|#SBATCH --gres=$GRES_TEST|g" \
         -e "s|^#SBATCH --mem=.*|#SBATCH --mem=$MEM_TEST|g" \
         -e "s|^#SBATCH --cpus-per-task=.*|#SBATCH --cpus-per-task=$CPUS_TEST|g" \
         "$SCRATCH_SUBMIT_FILE_PATH" > "$SCRATCH_SUBMIT_FILE_PATH.test"
+        
+    # Copy test submit script to source submit directory
+    SUBMIT_SOURCE_PATH="${SUBMIT_FILE_PATH%/*}"
+    cp "$SCRATCH_SUBMIT_FILE_PATH.test" "$SUBMIT_SOURCE_PATH"
     
     echo "Submitting test job: sbatch --job-name=fdq-test $SCRATCH_SUBMIT_FILE_PATH.test"
     if sbatch --job-name=fdq-test "$SCRATCH_SUBMIT_FILE_PATH.test"; then
@@ -357,7 +367,7 @@ if [ "$RUN_TEST" == True ] && [ $RETVALUE -eq 0 ] && [ "$IS_TEST" == False ]; th
         echo "ERROR: Failed to submit test job"
         exit 1
     fi
-elif [ "$RUN_TEST" == True ]; then
+elif [ "$RUN_TEST" == True ] && [ $RETVALUE -ne 0 ] && [ "$IS_TEST" == False ]; then
     echo -----------------------------------------------------------
     echo "Test job not started due to training failure (exit code: $RETVALUE)"
     echo -----------------------------------------------------------
@@ -383,14 +393,14 @@ def recursive_dict_update(d_parent: dict, d_child: dict) -> dict:
     return result
 
 
-def load_conf_file(path: str) -> "DictToObj":
+def load_conf_file(path: str) -> dict:
     """Load an experiment configuration file with recursive parent merging.
 
     Args:
         path: Path to the experiment configuration YAML file
 
     Returns:
-        The merged configuration as a DictToObj instance
+        The merged configuration as a dictionary
 
     Raises:
         FDQSubmitError: If configuration cannot be loaded or is invalid
@@ -403,62 +413,9 @@ def load_conf_file(path: str) -> "DictToObj":
             raise ValueError("YAML root must be a mapping/dict")
 
         return conf
-        return DictToObj(conf)
 
     except Exception as exc:
         raise FDQSubmitError(f"Failed to load configuration from {path}: {exc}") from exc
-
-
-class DictToObj:
-    """A class that converts a dictionary into an object, allowing attribute-style access to keys, including nested dictionaries."""
-
-    def __init__(self, dictionary: dict) -> None:
-        """Initialize the object by setting attributes from the given dictionary, converting nested dictionaries to DictToObj."""
-        for key, value in dictionary.items():
-            if isinstance(value, dict):
-                value = DictToObj(value)
-            setattr(self, key, value)
-
-    def __getattr__(self, name: str) -> Any:
-        """Return None if the requested attribute is not found."""
-        return None
-
-    def __repr__(self) -> str:
-        """Return the string representation for debugging."""
-        keys = ", ".join(self.__dict__.keys())
-        return f"<{self.__class__.__name__}: {keys}>"
-
-    def __str__(self) -> str:
-        """Return the string representation of the object."""
-        return self.__repr__()
-
-    def __iter__(self):
-        """Return an iterator over the object's dictionary items."""
-        return iter(self.__dict__.items())
-
-    def keys(self):
-        return self.__dict__.keys()
-
-    def items(self):
-        return self.__dict__.items()
-
-    def values(self):
-        return self.__dict__.values()
-
-    def to_dict(self) -> dict:
-        result = {}
-        for key, value in self.__dict__.items():
-            if isinstance(value, DictToObj):
-                result[key] = value.to_dict()
-            else:
-                result[key] = value
-        return result
-
-    def get(self, key: str, default: Any = None) -> Any:
-        res = getattr(self, key)
-        if res is None:
-            return default
-        return res
 
 
 def get_default_config(slurm_conf: Any, mode_config: Any) -> dict[str, Any]:

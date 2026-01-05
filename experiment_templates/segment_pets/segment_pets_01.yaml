@@ -72,7 +72,7 @@ store:
   checkpoint_frequency: 10
   use_tensorboard: false
   use_wandb: true
-  wandb_project: ox_pet_test
+  wandb_project: oxford_pets
   wandb_entity: stmd
 
 test:
@@ -84,7 +84,7 @@ test:
 
 slurm_cluster:
   fdq_test_repo: true
-  fdq_version: 0.0.73.dev1
+  fdq_version: 0.0.73.dev2
   python_env_module: python/3.12.4
   uv_env_module: uv/0.6.12
   cuda_env_module: cuda/12.8.0
