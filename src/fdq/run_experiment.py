@@ -79,10 +79,7 @@ def expand_paths(cfg):
     version_base=None,
     # Uncomment for easy debugging
     # config_path="/home/marc/dev/fonduecaquelon/experiment_templates/mnist",
-    # config_path="/cluster/home/stmd/dev/fonduecaquelon/experiment_templates/mnist/",
-    # config_path="/cluster/home/stmd/dev/fonduecaquelon/experiment_templates/segment_pets",
     # config_name="mnist_class_dense",
-    # config_name="segment_pets_01",
 )
 def main(cfg: DictConfig) -> None:
     """Main function to parse arguments, load configuration, and run the FDQ experiment."""

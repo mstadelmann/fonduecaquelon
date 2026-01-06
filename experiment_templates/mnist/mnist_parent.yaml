@@ -1,71 +1,61 @@
 globals:
   project: MNIST classifier - parent
   author: Marc
-  set_random_seed: 22
-mode:
-  run_train: true
-  run_test_interactive: false
-  run_test_auto: true
-  dump_model: false
-  run_inference: false
-  print_model_summary: false
-  resume_chpt_path: null
+
+models:
+  simpleNet:
+    comment: "You can either selected an installed module or define a custom path and class name."
+    path: "~/dev/fonduecaquelon/src/networks/simpleNet.py"
+    class_name: "simpleNet"
+    args:
+      nb_in_channels: 1
+      nb_out_channels: 10
+      input_shape:
+        - 28
+        - 28
+    optimizer:
+      class_name: "torch.optim.Adam"
+      args:
+        lr: 0.001
+    lr_scheduler:
+      class_name: "torch.optim.lr_scheduler.StepLR"
+      args:
+        step_size: 2
+        gamma: 0.95
+
 transforms:
   resize_norm_inp:
     - "ToTensor"
     - NORM:
         mean: 0.1307
         stdev: 0.3081
-data:
-  MNIST:
-    processor: "~/dev/fonduecaquelon/experiment_templates/mnist/mnist_preparator.py"
+
+train:
+  path: "~/dev/fonduecaquelon/experiment_templates/mnist/train_mnist.py"
+  args:
+    epochs: 4
+    use_GPU: false
+    use_AMP: false
+    accumulate_grad_batches: 1
+    early_stop_val_loss: 5
+    early_stop_train_loss: 5
+    early_stop_nan: 5
+
+losses:
+  cp_dummy:
+    comment: "You can either selected an installed module or define a custom path and class name."
+    path: "~/dev/fonduecaquelon/experiment_templates/mnist/dummy_crossentropy_loss.py"
+    class_name: "DummyCrossEntropyLoss"
     args:
-      base_path: "~/data_ML/mnist_from_torchvision/"
-      subset_train: 0.2
-      subset_test: 0.2
-      val_ratio: 0.2
-      pin_memory: true
-      num_workers: 4
-      train_batch_size: 32
-      val_batch_size: 32
-      test_batch_size: 1
-      shuffle_train: true
-      shuffle_val: false
-      shuffle_test: false
-store:
-  results_path: "~/data_ML/results"
-  img_exp_nb: 4
-  save_last_model: true
-  save_best_val_model: true
-  save_best_train_model: true
-  checkpoint_frequency: 2
-  use_tensorboard: true
-  use_wandb: false
-  wandb_project: "mnist_test"
-  wandb_entity: "stmd"
+      reduction: "mean"
+  cross_ent:
+    class_name: "torch.nn.CrossEntropyLoss"
+    args:
+      reduction: "mean"
+
 test:
   processor: "~/dev/fonduecaquelon/experiment_templates/mnist/mnist_test.py"
   test_model: "best"
   args:
     metrics:
       nb_test_samples: "100"
-# slurm_cluster:
-#   fdq_test_repo: false
-#   fdq_version: "0.0.73"
-#   python_env_module: "python/3.12.4"
-#   uv_env_module: "uv/0.6.12"
-#   cuda_env_module: "cuda/12.8.0"
-#   scratch_results_path: "/scratch/fdq_results/"
-#   scratch_data_path: null #"/scratch/fdq_data/"
-#   log_path: "~/dev/fonduecaquelon/slurm_log"
-#   job_time: 15
-#   stop_grace_time: 5
-#   cpus_per_task: 8
-#   gres: "gpu:1"
-#   mem: "20G"
-#   partition: "gpu"
-#   account: "cai_ivs"
-#   run_train: true
-#   run_test: true
-#   auto_resubmit: true
-#   resume_chpt_path: null
