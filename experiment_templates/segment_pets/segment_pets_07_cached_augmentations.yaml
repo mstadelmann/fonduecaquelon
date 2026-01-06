@@ -1,0 +1,16 @@
+globals:
+  project: Segment OXPET
+  author: Marc
+  parent: segment_pets_05_cached
+  comment: "Same experiment as segment_pets_05_cached.yaml, but with additional non-deterministic transformations (augmentations). This lets you split transforms into deterministic (cached) and random (on-the-fly)."
+
+transforms:
+  random_vertical_flip_sync:
+    - SynchronizedRandomVerticalFlip:
+        p: 0.5
+
+data:
+  OXPET:
+    caching:
+      nondeterministic_transforms:
+        processor: ~/dev/fonduecaquelon/experiment_templates/segment_pets/oxpets_augmentation.py
