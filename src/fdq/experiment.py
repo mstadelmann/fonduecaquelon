@@ -573,7 +573,7 @@ class fdqExperiment:
 
         self.cp_to_res_dir(file_path=self.experiment_file_path)
         for p in get_parent_config_paths():
-            self.cp_to_test_dir(file_path=p)
+            self.cp_to_res_dir(file_path=p)
 
         store_processing_infos(self)
         self.dist_barrier()
