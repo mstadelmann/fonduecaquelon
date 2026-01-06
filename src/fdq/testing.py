@@ -38,18 +38,16 @@ def find_experiment_result_dirs(experiment: Any) -> tuple[str, list[str]]:
         elif outbasepath[0] != "/":
             raise ValueError("Error: The results path needs to be an absolute path!")
 
-        experiment_res_path: str | None = os.path.join(outbasepath, experiment.project, experiment.experimentName)
+        res_path: str | None = os.path.join(outbasepath, experiment.project, experiment.experimentName)
 
-        p = Path(experiment_res_path)
+        p = Path(res_path)
         if p.exists() and p.is_dir():
-            subfolders: list[str] | None = [
-                f.path.split("/")[-1] for f in os.scandir(experiment_res_path) if f.is_dir()
-            ]
+            subfolders: list[str] | None = [f.path.split("/")[-1] for f in os.scandir(res_path) if f.is_dir()]
         else:
-            experiment_res_path = None
+            res_path = None
             subfolders = None
 
-        return experiment_res_path, subfolders
+        return res_path, subfolders
 
     scratch_results: str | None = experiment.cfg.get("slurm_cluster", {}).get("scratch_results_path")
     default_results: str | None = experiment.cfg.get("store", {}).get("results_path")
@@ -57,19 +55,22 @@ def find_experiment_result_dirs(experiment: Any) -> tuple[str, list[str]]:
     if default_results is None:
         raise ValueError("Error: No store.results_path specified in experiment file.")
 
+    experiment_res_path: str | None = None
+
     if not experiment.is_slurm:
         experiment_res_path, subfolders = _validate(default_results)
 
     else:
-        experiment_res_path, subfolders = _validate(default_results)
-
-        if experiment_res_path is None:
-            iprint("This is a slurm TEST session, but results were not found in default results_path!")
-            iprint("Trying scratch_results_path instead...")
+        if scratch_results is not None:
+            iprint("This is a slurm TEST session, trying to find results in 'slurm_cluster.scratch_results_path'")
             wprint(
-                "Warning: results will NOT automatically be copied back from 'scratch_results_path' to 'results_path' when working interactively!"
+                "Warning: results will NOT automatically be copied back from 'slurm_cluster.scratch_results_path' to 'store.results_path' when working interactively!"
             )
             experiment_res_path, subfolders = _validate(scratch_results)
+
+        if experiment_res_path is None:
+            iprint("Trying to load model from 'store.results_path'...")
+            experiment_res_path, subfolders = _validate(default_results)
 
     if experiment_res_path is None:
         raise ValueError(
