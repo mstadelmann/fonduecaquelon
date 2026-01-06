@@ -2,7 +2,7 @@ import json
 import os
 from datetime import datetime
 from typing import Any
-
+from pathlib import Path
 from fdq.ui_functions import iprint, wprint, getIntInput
 from fdq.misc import get_parent_config_paths
 
@@ -20,31 +20,61 @@ def get_nb_exp_epochs(path: str) -> int:
 
 
 def find_experiment_result_dirs(experiment: Any) -> tuple[str, list[str]]:
-    """Finds and returns the experiment result directory and its subfolders for the given experiment."""
-    if experiment.is_slurm and experiment.cfg.mode.run_train:
-        wprint("WARNING: This is a slurm TRAINING session - looking only for results in scratch_results_path!")
-        outbasepath: str | None = experiment.cfg.get("slurm_cluster", {}).get("scratch_results_path")  # TODO
+    """Finds and returns the experiment result directory and its subfolders for the given experiment.
 
-    elif experiment.is_slurm and not experiment.mode.op_mode.train:
-        wprint("WARNING: This is a slurm INFERENCE session - looking for results in regular path!")
-        outbasepath = experiment.cfg.get("store", {}).get("results_path")  # TODO
+    Possible cases:
+    1) Local session -> use default results path
+    2) Slurm FDQ_submit session -> use default results path
+    3) Slurm interactive session -> use default results path, if folder not found try scratch results path and print warning
 
+    Issue: We dont know if we are in a interactive or in a FDQ_submit Slurm session here!
+           The results are only copied back from scratch_results_path to results_path if FDQ_submit is used.
+    """
+
+    def _validate(outbasepath) -> tuple[str, list[str]]:
         if outbasepath[0] == "~":
             outbasepath = os.path.expanduser(outbasepath)
 
         elif outbasepath[0] != "/":
             raise ValueError("Error: The results path needs to be an absolute path!")
 
+        experiment_res_path: str | None = os.path.join(outbasepath, experiment.project, experiment.experimentName)
+
+        p = Path(experiment_res_path)
+        if p.exists() and p.is_dir():
+            subfolders: list[str] | None = [
+                f.path.split("/")[-1] for f in os.scandir(experiment_res_path) if f.is_dir()
+            ]
+        else:
+            experiment_res_path = None
+            subfolders = None
+
+        return experiment_res_path, subfolders
+
+    scratch_results: str | None = experiment.cfg.get("slurm_cluster", {}).get("scratch_results_path")
+    default_results: str | None = experiment.cfg.get("store", {}).get("results_path")
+
+    if default_results is None:
+        raise ValueError("Error: No store.results_path specified in experiment file.")
+
+    if not experiment.is_slurm:
+        experiment_res_path, subfolders = _validate(default_results)
+
     else:
-        # regular local use
-        outbasepath = experiment.cfg.get("store", {}).get("results_path")
-        outbasepath = os.path.expanduser(outbasepath)
+        experiment_res_path, subfolders = _validate(default_results)
 
-    if outbasepath is None:
-        raise ValueError("Error: No store path specified in experiment file.")
+        if experiment_res_path is None:
+            iprint("This is a slurm TEST session, but results were not found in default results_path!")
+            iprint("Trying scratch_results_path instead...")
+            wprint(
+                "Warning: results will NOT automatically be copied back from 'scratch_results_path' to 'results_path' when working interactively!"
+            )
+            experiment_res_path, subfolders = _validate(scratch_results)
 
-    experiment_res_path: str = os.path.join(outbasepath, experiment.project, experiment.experimentName)
-    subfolders: list[str] = [f.path.split("/")[-1] for f in os.scandir(experiment_res_path) if f.is_dir()]
+    if experiment_res_path is None:
+        raise ValueError(
+            "Error: No valid store.results_path / slurm_cluster.scratch_results_path specified in experiment file."
+        )
 
     return experiment_res_path, subfolders
 

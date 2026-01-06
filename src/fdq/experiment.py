@@ -29,7 +29,7 @@ from fdq.transformers import get_transformers
 from fdq.misc import (
     remove_file,
     store_processing_infos,
-    FCQmode,
+    FDQmode,
     DictToObj,
     save_train_history,
     save_tensorboard,
@@ -60,7 +60,7 @@ class fdqExperiment:
         self.experimentName: str = self.get_config_name()
         self.funky_name: str | None = None
         self.checkpoint_frequency: int = cfg.store.checkpoint_frequency
-        self.mode: FCQmode = FCQmode()
+        self.mode: FDQmode = FDQmode()
         self.creation_time: datetime = datetime.now()
         self.current_ep_start_time: datetime | None = None
         self.finish_time: datetime | None = None
@@ -159,16 +159,20 @@ class fdqExperiment:
 
             folder_name = f"{dt_string}__{self.funky_name}"
 
+            res_base_path: str | None = None
+
             if self.is_slurm:
                 folder_name += f"__{self.slurm_job_id}"
                 res_base_path = self.cfg.get("slurm_cluster", {}).get("scratch_results_path")
                 if res_base_path is None:
-                    raise ValueError("Error, scratch_results_path was not defined.")
+                    wprint(
+                        "Warning: This is a Slurm job but 'scratch_results_path' was not defined in 'slurm_cluster' configuration. Trying to use the default 'results_path' instead."
+                    )
 
-            else:
+            if res_base_path is None:
                 res_base_path = self.cfg.get("store", {}).get("results_path", None)
                 if res_base_path is None:
-                    raise ValueError("Error, result path was not defined.")
+                    raise ValueError("Error, results_path was not defined.")
 
             self._results_dir = os.path.join(res_base_path, self.project, self.experimentName, folder_name)
 

@@ -63,7 +63,7 @@ CPUS_TEST=#cpus_per_task_test#
 AUTO_RESUBMIT=#auto_resubmit# # resubmit the job if stopped due to time constraints
 RESUME_CHPT_PATH=#resume_chpt_path# # path to checkpoint file to resume training
 CONFIG_PATH=#config_path#
-CONFIG_NAME=#config_name#.yaml
+CONFIG_NAME=#config_name#
 SCRATCH_RESULTS_PATH=#scratch_results_path#
 SCRATCH_DATA_PATH=#scratch_data_path#
 RESULTS_PATH=#results_path#
@@ -698,7 +698,7 @@ def main() -> None:
 
         # Set paths and basic info
         job_config["config_path"] = config_path
-        job_config["config_name"] = config_name[:30].replace(" ", "_")
+        job_config["config_name"] = config_name
         job_config["user"] = getpass.getuser()
 
         job_config["results_path"] = exp_config.get("store", {}).get("results_path")

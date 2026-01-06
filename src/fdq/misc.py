@@ -21,11 +21,11 @@ from hydra.core.hydra_config import HydraConfig
 from fdq.ui_functions import iprint, wprint, eprint
 
 
-class FCQmode:
+class FDQmode:
     """Class to manage operation and test modes for the FondueCaquelon project."""
 
     def __init__(self) -> None:
-        """Initialize the FCQmode object with default operation and test modes, and create dynamic setters."""
+        """Initialize the FDQmode object with default operation and test modes, and create dynamic setters."""
         self._op_mode: str = "init"
         self.allowed_op_modes: list[str] = [
             "init",  # initial state
@@ -53,7 +53,7 @@ class FCQmode:
             setattr(self, mode, self._create_setter("_test_mode", mode))
 
     def __repr__(self) -> str:
-        """Return the string representation of the FCQmode object."""
+        """Return the string representation of the FDQmode object."""
         if self._op_mode == "test":
             return f"<{self.__class__.__name__}: {self._op_mode} / {self._test_mode}>"
         return f"<{self.__class__.__name__}: {self._op_mode}>"
@@ -74,7 +74,7 @@ class FCQmode:
         class OpMode:
             """Helper class to provide boolean properties for each allowed operation mode."""
 
-            def __init__(self, parent: "FCQmode") -> None:
+            def __init__(self, parent: "FDQmode") -> None:
                 self.parent = parent
 
             def __repr__(self) -> str:
@@ -92,7 +92,7 @@ class FCQmode:
         class TestMode:
             """Helper class to provide boolean properties for each allowed test mode."""
 
-            def __init__(self, parent: "FCQmode") -> None:
+            def __init__(self, parent: "FDQmode") -> None:
                 self.parent = parent
 
             def __repr__(self) -> str:
