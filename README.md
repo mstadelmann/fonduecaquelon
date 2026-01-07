@@ -57,7 +57,7 @@ pip install -e .[dev,gpu]
 
 ### Local Experiments
 
-All experiment parameters are defined in a [config file](experiment_templates/mnist/mnist_class_dense.yaml). Config files can inherit from a [parent file](experiment_templates/mnist/mnist_parent.yaml) for easy reuse and organization.
+All experiment parameters are defined in a [config file](experiment_templates/mnist/mnist_class_dense.yaml). Config files can inherit from a [parent / defaults file](experiment_templates/mnist/mnist_parent.yaml) for easy reuse and organization.
 
 Run an experiment locally:
 
@@ -428,7 +428,7 @@ pip install -e .
 
 ## 📝 Tips
 
-* **Config Inheritance:** Use the `parent` key (without file extension) to inherit from another config and reduce duplication.
+* **Config Inheritance:** Use Hydra’s `defaults` list in your YAML configs to include/extend base configs and reduce duplication.
 * **Multiple Models/Losses:** Add multiple models and losses to config dictionaries as needed.
 * **Cluster Submission:** `fdq_submit.py` handles SLURM job script generation, submission, environment setup, and result copying.
 * **Model Export:** Use `-d` or `--dump` for interactive model export and optimization.

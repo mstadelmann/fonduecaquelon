@@ -686,10 +686,15 @@ def main() -> None:
         slurm_conf = exp_config.get("slurm_cluster")
         mode_config = exp_config.get("mode")
 
-        if slurm_conf is None or mode_config is None:
+        if slurm_conf is None:
             raise FDQSubmitError(
-                "Missing 'slurm_cluster' or 'mode' section in configuration file. "
-                "These sections are required for SLURM job submission."
+                "Missing 'slurm_cluster' section in configuration file. "
+                "This section is required for SLURM job submission."
+            )
+
+        if mode_config is None:
+            raise FDQSubmitError(
+                "Missing 'mode' section in configuration file. This section is required for SLURM job submission."
             )
 
         config_path = os.path.dirname(full_config_path)

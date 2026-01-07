@@ -70,7 +70,6 @@ class TestMNISTClassifier(unittest.TestCase):
         getattr(experiment.mode, "unittest")()  # Set to unittest mode
 
         # Store temp config path for cleanup if created
-        # temp_config_path = exp_path if os.getenv("GITHUB_ACTIONS") else None
         experiment.prepareTraining()
         experiment.trainer.fdq_train(experiment)
 
