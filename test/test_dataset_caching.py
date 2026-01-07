@@ -30,7 +30,7 @@ from fdq.dataset_caching import (
     cache_dataloader,
     reconfig_orig_dataloader,
 )
-from fdq.misc import DictToObj
+from fdq.misc import DictToObj, build_dummy_hydra_paths
 
 
 class MockDataset(Dataset):
@@ -140,51 +140,9 @@ class TestDatasetCaching(unittest.TestCase):
                     config_name=self.conf_name,
                     overrides=["hydra.run.dir=.", "hydra.job.chdir=False"],
                 )
-        # Inject hydra_paths similar to run_experiment.get_hydra_paths
-        config_dir = self.config_dir
-        config_name = self.conf_name
-        root_config_path = os.path.join(config_dir, f"{config_name}.yaml")
-
-        def _collect_parents(cfg_path: str, seen: set[str]) -> list[str]:
-            parents: list[str] = []
-            try:
-                y = OmegaConf.load(cfg_path)
-            except Exception:
-                return parents
-
-            defaults = y.get("defaults", []) or []
-            for item in defaults:
-                name = None
-                if isinstance(item, str):
-                    name = item
-                elif isinstance(item, dict) and len(item) == 1:
-                    k, v = next(iter(item.items()))
-                    name = v if isinstance(v, str) else k
-
-                if not name or name == "_self_":
-                    continue
-
-                if "keys" in name:
-                    continue
-
-                parent_path = os.path.join(config_dir, f"{name}.yaml")
-                if os.path.exists(parent_path) and parent_path not in seen:
-                    seen.add(parent_path)
-                    parents.append(parent_path)
-                    parents.extend(_collect_parents(parent_path, seen))
-            return parents
-
-        parents = _collect_parents(root_config_path, set()) if os.path.exists(root_config_path) else []
-
-        hydra_paths = {
-            "config_name": config_name,
-            "config_dir": config_dir,
-            "root_config_path": root_config_path,
-            "parents": parents,
-        }
-
+        # Inject hydra_paths via shared helper
         with open_dict(self.cfg):
-            self.cfg.hydra_paths = hydra_paths
+            self.cfg.hydra_paths = build_dummy_hydra_paths(self.config_dir, self.conf_name)
 
     def tearDown(self):
         """Clean up test environment."""
@@ -442,51 +400,9 @@ class TestDatasetCachingIntegration(unittest.TestCase):
                     config_name=self.conf_name,
                     overrides=["hydra.run.dir=.", "hydra.job.chdir=False"],
                 )
-        # Inject hydra_paths similar to run_experiment.get_hydra_paths
-        config_dir = self.config_dir
-        config_name = self.conf_name
-        root_config_path = os.path.join(config_dir, f"{config_name}.yaml")
-
-        def _collect_parents(cfg_path: str, seen: set[str]) -> list[str]:
-            parents: list[str] = []
-            try:
-                y = OmegaConf.load(cfg_path)
-            except Exception:
-                return parents
-
-            defaults = y.get("defaults", []) or []
-            for item in defaults:
-                name = None
-                if isinstance(item, str):
-                    name = item
-                elif isinstance(item, dict) and len(item) == 1:
-                    k, v = next(iter(item.items()))
-                    name = v if isinstance(v, str) else k
-
-                if not name or name == "_self_":
-                    continue
-
-                if "keys" in name:
-                    continue
-
-                parent_path = os.path.join(config_dir, f"{name}.yaml")
-                if os.path.exists(parent_path) and parent_path not in seen:
-                    seen.add(parent_path)
-                    parents.append(parent_path)
-                    parents.extend(_collect_parents(parent_path, seen))
-            return parents
-
-        parents = _collect_parents(root_config_path, set()) if os.path.exists(root_config_path) else []
-
-        hydra_paths = {
-            "config_name": config_name,
-            "config_dir": config_dir,
-            "root_config_path": root_config_path,
-            "parents": parents,
-        }
-
+        # Inject hydra_paths via shared helper
         with open_dict(self.cfg):
-            self.cfg.hydra_paths = hydra_paths
+            self.cfg.hydra_paths = build_dummy_hydra_paths(self.config_dir, self.conf_name)
 
     def tearDown(self):
         """Clean up test environment."""

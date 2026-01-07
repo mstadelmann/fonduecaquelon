@@ -18,6 +18,8 @@ from torch.utils.tensorboard import SummaryWriter
 
 from fdq.ui_functions import iprint, wprint, eprint
 
+from omegaconf import OmegaConf
+
 
 class FDQmode:
     """Class to manage operation and test modes for the FondueCaquelon project."""
@@ -688,3 +690,54 @@ def load_conf_file(path) -> dict:
     replace_tilde_with_abs_path(conf)
 
     return DictToObj(conf)
+
+
+def build_dummy_hydra_paths(config_dir: str, config_name: str) -> dict[str, Any]:
+    """Build a Hydra-like hydra_paths dict for tests.
+
+    Mirrors run_experiment.get_hydra_paths() without requiring Hydra runtime.
+    Returns a dict with keys: config_name, config_dir, root_config_path, parents.
+    Parents are collected recursively from the `defaults` entries, skipping those
+    containing "keys".
+    """
+    root_config_path = os.path.join(config_dir, f"{config_name}.yaml")
+    seen: set[str] = set()
+
+    def _collect(cfg_path: str) -> list[str]:
+        parents: list[str] = []
+        try:
+            cfg = OmegaConf.load(cfg_path)
+        except Exception:
+            return parents
+
+        defaults = cfg.get("defaults", []) or []
+        for item in defaults:
+            name = None
+            if isinstance(item, str):
+                name = item
+            elif isinstance(item, dict) and len(item) == 1:
+                k, v = next(iter(item.items()))
+                name = v if isinstance(v, str) else k
+
+            if not name or name == "_self_":
+                continue
+
+            if "keys" in name:
+                continue
+
+            parent_path = os.path.join(config_dir, f"{name}.yaml")
+            if os.path.exists(parent_path) and parent_path not in seen:
+                seen.add(parent_path)
+                parents.append(parent_path)
+                parents.extend(_collect(parent_path))
+
+        return parents
+
+    parents = _collect(root_config_path) if os.path.exists(root_config_path) else []
+
+    return {
+        "config_name": config_name,
+        "config_dir": config_dir,
+        "root_config_path": root_config_path,
+        "parents": parents,
+    }

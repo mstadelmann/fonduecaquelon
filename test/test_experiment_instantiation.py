@@ -10,6 +10,7 @@ from omegaconf import DictConfig, OmegaConf, open_dict
 from hydra import compose
 from hydra import initialize_config_dir
 from fdq.experiment import fdqExperiment
+from fdq.misc import build_dummy_hydra_paths
 
 
 class TestFdqExperimentInstantiation(unittest.TestCase):
@@ -51,49 +52,8 @@ class TestFdqExperimentInstantiation(unittest.TestCase):
                     config_name=self.conf_name,
                     overrides=["hydra.run.dir=.", "hydra.job.chdir=False"],
                 )
-        # Inject dummy hydra_paths similar to run_experiment.get_hydra_paths
-        config_dir = self.config_dir
-        config_name = self.conf_name
-        root_config_path = os.path.join(config_dir, f"{config_name}.yaml")
-
-        def _collect_parents(cfg_path: str, seen: set[str]) -> list[str]:
-            parents: list[str] = []
-            try:
-                y = OmegaConf.load(cfg_path)
-            except Exception:
-                return parents
-
-            defaults = y.get("defaults", []) or []
-            for item in defaults:
-                name = None
-                if isinstance(item, str):
-                    name = item
-                elif isinstance(item, dict) and len(item) == 1:
-                    k, v = next(iter(item.items()))
-                    name = v if isinstance(v, str) else k
-
-                if not name or name == "_self_":
-                    continue
-
-                # skip secret/key overlays
-                if "keys" in name:
-                    continue
-
-                parent_path = os.path.join(config_dir, f"{name}.yaml")
-                if os.path.exists(parent_path) and parent_path not in seen:
-                    seen.add(parent_path)
-                    parents.append(parent_path)
-                    parents.extend(_collect_parents(parent_path, seen))
-            return parents
-
-        parents = _collect_parents(root_config_path, set()) if os.path.exists(root_config_path) else []
-
-        hydra_paths = {
-            "config_name": config_name,
-            "config_dir": config_dir,
-            "root_config_path": root_config_path,
-            "parents": parents,
-        }
+        # Inject dummy hydra_paths via shared helper
+        hydra_paths = build_dummy_hydra_paths(self.config_dir, self.conf_name)
 
         with open_dict(cfg):
             cfg.hydra_paths = hydra_paths

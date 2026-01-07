@@ -8,11 +8,12 @@ import json
 import os
 import unittest
 import glob
-from omegaconf import DictConfig, OmegaConf, open_dict
+from omegaconf import DictConfig, open_dict
 from hydra import compose
 from hydra import initialize_config_dir
 from fdq.experiment import fdqExperiment
 from fdq.testing import run_test, find_model_path
+from fdq.misc import build_dummy_hydra_paths
 from fdq.run_experiment import expand_paths
 
 
@@ -55,51 +56,9 @@ class TestMNISTClassifier(unittest.TestCase):
                     config_name=self.conf_name,
                     overrides=["hydra.run.dir=.", "hydra.job.chdir=False"],
                 )
-        # Inject dummy hydra_paths similar to run_experiment.get_hydra_paths
-        config_dir = self.config_dir
-        config_name = self.conf_name
-        root_config_path = os.path.join(config_dir, f"{config_name}.yaml")
-
-        def _collect_parents(cfg_path: str, seen: set[str]) -> list[str]:
-            parents: list[str] = []
-            try:
-                y = OmegaConf.load(cfg_path)
-            except Exception:
-                return parents
-
-            defaults = y.get("defaults", []) or []
-            for item in defaults:
-                name = None
-                if isinstance(item, str):
-                    name = item
-                elif isinstance(item, dict) and len(item) == 1:
-                    k, v = next(iter(item.items()))
-                    name = v if isinstance(v, str) else k
-
-                if not name or name == "_self_":
-                    continue
-
-                if "keys" in name:
-                    continue
-
-                parent_path = os.path.join(config_dir, f"{name}.yaml")
-                if os.path.exists(parent_path) and parent_path not in seen:
-                    seen.add(parent_path)
-                    parents.append(parent_path)
-                    parents.extend(_collect_parents(parent_path, seen))
-            return parents
-
-        parents = _collect_parents(root_config_path, set()) if os.path.exists(root_config_path) else []
-
-        hydra_paths = {
-            "config_name": config_name,
-            "config_dir": config_dir,
-            "root_config_path": root_config_path,
-            "parents": parents,
-        }
-
+        # Inject dummy hydra_paths via shared helper
         with open_dict(cfg):
-            cfg.hydra_paths = hydra_paths
+            cfg.hydra_paths = build_dummy_hydra_paths(self.config_dir, self.conf_name)
         return cfg
 
     def test_run_train(self):
@@ -141,13 +100,6 @@ class TestMNISTClassifier(unittest.TestCase):
         with open(res_paths[0], encoding="utf8") as json_file:
             testres = json.load(json_file)
             self.assertTrue(testres["test results"] > 0.2)
-
-        # Cleanup temporary config file if created for CI
-        # if temp_config_path and os.path.exists(temp_config_path):
-        #     try:
-        #         os.unlink(temp_config_path)
-        #     except OSError:
-        #         pass  # Ignore cleanup errors
 
 
 if __name__ == "__main__":
