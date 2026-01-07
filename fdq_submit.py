@@ -326,6 +326,8 @@ if [ "$RUN_TEST" == True ] && [ $RETVALUE -eq 0 ] && [ "$IS_TEST" == False ]; th
         -e "s|RUN_TRAIN=True|RUN_TRAIN=False|g" \
         -e "s|RUN_TEST=True|RUN_TEST=False|g" \
         -e "s|job_config[\"job_tag\"] = \"_train\"|job_config[\"job_tag\"] = \"_test\"|g" \
+        -e "s|_train.out|_test.out|g" \
+        -e "s|_train.err|_test.err|g" \
         -e "s|^#SBATCH --gres=.*|#SBATCH --gres=$GRES_TEST|g" \
         -e "s|^#SBATCH --mem=.*|#SBATCH --mem=$MEM_TEST|g" \
         -e "s|^#SBATCH --cpus-per-task=.*|#SBATCH --cpus-per-task=$CPUS_TEST|g" \
