@@ -15,7 +15,6 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from torch.utils.data import random_split
 from torch.utils.tensorboard import SummaryWriter
-from hydra.core.hydra_config import HydraConfig
 
 from fdq.ui_functions import iprint, wprint, eprint
 
