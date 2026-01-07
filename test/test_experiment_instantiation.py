@@ -6,7 +6,7 @@ can be instantiated without errors.
 
 import os
 import unittest
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf, open_dict
 from hydra import compose
 from hydra import initialize_config_dir
 from fdq.experiment import fdqExperiment
@@ -17,7 +17,6 @@ class TestFdqExperimentInstantiation(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures before each test method."""
-
         os.environ["FDQ_UNITTEST"] = "1"
         os.environ["FDQ_UNITTEST_DIR"] = "1"
         os.environ["FDQ_UNITTEST_CONF"] = "1"
@@ -52,10 +51,56 @@ class TestFdqExperimentInstantiation(unittest.TestCase):
                     config_name=self.conf_name,
                     overrides=["hydra.run.dir=.", "hydra.job.chdir=False"],
                 )
+        # Inject dummy hydra_paths similar to run_experiment.get_hydra_paths
+        config_dir = self.config_dir
+        config_name = self.conf_name
+        root_config_path = os.path.join(config_dir, f"{config_name}.yaml")
+
+        def _collect_parents(cfg_path: str, seen: set[str]) -> list[str]:
+            parents: list[str] = []
+            try:
+                y = OmegaConf.load(cfg_path)
+            except Exception:
+                return parents
+
+            defaults = y.get("defaults", []) or []
+            for item in defaults:
+                name = None
+                if isinstance(item, str):
+                    name = item
+                elif isinstance(item, dict) and len(item) == 1:
+                    k, v = next(iter(item.items()))
+                    name = v if isinstance(v, str) else k
+
+                if not name or name == "_self_":
+                    continue
+
+                # skip secret/key overlays
+                if "keys" in name:
+                    continue
+
+                parent_path = os.path.join(config_dir, f"{name}.yaml")
+                if os.path.exists(parent_path) and parent_path not in seen:
+                    seen.add(parent_path)
+                    parents.append(parent_path)
+                    parents.extend(_collect_parents(parent_path, seen))
+            return parents
+
+        parents = _collect_parents(root_config_path, set()) if os.path.exists(root_config_path) else []
+
+        hydra_paths = {
+            "config_name": config_name,
+            "config_dir": config_dir,
+            "root_config_path": root_config_path,
+            "parents": parents,
+        }
+
+        with open_dict(cfg):
+            cfg.hydra_paths = hydra_paths
         return cfg
 
     def test_experiment_instantiation(self) -> None:
-        """fdqExperiment can be instantiated from Hydra DictConfig."""
+        """FdqExperiment can be instantiated from Hydra DictConfig."""
         cfg = self._compose_cfg()
         experiment = fdqExperiment(cfg, rank=0)
 
