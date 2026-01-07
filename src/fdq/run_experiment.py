@@ -3,9 +3,11 @@ import random
 import sys
 import os
 import hydra
+from hydra.core.hydra_config import HydraConfig
 from typing import Any
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
+from omegaconf import open_dict
 
 import numpy as np
 import torch
@@ -13,25 +15,13 @@ import torch.multiprocessing as mp
 from fdq.experiment import fdqExperiment
 from fdq.testing import run_test
 from fdq.ui_functions import iprint
-from fdq.misc import load_conf_file
 from fdq.dump import dump_model
 from fdq.inference import inference_model
-# from hydra import initialize  # TODO
-# from hydra.core.hydra_config import HydraConfig  # TODO
 
 
 def start(rank: int, cfg: DictConfig = None, cfg_container=None) -> None:
     """Main entry point for running an FDQ experiment based on command-line arguments."""
-    # # Ensure Hydra’s global state exists in child processes # TODO
-    # with initialize(config_path=None, version_base=None):  # TODO
-    #     # Register the composed config so HydraConfig.get() works in children# TODO
-    #     try:  # TODO
-    #         HydraConfig.get()  # TODO
-    #     except ValueError:  # TODO
-    #         HydraConfig.instance().set_config(cfg)  # TODO
-
     if cfg is None:
-        # reconstruct DictConfig in worker
         cfg = OmegaConf.create(cfg_container)
 
     experiment: fdqExperiment = fdqExperiment(cfg, rank=rank)
@@ -89,6 +79,64 @@ def expand_paths(cfg):
     return OmegaConf.create(_expand(OmegaConf.to_container(cfg, resolve=True)))
 
 
+def get_hydra_paths():
+    def collect(cfg_path: str) -> None:
+        seen: set[str] = set()
+        parents: list[str] = []
+        try:
+            cfg = OmegaConf.load(cfg_path)
+        except Exception:
+            return
+
+        defaults = cfg.get("defaults", []) or []
+        for item in defaults:
+            name = None
+            if isinstance(item, str):
+                name = item
+            elif isinstance(item, dict) and len(item) == 1:
+                k, v = next(iter(item.items()))
+                name = v if isinstance(v, str) else k
+
+            if not name or name == "_self_":
+                continue
+
+            parent_path = os.path.join(config_dir, f"{name}.yaml")
+            if "keys" in name:
+                iprint(f"Skipping copying key files to results dir: {name}")
+            elif os.path.exists(parent_path) and parent_path not in seen:
+                seen.add(parent_path)
+                parents.append(parent_path)
+                collect(parent_path)  # recurse
+
+        return parents
+
+    # Get Hydra config paths
+    try:
+        hc = HydraConfig.get()
+        config_name = hc.job.config_name
+        for src in hc.runtime.config_sources:
+            if src.schema == "file":
+                config_dir = src.path
+                break
+        else:
+            raise RuntimeError("No file-based config source found")
+        root_config_path = os.path.join(config_dir, f"{config_name}.yaml")
+
+    except Exception:
+        raise RuntimeError("Could not determine Hydra config path")
+
+    parents = collect(root_config_path)
+
+    res = {
+        "config_name": config_name,
+        "config_dir": config_dir,
+        "root_config_path": root_config_path,
+        "parents": parents,
+    }
+
+    return res
+
+
 @hydra.main(
     version_base=None,
     # Uncomment for easy debugging
@@ -112,6 +160,10 @@ def main(cfg: DictConfig) -> None:
                 raise ValueError(
                     f"ERROR, world size {world_size} is larger than available GPUs: {torch.cuda.device_count()}"
                 )
+
+    hydra_paths = get_hydra_paths()
+    with open_dict(cfg):
+        cfg.hydra_paths = hydra_paths
 
     if world_size == 1:
         # No need for multiprocessing

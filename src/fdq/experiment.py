@@ -34,8 +34,6 @@ from fdq.misc import (
     save_train_history,
     save_tensorboard,
     save_wandb,
-    load_conf_file,
-    get_parent_config_paths,
 )
 from fdq.dataset_caching import cache_datasets_ddp_handler
 
@@ -57,7 +55,7 @@ class fdqExperiment:
         self.experiment_file_path = self.get_config_file_path()
         self.globals = self.cfg.globals
         self.project: str = self.cfg.globals.project.replace(" ", "_")
-        self.experimentName: str = self.get_config_name()
+        self.experimentName: str = cfg.hydra_paths.config_name
         self.funky_name: str | None = None
         self.checkpoint_frequency: int = cfg.store.checkpoint_frequency
         self.mode: FDQmode = FDQmode()
@@ -139,13 +137,6 @@ class fdqExperiment:
             self.is_cuda = False
         self.prepare_transformers()
         self.store_experiment_git_hash()
-
-    def get_config_name(self) -> str:
-        if self.is_running_under_tests():
-            return os.getenv("FDQ_UNITTEST_CONF", "unknown_config")
-        else:
-            hc = HydraConfig.get()
-            return hc.job.config_name.replace(".yaml", "")
 
     @property
     def results_dir(self) -> str:
@@ -298,16 +289,7 @@ class fdqExperiment:
                 raise RuntimeError("FDQ_UNITTEST_DIR and FDQ_UNITTEST_CONF must be set when running under tests.")
             return os.path.join(config_dir, f"{config_name}.yaml")
         else:
-            hc = HydraConfig.get()
-            config_name = hc.job.config_name
-            for src in hc.runtime.config_sources:
-                if src.schema == "file":
-                    base_dir = src.path
-                    break
-            else:
-                raise RuntimeError("No file-based config source found")
-            cfg_path = os.path.join(base_dir, f"{config_name}.yaml")
-            return cfg_path
+            return self.cfg.hydra_paths.root_config_path
 
     def store_experiment_git_hash(self):
         """Check if the experiment directory is a git repository and store the current git hash."""
@@ -576,7 +558,7 @@ class fdqExperiment:
             self.load_checkpoint(self.cfg.mode.resume_chpt_path)
 
         self.cp_to_res_dir(file_path=self.experiment_file_path)
-        for p in get_parent_config_paths():
+        for p in self.cfg.hydra_paths.parents:
             self.cp_to_res_dir(file_path=p)
 
         store_processing_infos(self)
