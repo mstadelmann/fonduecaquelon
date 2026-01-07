@@ -6,7 +6,6 @@ import random
 from datetime import datetime
 from typing import Any
 from collections.abc import Callable, Iterator
-from omegaconf import OmegaConf
 
 import cv2
 import torch

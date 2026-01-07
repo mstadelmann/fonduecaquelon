@@ -1,4 +1,3 @@
-import argparse
 import random
 import sys
 import os
@@ -65,6 +64,12 @@ def start(rank: int, cfg: DictConfig = None, cfg_container=None) -> None:
 
 
 def expand_paths(cfg):
+    """Expand user-home (`~`) in all string paths within the Hydra config.
+
+    Converts the DictConfig to a plain container, walks it recursively, and
+    expands any leading tildes in strings, then recreates a DictConfig.
+    """
+
     # convert to container (dict/list), walk recursively
     def _expand(v):
         if isinstance(v, str) and v.startswith("~"):
@@ -80,13 +85,20 @@ def expand_paths(cfg):
 
 
 def get_hydra_paths():
-    def collect(cfg_path: str) -> None:
-        seen: set[str] = set()
+    """Return Hydra config path metadata for the current run.
+
+    Determines the active `config_name` and its source `config_dir`, builds the
+    absolute `root_config_path`, and collects parent config file paths from
+    Hydra `defaults` entries, skipping secret/key overlays.
+    """
+    seen: set[str] = set()
+
+    def collect(cfg_path: str) -> list[str]:
         parents: list[str] = []
         try:
             cfg = OmegaConf.load(cfg_path)
         except Exception:
-            return
+            return parents
 
         defaults = cfg.get("defaults", []) or []
         for item in defaults:
@@ -106,11 +118,10 @@ def get_hydra_paths():
             elif os.path.exists(parent_path) and parent_path not in seen:
                 seen.add(parent_path)
                 parents.append(parent_path)
-                collect(parent_path)  # recurse
+                parents.extend(collect(parent_path))
 
         return parents
 
-    # Get Hydra config paths
     try:
         hc = HydraConfig.get()
         config_name = hc.job.config_name

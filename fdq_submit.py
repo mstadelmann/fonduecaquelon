@@ -623,7 +623,7 @@ def get_config_path() -> str:
         raise FDQSubmitError(f"Experiment configuration file is not a file: {abs_path}")
 
     if not abs_path.endswith(".yaml"):
-        raise FDQSubmitError(f"Experiment configuration file must have a .yaml or .yml extension: {abs_path}")
+        raise FDQSubmitError(f"Experiment configuration file must have a .yaml extension: {abs_path}")
 
     return abs_path
 

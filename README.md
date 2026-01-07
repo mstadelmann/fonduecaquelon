@@ -186,7 +186,7 @@ FDQ uses YAML config files (with Hydra) to define experiments. These specify mod
 
 ### Mode
 
-You can either define in the config file what you want fdq to do (train, test, resume training, dump ect.), or you can specify/overwrite these parameters when launching the experiment (Hydra Style).
+You can either define in the config file what you want FDQ to do (train, test, resume training, dump, etc.), or you can specify/overwrite these parameters when launching the experiment (Hydra-style).
 ```yaml
 mode:
   run_train: true
