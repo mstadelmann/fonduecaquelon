@@ -5,7 +5,7 @@ import os
 import numpy as np
 import torch
 import h5py
-import json
+from omegaconf import DictConfig, OmegaConf
 from unittest.mock import Mock, patch, MagicMock
 from torch.utils.data import Dataset, DataLoader
 
@@ -164,9 +164,9 @@ class TestDatasetCaching(unittest.TestCase):
 
     def test_hash_conf(self):
         """Test configuration hashing."""
-        config1 = DictToObj({"param1": "value1", "param2": 42})
-        config2 = DictToObj({"param1": "value1", "param2": 42})
-        config3 = DictToObj({"param1": "value1", "param2": 43})
+        config1 = OmegaConf.create({"param1": "value1", "param2": 42})
+        config2 = OmegaConf.create({"param1": "value1", "param2": 42})
+        config3 = OmegaConf.create({"param1": "value1", "param2": 43})
 
         # Same configs should produce same hash
         self.assertEqual(hash_conf(config1), hash_conf(config2))
@@ -418,21 +418,19 @@ class TestDatasetCachingIntegration(unittest.TestCase):
         data_name = "test_dataset"
 
         # Data source configuration (kept minimal; cache_dir comes from temp)
-        data_source = DictToObj(
+        data_source = OmegaConf.create(
             {
-                "caching": DictToObj(
-                    {
-                        "cache_dir": self.cache_dir,
-                        "shuffle_train": True,
-                        "shuffle_val": False,
-                        "shuffle_test": False,
-                        "num_workers": 0,
-                        "pin_memory": False,
-                        "compress_cache": False,
-                        "nondeterministic_transforms": DictToObj({"processor": None}),
-                    }
-                ),
-                "args": DictToObj({}),
+                "caching": {
+                    "cache_dir": self.cache_dir,
+                    "shuffle_train": True,
+                    "shuffle_val": False,
+                    "shuffle_test": False,
+                    "num_workers": 0,
+                    "pin_memory": False,
+                    "compress_cache": False,
+                    "nondeterministic_transforms": {"processor": None},
+                },
+                "args": {},
             }
         )
 
