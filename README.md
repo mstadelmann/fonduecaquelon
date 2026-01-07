@@ -18,11 +18,11 @@ A *fonduecaquelon* is the heavy pot that keeps cheeses (e.g. 50% Gruyère and 50
 * **High-Performance Inference:** TensorRT integration for GPU-accelerated inference with up to 10x speedup.
 * **Model Compilation:** JIT tracing/scripting and `torch.compile` support for optimized execution.
 * **Interactive Model Dumping:** Intuitive interface for exporting and optimizing trained models.
-* **Monitoring Tools:** Built-in support for [Weights & Biases](https://wandb.a) and [TensorBoard](https://www.tensorflow.org/tensorboard).
+* **Monitoring Tools:** Built-in support for [Weights & Biases](https://wandb.ai) and [TensorBoard](https://www.tensorflow.org/tensorboard).
 
 ## 🛠️ Installation
 
-If you simply want to submit jobs to a Slurm cluster, you dont have to install anything. Just download [fdq_submit.py](fdq_submit.py) and launch jour job as documented [below](#slurm-cluster-execution).
+If you simply want to submit jobs to a Slurm cluster, you don't have to install anything. Just download [fdq_submit.py](fdq_submit.py) and launch your job as documented [below](#slurm-cluster-execution).
 
 To run/debug experiments, install the latest release from PyPI:
 
@@ -48,6 +48,13 @@ pip install -e .[dev,gpu]
 
 ## 📖 Usage
 
+### Table of Contents
+
+- [Local Experiments](#local-experiments)
+- [SLURM Cluster Execution](#slurm-cluster-execution)
+- [Model Export and Optimization](#model-export-and-optimization)
+- [Additional CLI Options](#additional-cli-options)
+
 ### Local Experiments
 
 All experiment parameters are defined in a [config file](experiment_templates/mnist/mnist_class_dense.yaml). Config files can inherit from a [parent file](experiment_templates/mnist/mnist_parent.yaml) for easy reuse and organization.
@@ -62,15 +69,41 @@ fdq --config-path /home/marc/dev/fonduecaquelon/experiment_templates/mnist --con
 
 ### SLURM Cluster Execution
 
-To run experiments on a SLURM cluster, add a `slurm_cluster` section to your config. See [this example](experiment_templates/segment_pets/segment_pets_01.yaml).
+Run experiments on SLURM by adding a `slurm_cluster` section to your config. See [segment_pets_01.yaml](experiment_templates/segment_pets/segment_pets_01.yaml).
 
-Important: When using chained config files, the `mode`, `slurm_cluster` and `store` sections must be defined in the child config file!
+Important: When using chained config files, define the `mode`, `slurm_cluster`, and `store` sections in the child config (the one you launch).
+
+Minimal example (YAML):
+
+```yaml
+slurm_cluster:
+  fdq_test_repo: false
+  fdq_version: 0.0.74
+  python_env_module: "python/3.12.4"
+  uv_env_module: "uv/0.6.12"
+  cuda_env_module: "cuda/12.8.0"
+  scratch_results_path: "/scratch/fdq_results/"
+  scratch_data_path: "/scratch/fdq_data/"
+  log_path: "~/dev/fonduecaquelon/slurm_log"
+  job_time: 15
+  stop_grace_time: 5
+  cpus_per_task: 8
+  gres: "gpu:1"
+  mem: "20G"
+  partition: "gpu"
+  account: "cai_ivs"
+  auto_resubmit: true
+```
 
 Submit your experiment:
 
 ```bash
-python <path_to>/fdq_submit.py <path_to_config_file.yaml>
+python /path/to/fdq_submit.py /path/to/config.yaml
 ```
+
+Notes:
+- SLURM logs are written to `slurm_log/`.
+- Results are organized under the configured `store.results_path` (when using `fdq_submit.py` on Slurm cluster, to `scratch_results_path`, which are then automatically copied back to `store.results_path` at job termination).
 
 ### Model Export and Optimization
 
@@ -93,7 +126,7 @@ This launches an interactive interface where you can:
 You can overwrite all configurations at launch time (Hydra-style). This is mostly interesting to change the operations that you want FDQ to run:
 
 ```bash
-# Run default (as defined in the mode section of teh config file)
+# Run default (as defined in the mode section of the config file)
 fdq --config-path <path_to_config_dir> --config-name <config_basename>
 
 # Skip training
