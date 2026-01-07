@@ -16,19 +16,19 @@ from fdq.ui_functions import iprint
 from fdq.misc import load_conf_file
 from fdq.dump import dump_model
 from fdq.inference import inference_model
-from hydra import initialize
-from hydra.core.hydra_config import HydraConfig
+from hydra import initialize  # TODO
+from hydra.core.hydra_config import HydraConfig  # TODO
 
 
 def start(rank: int, cfg: DictConfig) -> None:
     """Main entry point for running an FDQ experiment based on command-line arguments."""
     # Ensure Hydra’s global state exists in child processes # TODO
-    with initialize(config_path=None, version_base=None):
-        # Register the composed config so HydraConfig.get() works in children
-        try:
-            HydraConfig.get()
-        except ValueError:
-            HydraConfig.instance().set_config(cfg)
+    with initialize(config_path=None, version_base=None):  # TODO
+        # Register the composed config so HydraConfig.get() works in children# TODO
+        try:  # TODO
+            HydraConfig.get()  # TODO
+        except ValueError:  # TODO
+            HydraConfig.instance().set_config(cfg)  # TODO
     experiment: fdqExperiment = fdqExperiment(cfg, rank=rank)
 
     random_seed: Any = experiment.cfg.globals.get("set_random_seed")
