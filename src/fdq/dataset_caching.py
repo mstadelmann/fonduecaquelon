@@ -10,6 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from fdq.misc import DictToObj
 from fdq.ui_functions import iprint, wprint, eprint
+from omegaconf import OmegaConf
 
 FDQ_CACHE_HASH_KEY = "fdq_data_hash"
 
@@ -170,7 +171,7 @@ class CachedDataset(Dataset):
 
 def hash_conf(conf):
     """Create a hash from a dictionary."""
-    dict_string = json.dumps(conf.to_dict(), sort_keys=True, ensure_ascii=True)
+    dict_string = json.dumps(OmegaConf.to_container(conf, resolve=True), sort_keys=True, ensure_ascii=True)
     return hashlib.md5(dict_string.encode()).hexdigest()
 
 
