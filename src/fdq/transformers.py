@@ -3,6 +3,7 @@ from collections.abc import Callable
 import torch
 import torch.nn.functional as F
 from torchvision.transforms import v2 as transforms
+from omegaconf import DictConfig
 
 
 class AddValueTransform:
@@ -698,7 +699,7 @@ def get_transformer(t_defs: Any) -> Callable:
         "NORM": {"mean": [float], "stdev": [float]},
     }
 
-    if isinstance(t_defs, dict):
+    if isinstance(t_defs, DictConfig):
         keys = list(t_defs.keys())
         if len(keys) != 1:
             raise ValueError(f"Transformation {t_defs} does not correspond to the expected format!")

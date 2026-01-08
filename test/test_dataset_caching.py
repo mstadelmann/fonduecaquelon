@@ -1,18 +1,23 @@
 import unittest
 import tempfile
 import shutil
+import sys
 import os
 import numpy as np
 import torch
 import h5py
-import json
-from unittest.mock import Mock, patch, MagicMock
+from omegaconf import DictConfig, OmegaConf, open_dict
+from unittest.mock import Mock, patch
 from torch.utils.data import Dataset, DataLoader
-
-# Add the src directory to the path
-import sys
+from hydra import compose
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+
+
+try:
+    from hydra import initialize_config_dir  # Hydra >=1.2
+except ImportError:
+    from hydra import initialize as initialize_config_dir  # fallback
 
 from fdq.dataset_caching import (
     get_file_size_mb,
@@ -25,7 +30,7 @@ from fdq.dataset_caching import (
     cache_dataloader,
     reconfig_orig_dataloader,
 )
-from fdq.misc import DictToObj
+from fdq.misc import DictToObj, build_dummy_hydra_paths
 
 
 class MockDataset(Dataset):
@@ -47,19 +52,26 @@ class MockDataset(Dataset):
 class MockExperiment:
     """Mock experiment object for testing."""
 
-    def __init__(self, is_main=True, rank=0):
+    def __init__(self, cfg: DictConfig | None = None, is_main=True, rank=0):
         """Initialize mock experiment."""
         self._is_main = is_main
         self.rank = rank
         self.barrier_calls = 0
-
-        # Add minimal inargs for compatibility with get_loaders_to_cache
-        class InArgs:
-            train_model = True
-            test_model_auto = False
-            test_model_ia = False
-
-        self.inargs = InArgs()
+        # Minimal Hydra-like cfg with mode flags so dataset_caching.get_loaders_to_cache works
+        if cfg is None:
+            self.cfg = DictToObj(
+                {
+                    "mode": DictToObj(
+                        {
+                            "run_train": True,
+                            "run_test_auto": False,
+                            "run_test_interactive": False,
+                        }
+                    )
+                }
+            )
+        else:
+            self.cfg = cfg
 
     def is_main_process(self):
         return self._is_main
@@ -104,10 +116,33 @@ class TestDatasetCaching(unittest.TestCase):
     """Test suite for dataset caching functionality."""
 
     def setUp(self):
-        """Set up test environment."""
+        """Set up test environment with Hydra cfg."""
+        os.environ["FDQ_UNITTEST"] = "1"
         self.temp_dir = tempfile.mkdtemp()
         self.cache_dir = os.path.join(self.temp_dir, "cache")
         os.makedirs(self.cache_dir, exist_ok=True)
+
+        # Compose Hydra cfg like other tests
+        self.config_dir = os.path.join(os.path.dirname(__file__), "test_experiment")
+        self.conf_name = "mnist_testexp_dense_ci" if os.getenv("GITHUB_ACTIONS") else "mnist_testexp_dense"
+        try:
+            with initialize_config_dir(version_base=None, config_dir=self.config_dir):
+                self.cfg: DictConfig = compose(
+                    config_name=self.conf_name,
+                    overrides=["hydra.run.dir=.", "hydra.job.chdir=False"],
+                )
+        except Exception:
+            from hydra import initialize
+
+            conf_rel = os.path.relpath(self.config_dir, os.getcwd())
+            with initialize(version_base=None, config_path=conf_rel):
+                self.cfg = compose(
+                    config_name=self.conf_name,
+                    overrides=["hydra.run.dir=.", "hydra.job.chdir=False"],
+                )
+        # Inject hydra_paths via shared helper
+        with open_dict(self.cfg):
+            self.cfg.hydra_paths = build_dummy_hydra_paths(self.config_dir, self.conf_name)
 
     def tearDown(self):
         """Clean up test environment."""
@@ -128,9 +163,9 @@ class TestDatasetCaching(unittest.TestCase):
 
     def test_hash_conf(self):
         """Test configuration hashing."""
-        config1 = DictToObj({"param1": "value1", "param2": 42})
-        config2 = DictToObj({"param1": "value1", "param2": 42})
-        config3 = DictToObj({"param1": "value1", "param2": 43})
+        config1 = OmegaConf.create({"param1": "value1", "param2": 42})
+        config2 = OmegaConf.create({"param1": "value1", "param2": 42})
+        config3 = OmegaConf.create({"param1": "value1", "param2": 43})
 
         # Same configs should produce same hash
         self.assertEqual(hash_conf(config1), hash_conf(config2))
@@ -207,7 +242,8 @@ class TestDatasetCaching(unittest.TestCase):
         # Create mock data source
         data_source = DictToObj({"caching": DictToObj({"nondeterministic_transforms": DictToObj({"processor": None})})})
 
-        experiment = MockExperiment()
+        # Use Hydra-backed MockExperiment
+        experiment = MockExperiment(cfg=self.cfg)
 
         # Test CachedDataset
         cached_dataset = CachedDataset(cache_file, data_source, experiment)
@@ -270,30 +306,25 @@ class TestDatasetCaching(unittest.TestCase):
         mock_data = DictToObj({"train_data_loader": Mock()})
         mock_cache_datasets.return_value = mock_data
 
-        experiment = MockExperiment(is_main=True)
+        # Main process with Hydra cfg
+        experiment = MockExperiment(cfg=self.cfg, is_main=True)
         processor = MockProcessor()
         data_name = "test_dataset"
         data_source = DictToObj({})
 
-        # Test main process
         result = cache_datasets_ddp_handler(experiment, processor, data_name, data_source)
 
-        # Should call cache_datasets once (main process)
         self.assertEqual(mock_cache_datasets.call_count, 1)
-        # Should call barrier twice
         self.assertEqual(experiment.barrier_calls, 2)
         self.assertEqual(result, mock_data)
 
         # Reset mocks
         mock_cache_datasets.reset_mock()
-        experiment = MockExperiment(is_main=False)
+        experiment = MockExperiment(cfg=self.cfg, is_main=False)
 
-        # Test child process
+        # Child process
         result = cache_datasets_ddp_handler(experiment, processor, data_name, data_source)
-
-        # Should call cache_datasets once (child process)
         self.assertEqual(mock_cache_datasets.call_count, 1)
-        # Should call barrier twice
         self.assertEqual(experiment.barrier_calls, 2)
 
     def test_save_sample_to_group_dict(self):
@@ -346,10 +377,32 @@ class TestDatasetCachingIntegration(unittest.TestCase):
     """Integration tests for dataset caching."""
 
     def setUp(self):
-        """Set up test environment."""
+        """Set up test environment with Hydra cfg."""
+        os.environ["FDQ_UNITTEST"] = "1"
         self.temp_dir = tempfile.mkdtemp()
         self.cache_dir = os.path.join(self.temp_dir, "cache")
         os.makedirs(self.cache_dir, exist_ok=True)
+
+        self.config_dir = os.path.join(os.path.dirname(__file__), "test_experiment")
+        self.conf_name = "mnist_testexp_dense_ci" if os.getenv("GITHUB_ACTIONS") else "mnist_testexp_dense"
+        try:
+            with initialize_config_dir(version_base=None, config_dir=self.config_dir):
+                self.cfg: DictConfig = compose(
+                    config_name=self.conf_name,
+                    overrides=["hydra.run.dir=.", "hydra.job.chdir=False"],
+                )
+        except Exception:
+            from hydra import initialize
+
+            conf_rel = os.path.relpath(self.config_dir, os.getcwd())
+            with initialize(version_base=None, config_path=conf_rel):
+                self.cfg = compose(
+                    config_name=self.conf_name,
+                    overrides=["hydra.run.dir=.", "hydra.job.chdir=False"],
+                )
+        # Inject hydra_paths via shared helper
+        with open_dict(self.cfg):
+            self.cfg.hydra_paths = build_dummy_hydra_paths(self.config_dir, self.conf_name)
 
     def tearDown(self):
         """Clean up test environment."""
@@ -361,48 +414,41 @@ class TestDatasetCachingIntegration(unittest.TestCase):
         """Test the full caching pipeline end-to-end."""
         from fdq.dataset_caching import cache_datasets
 
-        # Create mock experiment and processor
-        experiment = MockExperiment()
+        # Hydra-backed MockExperiment and processor
+        experiment = MockExperiment(cfg=self.cfg)
         processor = MockProcessor()
         data_name = "test_dataset"
 
-        # Create data source configuration
-        data_source = DictToObj(
+        # Data source configuration (kept minimal; cache_dir comes from temp)
+        data_source = OmegaConf.create(
             {
-                "caching": DictToObj(
-                    {
-                        "cache_dir": self.cache_dir,
-                        "shuffle_train": True,
-                        "shuffle_val": False,
-                        "shuffle_test": False,
-                        "num_workers": 0,
-                        "pin_memory": False,
-                        "compress_cache": False,  # Disable compression to avoid scalar dataset issues
-                        "nondeterministic_transforms": DictToObj({"processor": None}),
-                    }
-                ),
-                "args": DictToObj({}),
+                "caching": {
+                    "cache_dir": self.cache_dir,
+                    "shuffle_train": True,
+                    "shuffle_val": False,
+                    "shuffle_test": False,
+                    "num_workers": 0,
+                    "pin_memory": False,
+                    "compress_cache": False,
+                    "nondeterministic_transforms": {"processor": None},
+                },
+                "args": {},
             }
         )
 
-        # Run caching
         result = cache_datasets(experiment, processor, data_name, data_source)
 
-        # Check that result has the expected structure
         self.assertIsInstance(result, DictToObj)
         self.assertTrue(hasattr(result, "train_data_loader"))
         self.assertTrue(hasattr(result, "val_data_loader"))
 
-        # Check that cache files were created
         cache_files = [f for f in os.listdir(self.cache_dir) if f.endswith(".h5")]
         self.assertGreater(len(cache_files), 0)
 
-        # Check that cached dataloaders work
         train_loader = result.train_data_loader
         batch = next(iter(train_loader))
         self.assertIsNotNone(batch)
 
 
 if __name__ == "__main__":
-    # Set up test environment
     unittest.main(verbosity=2)

@@ -9,21 +9,23 @@ from collections.abc import Callable, Iterator
 
 import cv2
 import torch
+import wandb
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from torch.utils.data import random_split
 from torch.utils.tensorboard import SummaryWriter
-import wandb
 
 from fdq.ui_functions import iprint, wprint, eprint
 
+from omegaconf import OmegaConf
 
-class FCQmode:
+
+class FDQmode:
     """Class to manage operation and test modes for the FondueCaquelon project."""
 
     def __init__(self) -> None:
-        """Initialize the FCQmode object with default operation and test modes, and create dynamic setters."""
+        """Initialize the FDQmode object with default operation and test modes, and create dynamic setters."""
         self._op_mode: str = "init"
         self.allowed_op_modes: list[str] = [
             "init",  # initial state
@@ -51,7 +53,7 @@ class FCQmode:
             setattr(self, mode, self._create_setter("_test_mode", mode))
 
     def __repr__(self) -> str:
-        """Return the string representation of the FCQmode object."""
+        """Return the string representation of the FDQmode object."""
         if self._op_mode == "test":
             return f"<{self.__class__.__name__}: {self._op_mode} / {self._test_mode}>"
         return f"<{self.__class__.__name__}: {self._op_mode}>"
@@ -72,7 +74,7 @@ class FCQmode:
         class OpMode:
             """Helper class to provide boolean properties for each allowed operation mode."""
 
-            def __init__(self, parent: "FCQmode") -> None:
+            def __init__(self, parent: "FDQmode") -> None:
                 self.parent = parent
 
             def __repr__(self) -> str:
@@ -90,7 +92,7 @@ class FCQmode:
         class TestMode:
             """Helper class to provide boolean properties for each allowed test mode."""
 
-            def __init__(self, parent: "FCQmode") -> None:
+            def __init__(self, parent: "FDQmode") -> None:
                 self.parent = parent
 
             def __repr__(self) -> str:
@@ -276,9 +278,9 @@ def collect_processing_infos(experiment: Any | None = None) -> dict:
     if experiment.is_slurm:
         data["slurm_job_id"] = experiment.slurm_job_id
 
-    if experiment.inargs.resume_path is not None:
+    if experiment.cfg.mode.get("resume_chpt_path") is not None:
         data["job_continuation"] = True
-        data["job_continuation_chpt_path"] = experiment.inargs.resume_path
+        data["job_continuation_chpt_path"] = experiment.cfg.mode.get("resume_chpt_path")
         data["start_epoch"] = experiment.start_epoch
     else:
         data["job_continuation"] = False
@@ -434,7 +436,7 @@ def add_graph(experiment: Any) -> None:
         elif isinstance(sample, dict):
             dummy_input = next(iter(sample.values()))
 
-        for model_name, _ in experiment.exp_def.models:
+        for model_name, _ in experiment.cfg.models.items():
             experiment.tb_writer.add_graph(experiment.models[model_name], dummy_input.to(experiment.device))
             experiment.tb_graph_stored = True
     except (StopIteration, AttributeError, KeyError, TypeError):
@@ -506,11 +508,11 @@ def save_tensorboard(
 
 def init_wandb(experiment: Any) -> bool:
     """Initialize weights and biases."""
-    if experiment.exp_def.store.wandb_project is None:
+    if experiment.cfg.store.wandb_project is None:
         raise ValueError("Wandb project name is not set. Please set it in the experiment definition.")
-    if experiment.exp_def.store.wandb_entity is None:
+    if experiment.cfg.store.wandb_entity is None:
         raise ValueError("Wandb entity name is not set. Please set it in the experiment definition.")
-    if experiment.exp_def.store.wandb_key is None:
+    if experiment.cfg.store.wandb_key is None:
         raise ValueError("Wandb key is not set. Please set it in the experiment definition.")
 
     slurm_str = ""
@@ -537,12 +539,12 @@ def init_wandb(experiment: Any) -> bool:
             wandb_name = f"test__{dt_string}__{experiment.experimentName[:30]}{slurm_str}"
 
     try:
-        wandb.login(key=experiment.exp_def.store.wandb_key)
+        wandb.login(key=experiment.cfg.store.wandb_key)
         wandb.init(
-            project=experiment.exp_def.store.wandb_project,
-            entity=experiment.exp_def.store.wandb_entity,
+            project=experiment.cfg.store.wandb_project,
+            entity=experiment.cfg.store.wandb_entity,
             name=wandb_name,
-            config=experiment.exp_def.to_dict(),
+            config=experiment.cfg,
         )
         experiment.wandb_initialized = True
         iprint(f"Init Wandb -  log path: {wandb.run.dir}")
@@ -688,3 +690,54 @@ def load_conf_file(path) -> dict:
     replace_tilde_with_abs_path(conf)
 
     return DictToObj(conf)
+
+
+def build_dummy_hydra_paths(config_dir: str, config_name: str) -> dict[str, Any]:
+    """Build a Hydra-like hydra_paths dict for tests.
+
+    Mirrors run_experiment.get_hydra_paths() without requiring Hydra runtime.
+    Returns a dict with keys: config_name, config_dir, root_config_path, parents.
+    Parents are collected recursively from the `defaults` entries, skipping those
+    containing "keys".
+    """
+    root_config_path = os.path.join(config_dir, f"{config_name}.yaml")
+    seen: set[str] = set()
+
+    def _collect(cfg_path: str) -> list[str]:
+        parents: list[str] = []
+        try:
+            cfg = OmegaConf.load(cfg_path)
+        except Exception:
+            return parents
+
+        defaults = cfg.get("defaults", []) or []
+        for item in defaults:
+            name = None
+            if isinstance(item, str):
+                name = item
+            elif isinstance(item, dict) and len(item) == 1:
+                k, v = next(iter(item.items()))
+                name = v if isinstance(v, str) else k
+
+            if not name or name == "_self_":
+                continue
+
+            if "keys" in name:
+                continue
+
+            parent_path = os.path.join(config_dir, f"{name}.yaml")
+            if os.path.exists(parent_path) and parent_path not in seen:
+                seen.add(parent_path)
+                parents.append(parent_path)
+                parents.extend(_collect(parent_path))
+
+        return parents
+
+    parents = _collect(root_config_path) if os.path.exists(root_config_path) else []
+
+    return {
+        "config_name": config_name,
+        "config_dir": config_dir,
+        "root_config_path": root_config_path,
+        "parents": parents,
+    }

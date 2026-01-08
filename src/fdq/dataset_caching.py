@@ -10,6 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 from fdq.misc import DictToObj
 from fdq.ui_functions import iprint, wprint, eprint
+from omegaconf import OmegaConf
 
 FDQ_CACHE_HASH_KEY = "fdq_data_hash"
 
@@ -170,7 +171,7 @@ class CachedDataset(Dataset):
 
 def hash_conf(conf):
     """Create a hash from a dictionary."""
-    dict_string = json.dumps(conf.to_dict(), sort_keys=True, ensure_ascii=True)
+    dict_string = json.dumps(OmegaConf.to_container(conf, resolve=True), sort_keys=True, ensure_ascii=True)
     return hashlib.md5(dict_string.encode()).hexdigest()
 
 
@@ -244,8 +245,8 @@ def get_loaders_to_cache(experiment, data):
     Returns:
         dict: Dictionary mapping split names to dataloaders or None if not needed
     """
-    is_train = experiment.inargs.train_model
-    is_test = experiment.inargs.test_model_auto or experiment.inargs.test_model_ia
+    is_train = experiment.cfg.mode.run_train
+    is_test = experiment.cfg.mode.run_test_auto or experiment.cfg.mode.run_test_interactive
     return {
         "train": data.train_data_loader if hasattr(data, "train_data_loader") and is_train else None,
         "val": data.val_data_loader if hasattr(data, "val_data_loader") and is_train else None,

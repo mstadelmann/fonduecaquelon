@@ -1,0 +1,5 @@
+globals:
+  author: "Marc"
+store:
+  wandb_key: "..."
+  

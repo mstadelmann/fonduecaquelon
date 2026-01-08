@@ -2,7 +2,7 @@ import json
 import os
 from datetime import datetime
 from typing import Any
-
+from pathlib import Path
 from fdq.ui_functions import iprint, wprint, getIntInput
 
 
@@ -19,31 +19,62 @@ def get_nb_exp_epochs(path: str) -> int:
 
 
 def find_experiment_result_dirs(experiment: Any) -> tuple[str, list[str]]:
-    """Finds and returns the experiment result directory and its subfolders for the given experiment."""
-    if experiment.is_slurm and experiment.inargs.train_model:
-        wprint("WARNING: This is a slurm TRAINING session - looking only for results in scratch_results_path!")
-        outbasepath: str | None = experiment.exp_def.get("slurm_cluster", {}).get("scratch_results_path")
+    """Finds and returns the experiment result directory and its subfolders for the given experiment.
 
-    elif experiment.is_slurm and not experiment.mode.op_mode.train:
-        wprint("WARNING: This is a slurm INFERENCE session - looking for results in regular path!")
-        outbasepath = experiment.exp_def.get("store", {}).get("results_path")
+    Possible cases:
+    1) Local session -> use default results path
+    2) Slurm FDQ_submit session -> use default results path
+    3) Slurm interactive session -> use default results path, if folder not found try scratch results path and print warning
 
+    Issue: We dont know if we are in a interactive or in a FDQ_submit Slurm session here!
+           The results are only copied back from scratch_results_path to results_path if FDQ_submit is used.
+    """
+
+    def _validate(outbasepath) -> tuple[str, list[str]]:
         if outbasepath[0] == "~":
             outbasepath = os.path.expanduser(outbasepath)
 
         elif outbasepath[0] != "/":
             raise ValueError("Error: The results path needs to be an absolute path!")
 
+        res_path: str | None = os.path.join(outbasepath, experiment.project, experiment.experimentName)
+
+        p = Path(res_path)
+        if p.exists() and p.is_dir():
+            subfolders: list[str] | None = [f.path.split("/")[-1] for f in os.scandir(res_path) if f.is_dir()]
+        else:
+            res_path = None
+            subfolders = None
+
+        return res_path, subfolders
+
+    scratch_results: str | None = experiment.cfg.get("slurm_cluster", {}).get("scratch_results_path")
+    default_results: str | None = experiment.cfg.get("store", {}).get("results_path")
+
+    if default_results is None:
+        raise ValueError("Error: No store.results_path specified in experiment file.")
+
+    experiment_res_path: str | None = None
+
+    if not experiment.is_slurm:
+        experiment_res_path, subfolders = _validate(default_results)
+
     else:
-        # regular local use
-        outbasepath = experiment.exp_def.get("store", {}).get("results_path")
-        outbasepath = os.path.expanduser(outbasepath)
+        if scratch_results is not None:
+            iprint("This is a slurm TEST session, trying to find results in 'slurm_cluster.scratch_results_path'")
+            wprint(
+                "Warning: results will NOT automatically be copied back from 'slurm_cluster.scratch_results_path' to 'store.results_path' when working interactively!"
+            )
+            experiment_res_path, subfolders = _validate(scratch_results)
 
-    if outbasepath is None:
-        raise ValueError("Error: No store path specified in experiment file.")
+        if experiment_res_path is None:
+            iprint("Trying to load model from 'store.results_path'...")
+            experiment_res_path, subfolders = _validate(default_results)
 
-    experiment_res_path: str = os.path.join(outbasepath, experiment.project, experiment.experimentName)
-    subfolders: list[str] = [f.path.split("/")[-1] for f in os.scandir(experiment_res_path) if f.is_dir()]
+    if experiment_res_path is None:
+        raise ValueError(
+            "Error: No valid store.results_path / slurm_cluster.scratch_results_path specified in experiment file."
+        )
 
     return experiment_res_path, subfolders
 
@@ -185,11 +216,11 @@ def _set_test_mode(experiment: Any) -> None:
     if experiment.mode.op_mode.unittest:
         experiment.mode.last()
 
-    elif experiment.inargs.test_model_auto:
-        if experiment.exp_def.test.test_model == "best_val":
+    elif experiment.cfg.mode.run_test_auto:
+        if experiment.cfg.test.test_model == "best_val":
             iprint("Auto test: Loading best validation model.")
             experiment.mode.best_val()
-        elif experiment.exp_def.test.test_model == "best_train":
+        elif experiment.cfg.test.test_model == "best_train":
             iprint("Auto test: Loading best train model.")
             experiment.mode.best_train()
         else:
@@ -213,12 +244,12 @@ def run_test(experiment: Any) -> None:
 
     _set_test_mode(experiment)
 
-    if experiment.exp_def.models is not None:
+    if experiment.cfg.get("models") is not None:
         experiment.load_trained_models()
 
-    experiment.copy_files_to_test_dir(experiment.experiment_file_path)
-    for p in experiment.exp_def.globals.parent_hierarchy:
-        experiment.copy_files_to_test_dir(file_path=p)
+    experiment.cp_to_test_dir(experiment.experiment_file_path)
+    for p in experiment.cfg.hydra_paths.parents:
+        experiment.cp_to_test_dir(file_path=p)
 
     save_test_info(
         experiment,

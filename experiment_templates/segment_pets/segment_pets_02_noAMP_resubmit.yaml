@@ -1,0 +1,49 @@
+defaults:
+  - segment_pets_01 # Define the base experiment to inherit from
+  - _self_
+
+globals:
+  project: Segment OXPET
+  author: Marc
+  comment: "Same experiment as segment_pets_01.yaml, but without AMP (automatic mixed precision). Additionally, we run more epochs to test automatic job resubmission when running on a Slurm cluster."
+
+mode:
+  run_train: true
+  run_test_interactive: false
+  run_test_auto: true
+  dump_model: false
+  run_inference: false
+  print_model_summary: false
+  resume_chpt_path: null
+
+train:
+  args:
+    use_AMP: false
+    epochs: 20
+
+store:
+  results_path: ~/data_ML/results
+
+slurm_cluster:
+  fdq_test_repo: false # Pull FDQ from https://test.pypi.org instead of the official PyPI - for debugging purposes only
+  fdq_version: 0.0.74
+  python_env_module: python/3.12.4
+  uv_env_module: uv/0.6.12
+  cuda_env_module: cuda/12.8.0
+  scratch_results_path: /scratch/fdq_results/
+  scratch_data_path: /scratch/fdq_data/
+  log_path: ~/dev/fonduecaquelon/slurm_log
+  job_time: 8
+  stop_grace_time: 3
+  cpus_per_task: 8
+  cpus_per_task_test: 8
+  gres: gpu:1
+  gres_test: gpu:1
+  mem: 120G
+  mem_test: 120G
+  partition: gpu
+  account: cai_ivs
+  auto_resubmit: true
+  world_size: 1
+  additional_pip_packages:
+    - chuchichaestli==0.2.14

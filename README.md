@@ -8,7 +8,7 @@ A *fonduecaquelon* is the heavy pot that keeps cheeses (e.g. 50% Gruyère and 50
 ## 🚀 Features
 
 * **Minimal Boilerplate:** Define only what matters — FDQ handles the rest.
-* **Flexible Experiment Configuration:** Use JSON config files with inheritance support for easy experiment management.
+* **Flexible Experiment Configuration:** Use YAML config files with Hydra composition and runtime overrides.
 * **Multi-Model Support:** Seamlessly manage multiple models, losses, and data loaders.
 * **Cluster Ready:** Submit jobs to SLURM clusters with ease using built-in utilities such as automatic job resubmission.
 * **Extensible:** Easily integrate custom models, data loaders, and training/testing loops.
@@ -18,11 +18,13 @@ A *fonduecaquelon* is the heavy pot that keeps cheeses (e.g. 50% Gruyère and 50
 * **High-Performance Inference:** TensorRT integration for GPU-accelerated inference with up to 10x speedup.
 * **Model Compilation:** JIT tracing/scripting and `torch.compile` support for optimized execution.
 * **Interactive Model Dumping:** Intuitive interface for exporting and optimizing trained models.
-* **Monitoring Tools:** Built-in support for [Weights & Biases](https://wandb.a) and [TensorBoard](https://www.tensorflow.org/tensorboard).
+* **Monitoring Tools:** Built-in support for [Weights & Biases](https://wandb.ai) and [TensorBoard](https://www.tensorflow.org/tensorboard).
 
 ## 🛠️ Installation
 
-Install the latest release from PyPI:
+If you simply want to submit jobs to a Slurm cluster, you don't have to install anything. Just download [fdq_submit.py](fdq_submit.py) and launch your job as documented [below](#slurm-cluster-execution).
+
+To run/debug experiments, install the latest release from PyPI:
 
 ```bash
 pip install fdq
@@ -42,35 +44,82 @@ cd fonduecaquelon
 pip install -e .[dev,gpu]
 ```
 
+
+
 ## 📖 Usage
+
+### Table of Contents
+
+- [Local Experiments](#local-experiments)
+- [SLURM Cluster Execution](#slurm-cluster-execution)
+- [Model Export and Optimization](#model-export-and-optimization)
+- [Additional CLI Options](#additional-cli-options)
 
 ### Local Experiments
 
-All experiment parameters are defined in a [config file](experiment_templates/mnist/mnist_class_dense.json). Config files can inherit from a [parent file](experiment_templates/mnist/mnist_parent.json) for easy reuse and organization.
+All experiment parameters are defined in a [config file](experiment_templates/mnist/mnist_class_dense.yaml). Config files can inherit from a [parent / defaults file](experiment_templates/mnist/mnist_parent.yaml) for easy reuse and organization.
 
 Run an experiment locally:
 
 ```bash
-fdq <path_to_config_file.json>
+fdq --config-path <path_to_config_files> --config-name <name_of_config_file>
+# e.g.
+fdq --config-path /home/marc/dev/fonduecaquelon/experiment_templates/mnist --config-name mnist_class_dense
 ```
 
 ### SLURM Cluster Execution
 
-To run experiments on a SLURM cluster, add a `slurm_cluster` section to your config. See [this example](experiment_templates/segment_pets/segment_pets_01.json).
+Run experiments on SLURM by adding a `slurm_cluster` section to your config. See [segment_pets_01.yaml](experiment_templates/segment_pets/segment_pets_01.yaml).
+
+Important: When using chained config files, define the `mode`, `slurm_cluster`, and `store` sections in the child config (the one you launch).
+
+Minimal example (YAML):
+
+```yaml
+slurm_cluster:
+  fdq_test_repo: false
+  fdq_version: 0.0.74
+  python_env_module: "python/3.12.4"
+  uv_env_module: "uv/0.6.12"
+  cuda_env_module: "cuda/12.8.0"
+  scratch_results_path: "/scratch/fdq_results/"
+  scratch_data_path: "/scratch/fdq_data/"
+  log_path: "~/dev/fonduecaquelon/slurm_log"
+  job_time: 15
+  stop_grace_time: 5
+  cpus_per_task: 8
+  gres: "gpu:1"
+  mem: "20G"
+  partition: "gpu"
+  account: "cai_ivs"
+  auto_resubmit: true
+```
+
+When submitting jobs to a Slurm cluster, the only supported modes are:
+```yaml
+mode:
+  run_train: true|false
+  run_test_auto: true|false
+```
+The remaining actions have to be run in an interactive session.
 
 Submit your experiment:
 
 ```bash
-python <path_to>/fdq_submit.py <path_to_config_file.json>
+python /path/to/fdq_submit.py /path/to/config.yaml
 ```
+
+Notes:
+- SLURM logs are written to `slurm_log/`.
+- Results are organized under the configured `store.results_path` (when using `fdq_submit.py` on Slurm cluster, to `scratch_results_path`, which are then automatically copied back to `store.results_path` at job termination).
 
 ### Model Export and Optimization
 
 After training, export and optimize models for deployment:
 
 ```bash
-# Interactive model dumping with export options
-fdq <path_to_config_file.json> -nt -d
+# Interactive model dumping with export options (Hydra-style)
+fdq --config-path <path_to_config_dir> --config-name <config_basename> -nt -d
 ```
 
 This launches an interactive interface where you can:
@@ -82,32 +131,32 @@ This launches an interactive interface where you can:
 
 ### Additional CLI Options
 
-FDQ provides multiple command-line options:
+You can overwrite all configurations at launch time (Hydra-style). This is mostly interesting to change the operations that you want FDQ to run:
 
 ```bash
-# Run training (default)
-fdq <config_file.json>
+# Run default (as defined in the mode section of the config file)
+fdq --config-path <path_to_config_dir> --config-name <config_basename>
 
 # Skip training
-fdq <config_file.json> -nt
+fdq --config-path <path_to_config_dir> --config-name <config_basename> mode.run_train=false
 
 # Train and test automatically
-fdq <config_file.json> -ta
+fdq --config-path <path_to_config_dir> --config-name <config_basename> mode.run_train=false mode.run_test_auto=true 
 
 # Interactive testing
-fdq <config_file.json> -nt -ti
+fdq --config-path <path_to_config_dir> --config-name <config_basename> mode.run_train=false mode.run_test_interactive=true 
 
 # Export and optimize models
-fdq <config_file.json> -nt -d
+fdq --config-path <path_to_config_dir> --config-name <config_basename> mode.run_train=false mode.dump_model=true 
 
 # Run inference tests
-fdq <config_file.json> -nt -i
+fdq --config-path <path_to_config_dir> --config-name <config_basename> mode.run_train=false mode.run_inference=true 
 
 # Print model architecture before training
-fdq <config_file.json> -p
+fdq --config-path <path_to_config_dir> --config-name <config_basename> mode.run_train=true mode.print_model_summary=true 
 
 # Resume from checkpoint
-fdq <config_file.json> -rp /path/to/checkpoint
+fdq --config-path <path_to_config_dir> --config-name <config_basename> mode.run_train=true mode.resume_chpt_path=</path/to/checkpoint>
 ```
 
 ## 🚄 Model Export & Deployment
@@ -141,18 +190,30 @@ FDQ offers full model export and optimization support for deployment:
 
 ## ⚙️ Configuration Overview
 
-FDQ uses JSON config files to define experiments. These specify models, data loaders, training/testing scripts, and cluster settings.
+FDQ uses YAML config files (with Hydra) to define experiments. These specify models, data loaders, training/testing scripts, and cluster settings.
+
+### Mode
+
+You can either define in the config file what you want FDQ to do (train, test, resume training, dump, etc.), or you can specify/overwrite these parameters when launching the experiment (Hydra-style).
+```yaml
+mode:
+  run_train: true
+  run_test_interactive: false
+  run_test_auto: true
+  dump_model: false
+  run_inference: false
+  print_model_summary: false
+  resume_chpt_path: null
+```
 
 ### Models
 
 Models are defined as dictionaries. You can use pre-installed ones (e.g. [Chuchichaestli](https://github.com/CAIIVS/chuchichaestli)) or your own. Example:
 
-```json
-"models": {
-    "ccUNET": {
-        "class_name": "chuchichaestli.models.unet.unet.UNet"
-    }
-}
+```yaml
+models:
+  ccUNET:
+    class_name: chuchichaestli.models.unet.unet.UNet
 ```
 
 Access models in training via `experiment.models["ccUNET"]`. The same structure applies to losses and data loaders.
@@ -188,7 +249,7 @@ def fdq_train(experiment: fdqExperiment):
 Within it, you can access components:
 
 ```python
-nb_epochs = experiment.exp_def.train.args.epochs
+nb_epochs = experiment.cfg.train.args.epochs
 data_loader = experiment.data["OXPET"].train_data_loader
 model = experiment.models["ccUNET"]
 ```
@@ -201,7 +262,7 @@ Minimal pattern:
 
 ```python
 def fdq_train(experiment: fdqExperiment):
-    nb_epochs = experiment.exp_def.train.args.epochs
+    nb_epochs = experiment.cfg.train.args.epochs
     train_loader = experiment.data["OXPET"].train_data_loader
 
     for epoch in range(nb_epochs):
@@ -231,7 +292,7 @@ See [oxpets\_test.py](experiment_templates/segment_pets/oxpets_test.py) for refe
 
 ## 💾 Dataset Caching
 
-FDQ includes a dataset caching system to speed up training by caching preprocessed data to disk and loading it into RAM. See [segment\_pets\_05\_cached.json](experiment_templates/segment_pets/segment_pets_05_cached.json) for an example.
+FDQ includes a dataset caching system to speed up training by caching preprocessed data to disk and loading it into RAM. See [segment_pets_06_cached.yaml](experiment_templates/segment_pets/segment_pets_06_cached.yaml) for an example.
 
 ### How It Works
 
@@ -276,14 +337,11 @@ def augment(sample, transformers=None):
 
 Reference in your config:
 
-```json
-"data": {
-    "OXPET": {
-        "caching": {
-            "augmentation_script": "experiment_templates.segment_pets.oxpets_augmentation"
-        }
-    }
-}
+```yaml
+data:
+    OXPET:
+        caching:
+            augmentation_script: experiment_templates.segment_pets.oxpets_augmentation
 ```
 
 ## 🧮 Mixed precision
@@ -292,10 +350,10 @@ Leveraging torch.amp for mixed precision training can dramatically accelerate yo
 
 Observed speedup on H200sxm GPUs:
 
-| Experiment                                                                               | Time per epoch \[s] |
-| ---------------------------------------------------------------------------------------- | ------------------- |
-| [segment pets with AMP](experiment_templates/segment_pets/segment_pets_01.json)          | 100                 |
-| [segment pets without AMP](experiment_templates/segment_pets/segment_pets_01_noAMP.json) | 170                 |
+| Experiment                                                                                        | Time per epoch \[s] |
+| ------------------------------------------------------------------------------------------------- | ------------------- |
+| [segment pets with AMP](experiment_templates/segment_pets/segment_pets_01.yaml)                   | 100                 |
+| [segment pets without AMP](experiment_templates/segment_pets/segment_pets_02_noAMP_resubmit.yaml) | 170                 |
 
 ## 🖧 Distributed Training
 
@@ -309,17 +367,17 @@ To run with [PyTorch DDP](https://docs.pytorch.org/docs/stable/generated/torch.n
 }
 ```
 
-See [segment\_pets\_03\_distributed\_w2.json](experiment_templates/segment_pets/segment_pets_03_distributed_w2.json).
+See [segment_pets_04_distributed_w2.yaml](experiment_templates/segment_pets/segment_pets_04_distributed_w2.yaml).
 
 Use the same number of GPUs as your world size. DDP requires more CPU cores and memory, since multiple data loaders run in parallel. It’s most beneficial for large models, as overhead is significant.
 
 Observed speedup on H200sxm GPUs:
 
-| Experiment                                                                               | Time per ep. w/o AMP \[s] | with AMP \[s] | 
+| Experiment                                                                               | Time per ep. w/o AMP \[s] | with AMP \[s] |
 | ---------------------------------------------------------------------------------------- | ------------------------- | ------------- |
-| [segment pets default](experiment_templates/segment_pets/segment_pets_01.json)           | 170                       | 100           |
-| [DDP with 2 GPUs](experiment_templates/segment_pets/segment_pets_03_distributed_w2.json) | 100                       | 65           |
-| [DDP with 4 GPUs](experiment_templates/segment_pets/segment_pets_04_distributed_w4.json) | 60                        | 45            |
+| [segment pets default](experiment_templates/segment_pets/segment_pets_01.yaml)           | 170                       | 100           |
+| [DDP with 2 GPUs](experiment_templates/segment_pets/segment_pets_04_distributed_w2.yaml) | 100                       | 65            |
+| [DDP with 4 GPUs](experiment_templates/segment_pets/segment_pets_05_distributed_w4.yaml) | 60                        | 45            |
 
 By toggling mixed precision, you can directly observe how more intensive workloads see greater speedups when using DDP.
 
@@ -327,17 +385,15 @@ By toggling mixed precision, you can directly observe how more intensive workloa
 
 If your experiment requires extra packages, specify them in `additional_pip_packages`. FDQ installs them before execution.
 
-Example:
+Example (YAML):
 
-```json
-"slurm_cluster": {
-    "fdq_version": "0.0.73",
-    "...": "...",
-    "additional_pip_packages": [
-        "monai==1.4.0",
-        "prettytable"
-    ]
-}
+```yaml
+slurm_cluster:
+  fdq_version: 0.0.74
+  # ... other settings ...
+  additional_pip_packages:
+    - monai==1.4.0
+    - prettytable
 ```
 
 ## 🐛 Debugging
@@ -366,7 +422,10 @@ pip install -e .
             "debugJustMyCode": false,
             "program": "${workspaceFolder}/src/fdq/run_experiment.py",
             "console": "integratedTerminal",
-            "args": ["PATH_TO/experiment.json"],
+            "args": [
+                "--config-path", "${workspaceFolder}/experiment_templates/segment_pets",
+                "--config-name", "segment_pets_01"
+            ],
             "cwd": "${workspaceFolder}"
         }
     ]
@@ -377,7 +436,7 @@ pip install -e .
 
 ## 📝 Tips
 
-* **Config Inheritance:** Use the `parent` key to inherit from another config and reduce duplication.
+* **Config Inheritance:** Use Hydra’s `defaults` list in your YAML configs to include/extend base configs and reduce duplication.
 * **Multiple Models/Losses:** Add multiple models and losses to config dictionaries as needed.
 * **Cluster Submission:** `fdq_submit.py` handles SLURM job script generation, submission, environment setup, and result copying.
 * **Model Export:** Use `-d` or `--dump` for interactive model export and optimization.
@@ -396,3 +455,7 @@ Contributions are welcome! Please open issues or pull requests on [GitHub](https
 <p align="center">
   <img src="assets/fdq_logo.jpg" alt="FDQ Logo" width="300"/>
 </p>
+
+## 🧾 Changelog
+
+- 0.0.74: Configuration files switched from JSON to YAML, using Hydra in the backend for composition and runtime overrides.

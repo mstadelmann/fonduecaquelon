@@ -1,0 +1,65 @@
+defaults:
+  - mnist_parent
+  - wandb_keys
+  - _self_
+
+globals:
+  project: "MNIST classifier"
+  author: "Marc"
+  set_random_seed: 33
+
+mode:
+  run_train: true
+  run_test_interactive: false
+  run_test_auto: true
+  dump_model: false
+  run_inference: false
+  print_model_summary: false
+  resume_chpt_path: null
+
+data:
+  MNIST:
+    processor: "~/dev/fonduecaquelon/experiment_templates/mnist/mnist_preparator.py"
+    args:
+      base_path: "~/data_ML/mnist_from_torchvision/"
+      subset_train: 0.2
+      subset_test: 0.2
+      val_ratio: 0.2
+      pin_memory: true
+      num_workers: 4
+      train_batch_size: 32
+      val_batch_size: 32
+      test_batch_size: 1
+      shuffle_train: true
+      shuffle_val: false
+      shuffle_test: false
+      
+store:
+  results_path: "~/data_ML/results"
+  img_exp_nb: 4
+  save_last_model: true
+  save_best_val_model: true
+  save_best_train_model: true
+  checkpoint_frequency: 2
+  use_tensorboard: true
+  use_wandb: true
+  wandb_project: "mnist_classifier"
+  wandb_entity: "stmd"
+
+slurm_cluster:
+  fdq_test_repo: false
+  fdq_version: 0.0.74
+  python_env_module: "python/3.12.4"
+  uv_env_module: "uv/0.6.12"
+  cuda_env_module: "cuda/12.8.0"
+  scratch_results_path: "/scratch/fdq_results/"
+  scratch_data_path: null
+  log_path: "~/dev/fonduecaquelon/slurm_log"
+  job_time: 15
+  stop_grace_time: 5
+  cpus_per_task: 8
+  gres: "gpu:1"
+  mem: "20G"
+  partition: "gpu"
+  account: "cai_ivs"
+  auto_resubmit: true
