@@ -547,7 +547,10 @@ class fdqExperiment:
             )
 
         if self.useAMP:
+            iprint("Using Automatic Mixed Precision (AMP) for training.")
             self.scaler = torch.amp.GradScaler(device=self.device, enabled=True)
+        else:
+            iprint("NOT using Automatic Mixed Precision (AMP) for training.")
 
         if self.cfg.mode.resume_chpt_path is not None:
             iprint("-----------------------------------------------------------")
