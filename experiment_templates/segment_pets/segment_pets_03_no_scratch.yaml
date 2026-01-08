@@ -5,7 +5,7 @@ defaults:
 globals:
   project: Segment OXPET
   author: Marc
-  comment: "Same experiment as segment_pets_01.yaml, but without initially coping datasets to scratch. This has only an influence if dealing with heavy datasets and un-cached dataloaders (i.e. if the dataloader becomes the bottleneck because it reads from disk every epoch)."
+  comment: "Same experiment as segment_pets_01.yaml, but without initially copying datasets to scratch. This has only an influence if dealing with heavy datasets and un-cached dataloaders (i.e. if the dataloader becomes the bottleneck because it reads from disk every epoch)."
 
 mode:
   run_train: true
@@ -20,8 +20,8 @@ store:
   results_path: ~/data_ML/results
     
 slurm_cluster:
-  fdq_test_repo: true
-  fdq_version: 0.0.73.dev15
+  fdq_test_repo: false
+  fdq_version: 0.0.74
   python_env_module: python/3.12.4
   uv_env_module: uv/0.6.12
   cuda_env_module: cuda/12.8.0

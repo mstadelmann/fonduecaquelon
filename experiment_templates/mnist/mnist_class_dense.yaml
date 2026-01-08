@@ -42,18 +42,18 @@ store:
   save_best_train_model: true
   checkpoint_frequency: 2
   use_tensorboard: true
-  use_wandb: false
-  wandb_project: "mnist_test"
+  use_wandb: true
+  wandb_project: "mnist_classifier"
   wandb_entity: "stmd"
 
 slurm_cluster:
   fdq_test_repo: false
-  fdq_version: 0.0.73.dev15
+  fdq_version: 0.0.74
   python_env_module: "python/3.12.4"
   uv_env_module: "uv/0.6.12"
   cuda_env_module: "cuda/12.8.0"
   scratch_results_path: "/scratch/fdq_results/"
-  scratch_data_path: null #"/scratch/fdq_data/"
+  scratch_data_path: null
   log_path: "~/dev/fonduecaquelon/slurm_log"
   job_time: 15
   stop_grace_time: 5

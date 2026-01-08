@@ -21,21 +21,6 @@ store:
 
 data:
   OXPET:
-    processor: ~/dev/fonduecaquelon/experiment_templates/segment_pets/oxfordpet_preparator.py
-    args:
-      base_path: ~/data_ML/oxford_pets/
-      subset_train: 1.0
-      subset_val: 1.0
-      subset_test: 1.0
-      pin_memory: true
-      num_workers: 4
-      prefetch_factor: 2
-      train_batch_size: 16
-      val_batch_size: 16
-      test_batch_size: 1
-      shuffle_train: true
-      shuffle_val: false
-      shuffle_test: false
     caching:
       enabled: true
       cache_dir: /scratch/fdq_cache/
@@ -47,15 +32,15 @@ data:
       compress_cache: true
 
 slurm_cluster:
-  fdq_test_repo: true
-  fdq_version: 0.0.73.dev15
+  fdq_test_repo: false
+  fdq_version: 0.0.74
   python_env_module: python/3.12.4
   uv_env_module: uv/0.6.12
   cuda_env_module: cuda/12.8.0
   scratch_results_path: /scratch/fdq_results/
   scratch_data_path: /scratch/fdq_data/
   log_path: ~/dev/fonduecaquelon/slurm_log
-  job_time: 8
+  job_time: 15
   stop_grace_time: 3
   cpus_per_task: 8
   cpus_per_task_test: 8

@@ -21,8 +21,8 @@ store:
     
 slurm_cluster:
   comment: "Assign the same number of GPUs to your job as your world size. Also, this will require more CPU cores and more memory, as multiple dataloaders will be launched."
-  fdq_test_repo: true
-  fdq_version: 0.0.73.dev15
+  fdq_test_repo: false
+  fdq_version: 0.0.74
   python_env_module: python/3.12.4
   uv_env_module: uv/0.6.12
   cuda_env_module: cuda/12.8.0

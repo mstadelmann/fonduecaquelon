@@ -18,7 +18,7 @@ submit_job $mnist_path mnist_class_dense
 
 oxford_pets_path="/cluster/home/stmd/dev/fonduecaquelon/experiment_templates/segment_pets"
 submit_job $oxford_pets_path segment_pets_01
-submit_job $oxford_pets_path segment_pets_02_noAMP
+submit_job $oxford_pets_path segment_pets_02_noAMP_resubmit
 submit_job $oxford_pets_path segment_pets_03_no_scratch
 
 

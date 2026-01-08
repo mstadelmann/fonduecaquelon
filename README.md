@@ -95,6 +95,14 @@ slurm_cluster:
   auto_resubmit: true
 ```
 
+When submitting jobs to a Slurm cluster, the only supported modes are:
+```yaml
+mode:
+  run_train: true|false
+  run_test_auto: true|false
+```
+The remaining actions have to be run in an interactive session.
+
 Submit your experiment:
 
 ```bash
@@ -342,10 +350,10 @@ Leveraging torch.amp for mixed precision training can dramatically accelerate yo
 
 Observed speedup on H200sxm GPUs:
 
-| Experiment                                                                               | Time per epoch \[s] |
-| ---------------------------------------------------------------------------------------- | ------------------- |
-| [segment pets with AMP](experiment_templates/segment_pets/segment_pets_01.yaml)          | 100                 |
-| [segment pets without AMP](experiment_templates/segment_pets/segment_pets_02_noAMP.yaml) | 170                 |
+| Experiment                                                                                        | Time per epoch \[s] |
+| ------------------------------------------------------------------------------------------------- | ------------------- |
+| [segment pets with AMP](experiment_templates/segment_pets/segment_pets_01.yaml)                   | 100                 |
+| [segment pets without AMP](experiment_templates/segment_pets/segment_pets_02_noAMP_resubmit.yaml) | 170                 |
 
 ## 🖧 Distributed Training
 
