@@ -6,7 +6,7 @@ can be instantiated without errors.
 
 import os
 import unittest
-from omegaconf import DictConfig, OmegaConf, open_dict
+from omegaconf import DictConfig, open_dict
 from hydra import compose
 from hydra import initialize_config_dir
 from fdq.experiment import fdqExperiment

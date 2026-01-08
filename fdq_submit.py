@@ -400,6 +400,7 @@ def get_default_config(slurm_conf: Any, mode_config: Any) -> dict[str, Any]:
 
     Args:
         slurm_conf (dict): SLURM configuration dictionary.
+        mode_config (dict): Mode configuration dictionary controlling run and resume behavior.
 
     Returns:
         dict: Job configuration dictionary with updated values.

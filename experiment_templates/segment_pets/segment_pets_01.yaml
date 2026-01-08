@@ -3,7 +3,7 @@ defaults:
   - wandb_keys
   # - segment_pets_00_large
   - _self_
-  # - comment: change the parent to segment_pets_01_large / segment_pets_00_small depending on what you want to test.
+  # comment: change the parent to segment_pets_01_large / segment_pets_00_small depending on what you want to test.
 
 globals:
   project: Segment OXPET
