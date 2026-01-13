@@ -1001,7 +1001,7 @@ class fdqExperiment:
 
     def prepare_transformers(self) -> None:
         """Prepare transformers for the experiment."""
-        if self.cfg.transforms is None:
+        if self.cfg.get("transforms") is None:
             return
 
         try:
