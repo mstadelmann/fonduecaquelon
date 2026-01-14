@@ -78,7 +78,7 @@ Minimal example (YAML):
 ```yaml
 slurm_cluster:
   fdq_test_repo: false
-  fdq_version: 0.0.74
+  fdq_version: 0.0.75
   python_env_module: "python/3.12.4"
   uv_env_module: "uv/0.6.12"
   cuda_env_module: "cuda/12.8.0"
@@ -389,7 +389,7 @@ Example (YAML):
 
 ```yaml
 slurm_cluster:
-  fdq_version: 0.0.74
+  fdq_version: 0.0.75
   # ... other settings ...
   additional_pip_packages:
     - monai==1.4.0

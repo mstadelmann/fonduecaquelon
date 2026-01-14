@@ -536,7 +536,7 @@ class fdqExperiment:
         self.setupData()
         self.trainer = self.import_class(file_path=self.cfg.train.path)
         self.createLosses()
-        if self.cfg.models is not None:
+        if self.cfg.get("models") is not None:
             self.init_models()
             self.print_nb_weights()
             self.createOptimizer()
@@ -552,7 +552,7 @@ class fdqExperiment:
         else:
             iprint("NOT using Automatic Mixed Precision (AMP) for training.")
 
-        if self.cfg.mode.resume_chpt_path is not None:
+        if self.cfg.mode.get("resume_chpt_path") is not None:
             iprint("-----------------------------------------------------------")
             iprint(f"Loading checkpoint: {self.cfg.mode.resume_chpt_path}")
 
@@ -594,7 +594,7 @@ class fdqExperiment:
                 # no optimizer defined for this model
                 self.lr_schedulers[model_name] = None
                 continue
-            if margs.lr_scheduler is None:
+            if margs.get("lr_scheduler") is None:
                 self.lr_schedulers[model_name] = None
                 continue
 
@@ -619,7 +619,7 @@ class fdqExperiment:
                 cls = self.instantiate_class(class_path=largs.class_name)
             else:
                 raise ValueError(f"Error, loss {loss_name} must have a path or class name defined.")
-            if largs.args is not None:
+            if largs.get("args") is not None:
                 self.losses[loss_name] = cls(**largs.args)
             else:
                 self.losses[loss_name] = cls()
@@ -1001,7 +1001,7 @@ class fdqExperiment:
 
     def prepare_transformers(self) -> None:
         """Prepare transformers for the experiment."""
-        if self.cfg.transforms is None:
+        if self.cfg.get("transforms") is None:
             return
 
         try:
