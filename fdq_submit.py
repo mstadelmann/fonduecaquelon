@@ -625,9 +625,7 @@ def create_submit_file(job_config: dict[str, Any], slurm_conf: Any, submit_path:
             template_content = template_content.replace("#additional_pip_packages#", packages_cmd)
 
         else:
-            raise FDQSubmitError(
-                f"additional_pip_packages must be a list of strings, got {type(add_packages)}"
-            )
+            raise FDQSubmitError(f"additional_pip_packages must be a list of strings, got {type(add_packages)}")
 
         # Ensure submit directory exists
         submit_dir = os.path.dirname(submit_path)
