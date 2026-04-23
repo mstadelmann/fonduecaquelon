@@ -3,13 +3,17 @@
 import sys
 import os
 import re
-import yaml
 import copy
 import getpass
 import subprocess
 from datetime import datetime
 from typing import Any
 from pathlib import Path
+
+try:
+    import yaml
+except ModuleNotFoundError:
+    yaml = None
 
 
 class FDQSubmitError(Exception):
@@ -370,11 +374,32 @@ def recursive_dict_update(d_parent: dict, d_child: dict) -> dict:
     return result
 
 
-def load_conf_file(path: str) -> dict:
-    """Load an experiment configuration file with recursive parent merging.
+def _get_default_config_name(default_item: Any) -> str | None:
+    """Return the config name from a Hydra defaults entry."""
+    if isinstance(default_item, str):
+        return default_item
+    if isinstance(default_item, dict) and len(default_item) == 1:
+        key, value = next(iter(default_item.items()))
+        return value if isinstance(value, str) else key
+    return None
+
+
+def _resolve_default_path(config_dir: Path, default_name: str) -> Path:
+    """Resolve a defaults entry to a YAML path relative to the current config."""
+    default_path = Path(default_name).expanduser()
+    if not default_path.is_absolute():
+        default_path = config_dir / default_path
+    if default_path.suffix not in {".yaml", ".yml"}:
+        default_path = default_path.with_suffix(".yaml")
+    return default_path
+
+
+def load_conf_file(path: str, _seen: set[Path] | None = None) -> dict:
+    """Load an experiment YAML file with recursive Hydra defaults merging.
 
     Args:
         path: Path to the experiment configuration YAML file
+        _seen: Internal recursion guard for inherited defaults
 
     Returns:
         The merged configuration as a dictionary
@@ -382,17 +407,46 @@ def load_conf_file(path: str) -> dict:
     Raises:
         FDQSubmitError: If configuration cannot be loaded or is invalid
     """
+    if _seen is None:
+        _seen = set()
+
+    if yaml is None:
+        raise FDQSubmitError(
+            "PyYAML is required to load experiment YAML files. Install it with: python -m pip install pyyaml"
+        )
+
     try:
-        p = Path(path)
+        p = Path(path).expanduser().resolve()
+        if p in _seen:
+            raise ValueError(f"Recursive defaults reference detected for {p}")
+        _seen.add(p)
+
         with p.open("r", encoding="utf-8") as f:
             conf = yaml.safe_load(f)
         if not isinstance(conf, dict):
             raise ValueError("YAML root must be a mapping/dict")
 
-        return conf
+        defaults = conf.get("defaults", []) or []
+        merged_conf: dict[str, Any] = {}
+        for default_item in defaults:
+            default_name = _get_default_config_name(default_item)
+            if not default_name or default_name == "_self_":
+                continue
+
+            default_path = _resolve_default_path(p.parent, default_name)
+            if not default_path.exists():
+                raise ValueError(f"Defaults entry '{default_name}' not found at {default_path}")
+
+            parent_conf = load_conf_file(str(default_path), _seen)
+            merged_conf = recursive_dict_update(merged_conf, parent_conf)
+
+        conf_without_defaults = {key: value for key, value in conf.items() if key != "defaults"}
+        return recursive_dict_update(merged_conf, conf_without_defaults)
 
     except Exception as exc:
         raise FDQSubmitError(f"Failed to load configuration from {path}: {exc}") from exc
+    finally:
+        _seen.discard(Path(path).expanduser().resolve())
 
 
 def get_default_config(slurm_conf: Any, mode_config: Any) -> dict[str, Any]:
@@ -561,9 +615,6 @@ def create_submit_file(job_config: dict[str, Any], slurm_conf: Any, submit_path:
             nodelist_string = f"#SBATCH --nodelist={job_config['nodelist']}"
         template_content = template_content.replace(nodelist_placeholder, nodelist_string)
 
-        # Clean up double slashes in paths
-        template_content = template_content.replace("//", "/")
-
         # Handle additional pip packages
         add_packages = slurm_conf.get("additional_pip_packages")
         if add_packages is None:
@@ -575,7 +626,7 @@ def create_submit_file(job_config: dict[str, Any], slurm_conf: Any, submit_path:
 
         else:
             raise FDQSubmitError(
-                f"additional_pip_packages must be a list of strings, got {type(slurm_conf.additional_pip_packages)}"
+                f"additional_pip_packages must be a list of strings, got {type(add_packages)}"
             )
 
         # Ensure submit directory exists

@@ -203,11 +203,10 @@ class fdqExperiment:
     def valLoss(self, value: float) -> None:
         self._valLoss = value
         self.valLoss_per_ep.append(value)
-        if not math.isnan(value):
-            self.bestValLoss = min(self.bestValLoss, self._valLoss)
-            if self.bestValLoss == value:
-                self.new_best_val_loss = True
-                self.new_best_val_loss_ep_id = self.current_epoch
+        if not math.isnan(value) and value < self.bestValLoss:
+            self.bestValLoss = value
+            self.new_best_val_loss = True
+            self.new_best_val_loss_ep_id = self.current_epoch
 
     @property
     def trainLoss(self) -> float:
@@ -217,11 +216,10 @@ class fdqExperiment:
     def trainLoss(self, value: float) -> None:
         self._trainLoss = value
         self.trainLoss_per_ep.append(value)
-        if not math.isnan(value):
-            self.bestTrainLoss = min(self.bestTrainLoss, self._trainLoss)
-            if self.bestTrainLoss == value:
-                self.new_best_train_loss = True
-                self.new_best_train_loss_ep_id = self.current_epoch
+        if not math.isnan(value) and value < self.bestTrainLoss:
+            self.bestTrainLoss = value
+            self.new_best_train_loss = True
+            self.new_best_train_loss_ep_id = self.current_epoch
 
     def is_running_under_tests(self) -> bool:
         if os.getenv("FDQ_UNITTEST") == "1":
@@ -504,11 +502,7 @@ class fdqExperiment:
                 torch.save(model, best_model_path)
 
             # save best model according to train loss
-            if (
-                self.current_epoch == self.start_epoch
-                or self.cfg.store.get("save_best_train_model", False)
-                and self.new_best_train_loss
-            ):
+            if self.cfg.store.get("save_best_train_model", False) and self.new_best_train_loss:
                 best_train_model_path = os.path.join(
                     self.results_dir,
                     f"best_train_{model_name}_e{self.current_epoch}.fdqm",
@@ -768,7 +762,7 @@ class fdqExperiment:
         e_stop_train = self.cfg.train.args.early_stop_train_loss
 
         # early stop NaN ?
-        if e_stop_nan is not None:
+        if e_stop_nan is not None and len(self.trainLoss_per_ep) >= e_stop_nan:
             if all(math.isnan(x) for x in self.trainLoss_per_ep[-e_stop_nan:]):
                 self.early_stop_detected = True
                 self.early_stop_reason = "NaN_train_Loss"
@@ -795,7 +789,7 @@ class fdqExperiment:
                 return True
 
         # early stop train loss?
-        elif e_stop_train is not None and len(self.trainLoss_per_ep) >= e_stop_train:
+        if e_stop_train is not None and len(self.trainLoss_per_ep) >= e_stop_train:
             if min(self.trainLoss_per_ep[-e_stop_train:]) != self.bestTrainLoss:
                 wprint(
                     "\n###############################\n"
@@ -828,6 +822,8 @@ class fdqExperiment:
         else:
             self.current_epoch = epoch
 
+        self.new_best_train_loss = False
+        self.new_best_val_loss = False
         self.current_ep_start_time = datetime.now()
 
         iprint(f"\nEpoch: {self.current_epoch + 1} / {self.nb_epochs}")

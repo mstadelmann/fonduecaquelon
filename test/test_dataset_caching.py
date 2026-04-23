@@ -260,6 +260,23 @@ class TestDatasetCaching(unittest.TestCase):
         with self.assertRaises(IndexError):
             _ = cached_dataset[len(samples)]
 
+    def test_cached_dataset_loads_scalar_arrays(self):
+        """Scalar numpy arrays, such as squeezed labels, can be loaded from HDF5."""
+        samples = [(np.random.randn(3, 32, 32), np.array(1))]
+
+        cache_file = os.path.join(self.temp_dir, "test_scalar_cache.h5")
+        _save_samples_to_hdf5(samples, cache_file, "test_hash")
+
+        data_source = DictToObj({"caching": DictToObj({"nondeterministic_transforms": DictToObj({"processor": None})})})
+        experiment = MockExperiment(cfg=self.cfg)
+
+        cached_dataset = CachedDataset(cache_file, data_source, experiment)
+        _, label = cached_dataset[0]
+
+        self.assertIsInstance(label, torch.Tensor)
+        self.assertEqual(label.dim(), 0)
+        self.assertEqual(label.item(), 1)
+
     def test_cache_dataloader(self):
         """Test caching a DataLoader."""
         # Create test dataset

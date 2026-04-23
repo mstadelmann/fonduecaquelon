@@ -6,7 +6,7 @@
 
 submit_job() {
     root_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    python3 $root_path/fdq_submit.py $root_path/$1
+    python3 "$root_path/fdq_submit.py" "$root_path/$1"
 }
 
 submit_job experiment_templates/mnist/mnist_class_dense.yaml

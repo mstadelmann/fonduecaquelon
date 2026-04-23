@@ -15,6 +15,14 @@ from omegaconf import OmegaConf
 FDQ_CACHE_HASH_KEY = "fdq_data_hash"
 
 
+def _read_hdf5_dataset_as_tensor(dataset):
+    """Read a complete HDF5 dataset, including scalar datasets, as a tensor."""
+    value = dataset[()]
+    if isinstance(value, np.ndarray):
+        return torch.from_numpy(value)
+    return torch.as_tensor(value)
+
+
 def get_file_size_mb(file_path):
     """Get file size in MB.
 
@@ -108,8 +116,7 @@ class CachedDataset(Dataset):
                 for key in group.keys():
                     if key.endswith("_data"):
                         original_key = key[:-5]  # Remove '_data' suffix
-                        value = group[key][:]
-                        sample[original_key] = torch.from_numpy(value)
+                        sample[original_key] = _read_hdf5_dataset_as_tensor(group[key])
 
                 for attr_name in group.attrs.keys():
                     if attr_name != "type":
@@ -121,8 +128,7 @@ class CachedDataset(Dataset):
                 num_items = group.attrs.get("num_items", 0)
                 for i in range(num_items):
                     if f"item_{i}_data" in group:
-                        value = group[f"item_{i}_data"][:]
-                        items.append(torch.from_numpy(value))
+                        items.append(_read_hdf5_dataset_as_tensor(group[f"item_{i}_data"]))
                     else:
                         attr_name = f"item_{i}_value"
                         if attr_name in group.attrs:
@@ -134,8 +140,7 @@ class CachedDataset(Dataset):
                 num_items = group.attrs.get("num_items", 0)
                 for i in range(num_items):
                     if f"item_{i}_data" in group:
-                        value = group[f"item_{i}_data"][:]
-                        items.append(torch.from_numpy(value))
+                        items.append(_read_hdf5_dataset_as_tensor(group[f"item_{i}_data"]))
                     else:
                         attr_name = f"item_{i}_value"
                         if attr_name in group.attrs:
@@ -143,15 +148,14 @@ class CachedDataset(Dataset):
                 return items
 
             elif sample_type == "tensor":
-                value = group["data"][:]
-                return torch.from_numpy(value)
+                return _read_hdf5_dataset_as_tensor(group["data"])
 
             elif sample_type == "other":
                 return group.attrs.get("value", None)
 
         # Fallback for older format or unknown type
         if "data" in group:
-            return torch.from_numpy(group["data"][:])
+            return _read_hdf5_dataset_as_tensor(group["data"])
         return None
 
     def __len__(self):

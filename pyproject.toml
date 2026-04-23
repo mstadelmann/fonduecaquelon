@@ -32,7 +32,9 @@ dependencies = [
   "opencv-python==4.11.0.86",
   "onnxruntime==1.22.1",
   "tqdm==4.67.1",
-  "h5py==3.15.1"
+  "h5py==3.15.1",
+  "GitPython==3.1.44",
+  "PyYAML==6.0.2",
 ]
 
 [project.optional-dependencies]
@@ -77,6 +79,7 @@ dependencies = ["pytest", "pytest-cov"]
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
+testpaths = ["test"]
 
 [tool.ruff]
 line-length = 120

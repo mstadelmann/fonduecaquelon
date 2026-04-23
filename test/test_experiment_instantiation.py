@@ -10,7 +10,7 @@ from omegaconf import DictConfig, open_dict
 from hydra import compose
 from hydra import initialize_config_dir
 from fdq.experiment import fdqExperiment
-from fdq.misc import build_dummy_hydra_paths
+from fdq.misc import DictToObj, build_dummy_hydra_paths
 
 
 class TestFdqExperimentInstantiation(unittest.TestCase):
@@ -103,6 +103,62 @@ class TestFdqExperimentInstantiation(unittest.TestCase):
                     hasattr(experiment, attr),
                     f"Experiment missing essential attribute: {attr}",
                 )
+
+    def test_loss_best_flags_reset_each_epoch(self):
+        """Best-loss flags represent improvements in the current epoch only."""
+        experiment = fdqExperiment.__new__(fdqExperiment)
+        experiment._trainLoss = float("inf")
+        experiment._valLoss = float("inf")
+        experiment.bestTrainLoss = float("inf")
+        experiment.bestValLoss = float("inf")
+        experiment.trainLoss_per_ep = []
+        experiment.valLoss_per_ep = []
+        experiment.new_best_train_loss = False
+        experiment.new_best_val_loss = False
+        experiment.new_best_train_loss_ep_id = None
+        experiment.new_best_val_loss_ep_id = None
+        experiment.current_epoch = 0
+        experiment.nb_epochs = 2
+        experiment.world_size = 1
+
+        experiment.trainLoss = 1.0
+        experiment.valLoss = 2.0
+        self.assertTrue(experiment.new_best_train_loss)
+        self.assertTrue(experiment.new_best_val_loss)
+
+        experiment.on_epoch_start(epoch=1)
+        self.assertFalse(experiment.new_best_train_loss)
+        self.assertFalse(experiment.new_best_val_loss)
+
+        experiment.trainLoss = 1.5
+        experiment.valLoss = 1.0
+        self.assertFalse(experiment.new_best_train_loss)
+        self.assertTrue(experiment.new_best_val_loss)
+
+    def test_train_loss_early_stop_is_checked_with_val_loss_enabled(self):
+        """Train-loss early stopping is independent from validation-loss checks."""
+        experiment = fdqExperiment.__new__(fdqExperiment)
+        experiment.cfg = DictToObj(
+            {
+                "train": {
+                    "args": {
+                        "early_stop_nan": None,
+                        "early_stop_val_loss": 2,
+                        "early_stop_train_loss": 2,
+                    }
+                }
+            }
+        )
+        experiment.trainLoss_per_ep = [1.0, 2.0]
+        experiment.valLoss_per_ep = [1.0, 0.5]
+        experiment.bestTrainLoss = 1.0
+        experiment.bestValLoss = 0.5
+        experiment.current_epoch = 1
+        experiment.early_stop_detected = False
+        experiment.early_stop_reason = ""
+
+        self.assertTrue(experiment.check_early_stop())
+        self.assertEqual(experiment.early_stop_reason, "TrainLoss_stagnated")
 
 
 if __name__ == "__main__":

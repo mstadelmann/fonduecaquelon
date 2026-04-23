@@ -217,15 +217,19 @@ def _set_test_mode(experiment: Any) -> None:
         experiment.mode.last()
 
     elif experiment.cfg.mode.run_test_auto:
-        if experiment.cfg.test.test_model == "best_val":
+        test_model = str(experiment.cfg.test.get("test_model", "best_val")).lower()
+
+        if test_model in {"best", "best_val", "val", "validation"}:
             iprint("Auto test: Loading best validation model.")
             experiment.mode.best_val()
-        elif experiment.cfg.test.test_model == "best_train":
+        elif test_model in {"best_train", "train"}:
             iprint("Auto test: Loading best train model.")
             experiment.mode.best_train()
-        else:
+        elif test_model == "last":
             iprint("Auto test: Loading last trained model.")
             experiment.mode.last()
+        else:
+            raise ValueError("test.test_model must be one of: best, best_val, best_train, last")
 
     else:
         ui_ask_test_mode(experiment)
