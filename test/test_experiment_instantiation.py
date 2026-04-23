@@ -151,7 +151,7 @@ class TestFdqExperimentInstantiation(unittest.TestCase):
         )
         experiment.trainLoss_per_ep = [1.0, 2.0]
         experiment.valLoss_per_ep = [1.0, 0.5]
-        experiment.bestTrainLoss = 1.0
+        experiment.bestTrainLoss = 0.5
         experiment.bestValLoss = 0.5
         experiment.current_epoch = 1
         experiment.early_stop_detected = False

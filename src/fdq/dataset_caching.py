@@ -422,7 +422,8 @@ def _save_sample_to_group(sample, group, compression):
         group.attrs["num_items"] = len(sample)
         for i, item in enumerate(sample):
             if isinstance(item, np.ndarray):
-                group.create_dataset(f"item_{i}_data", data=item, compression=compression_algo)
+                compression = compression_algo if item.ndim > 0 else None
+                group.create_dataset(f"item_{i}_data", data=item, compression=compression)
             elif isinstance(item, int | float | str | bool | np.integer | np.floating):
                 group.attrs[f"item_{i}_value"] = item
             else:
@@ -433,7 +434,8 @@ def _save_sample_to_group(sample, group, compression):
         group.attrs["num_items"] = len(sample)
         for i, item in enumerate(sample):
             if isinstance(item, np.ndarray):
-                group.create_dataset(f"item_{i}_data", data=item, compression=compression_algo)
+                compression = compression_algo if item.ndim > 0 else None
+                group.create_dataset(f"item_{i}_data", data=item, compression=compression)
             elif isinstance(item, int | float | str | bool | np.integer | np.floating):
                 group.attrs[f"item_{i}_value"] = item
             else:
@@ -441,7 +443,8 @@ def _save_sample_to_group(sample, group, compression):
 
     elif isinstance(sample, np.ndarray):
         group.attrs["type"] = "tensor"
-        group.create_dataset("data", data=sample, compression=compression_algo)
+        compression = compression_algo if sample.ndim > 0 else None
+        group.create_dataset("data", data=sample, compression=compression)
 
     else:
         group.attrs["type"] = "other"
