@@ -689,7 +689,10 @@ def check_config(job_config: dict[str, Any]) -> dict[str, Any]:
         if value is None and key not in mandatory_fields:
             # Only set to "None" for optional fields
             job_config[key] = "None"
-        elif key in {"parameter_overrides", "parameter_run_tag", "parameter_study_paths", "test_results_dir"} and value == "":
+        elif (
+            key in {"parameter_overrides", "parameter_run_tag", "parameter_study_paths", "test_results_dir"}
+            and value == ""
+        ):
             job_config[key] = ""
         elif value == "":
             job_config[key] = "None"

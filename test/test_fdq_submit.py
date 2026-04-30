@@ -132,7 +132,10 @@ class TestFdqSubmit(unittest.TestCase):
             self.assertIn('export FDQ_PARAMETER_STUDY_PATHS="models.simpleNet.optimizer.args.lr"', content)
             self.assertIn('export FDQ_TEST_RESULTS_DIR=""', content)
             self.assertIn("$PARAMETER_OVERRIDES mode.run_test_auto=false", content)
-            self.assertIn('TRAINED_RESULTS_DIR=$(find "$SCRATCH_RESULTS_PATH" -type d -name "*__${SLURM_JOB_ID}${FDQ_PARAMETER_RUN_TAG}"', content)
+            self.assertIn(
+                'TRAINED_RESULTS_DIR=$(find "$SCRATCH_RESULTS_PATH" -type d -name "*__${SLURM_JOB_ID}${FDQ_PARAMETER_RUN_TAG}"',
+                content,
+            )
             self.assertIn('export FDQ_TEST_RESULTS_DIR="$TRAINED_RESULTS_DIR"', content)
             self.assertIn(
                 r"s|^\(#SBATCH --output=.*\)_train\([^/[:space:]]*\.out\)|\1_test\2|g",
