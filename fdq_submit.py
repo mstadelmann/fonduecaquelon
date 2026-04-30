@@ -7,6 +7,8 @@ import copy
 import getpass
 import subprocess
 from datetime import datetime
+from decimal import Decimal
+from itertools import product
 from typing import Any
 from pathlib import Path
 
@@ -20,6 +22,17 @@ class FDQSubmitError(Exception):
     """Custom exception for FDQ submission errors."""
 
     pass
+
+
+PARAMETER_RANGE_RE = re.compile(
+    r"^\s*"
+    r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)"
+    r"\s*:\s*"
+    r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)"
+    r"\s*:\s*"
+    r"(\d+)"
+    r"\s*$"
+)
 
 
 def log_info(message: str) -> None:
@@ -77,6 +90,7 @@ UV_MODULE=#uv_env_module#
 CUDA_MODULE=#cuda_env_module#
 FDQ_VERSION=#fdq_version#
 FDQ_TEST_REPO=#fdq_test_repo# # if True, install fdq from https://test.pypi.org
+PARAMETER_OVERRIDES="#parameter_overrides#"
 RETVALUE=1 # will become zero if training is successful, which will launch an optional test job
 
 # Function for safe file operations
@@ -119,6 +133,7 @@ echo "PYTHON MODULE: $PY_MODULE"
 echo "UV MODULE: $UV_MODULE"
 echo "CUDA MODULE: $CUDA_MODULE"
 echo "FDQ VERSION: $FDQ_VERSION"
+echo "PARAMETER OVERRIDES: $PARAMETER_OVERRIDES"
 
 echo -----------------------------------------------------------
 echo "PREPARING ENVIRONMENT"
@@ -249,11 +264,11 @@ if [ "$RUN_TRAIN" == True ]; then
     # Start training process
     if [ "$RESUME_CHPT_PATH" == None ]; then
         echo "Starting training from beginning with command:"
-        echo "fdq --config-path \"$CONFIG_PATH\" --config-name \"$CONFIG_NAME\"  mode.run_test_auto=false &"
-        fdq --config-path "$CONFIG_PATH" --config-name "$CONFIG_NAME"  mode.run_test_auto=false &
+        echo "fdq --config-path \"$CONFIG_PATH\" --config-name \"$CONFIG_NAME\" $PARAMETER_OVERRIDES mode.run_test_auto=false &"
+        fdq --config-path "$CONFIG_PATH" --config-name "$CONFIG_NAME" $PARAMETER_OVERRIDES mode.run_test_auto=false &
     elif [ -f "$RESUME_CHPT_PATH" ]; then
         echo "Resuming training from checkpoint: $RESUME_CHPT_PATH"
-        fdq --config-path "$CONFIG_PATH" --config-name "$CONFIG_NAME"  mode.resume_chpt_path="$RESUME_CHPT_PATH" mode.run_test_auto=false &
+        fdq --config-path "$CONFIG_PATH" --config-name "$CONFIG_NAME" $PARAMETER_OVERRIDES mode.resume_chpt_path="$RESUME_CHPT_PATH" mode.run_test_auto=false &
     else
         echo "ERROR: Checkpoint path does not exist: $RESUME_CHPT_PATH"
         exit 1
@@ -294,8 +309,8 @@ if [ "$IS_TEST" == True ]; then
     
     test_start=$(date +%s.%N)
     echo "Starting test with command:"
-    echo "fdq --config-path \"$CONFIG_PATH\" --config-name \"$CONFIG_NAME\" mode.run_train=false mode.run_test_auto=true &"
-    fdq --config-path "$CONFIG_PATH" --config-name "$CONFIG_NAME" mode.run_train=false mode.run_test_auto=true &
+    echo "fdq --config-path \"$CONFIG_PATH\" --config-name \"$CONFIG_NAME\" $PARAMETER_OVERRIDES mode.run_train=false mode.run_test_auto=true &"
+    fdq --config-path "$CONFIG_PATH" --config-name "$CONFIG_NAME" $PARAMETER_OVERRIDES mode.run_train=false mode.run_test_auto=true &
     fdq_pid=$!
     echo "Testing process started with PID: $fdq_pid"
     wait $fdq_pid
@@ -449,6 +464,90 @@ def load_conf_file(path: str, _seen: set[Path] | None = None) -> dict:
         _seen.discard(Path(path).expanduser().resolve())
 
 
+def _format_decimal(value: Decimal) -> str:
+    """Format a decimal for a Hydra CLI override without trailing noise."""
+    formatted = format(value.normalize(), "f")
+    if "." in formatted:
+        formatted = formatted.rstrip("0").rstrip(".")
+    return "0" if formatted in {"", "-0"} else formatted
+
+
+def _parse_parameter_range(value: Any) -> list[str] | None:
+    """Parse a `[start:stop:count]` parameter-study marker into override values."""
+    if not (isinstance(value, list) and len(value) == 1 and isinstance(value[0], str)):
+        return None
+
+    match = PARAMETER_RANGE_RE.match(value[0])
+    if not match:
+        return None
+
+    start = Decimal(match.group(1))
+    stop = Decimal(match.group(2))
+    count = int(match.group(3))
+    if count < 1:
+        raise FDQSubmitError(f"Parameter-study range '{value[0]}' must use a count of at least 1")
+    if count == 1:
+        return [_format_decimal(start)]
+
+    step = (stop - start) / Decimal(count - 1)
+    return [_format_decimal(start + step * Decimal(index)) for index in range(count)]
+
+
+def find_parameter_ranges(conf: dict[str, Any]) -> list[tuple[str, list[str]]]:
+    """Find all parameter-study range markers in a merged experiment configuration."""
+    ranges: list[tuple[str, list[str]]] = []
+
+    def visit(node: Any, path: tuple[str, ...]) -> None:
+        parsed_range = _parse_parameter_range(node)
+        if parsed_range is not None:
+            ranges.append((".".join(path), parsed_range))
+            return
+
+        if isinstance(node, dict):
+            for key, value in node.items():
+                visit(value, (*path, str(key)))
+
+    visit(conf, ())
+    return ranges
+
+
+def _set_nested_value(conf: dict[str, Any], dotted_path: str, value: str) -> None:
+    """Set a concrete parameter-study value in a copied config dictionary."""
+    parts = dotted_path.split(".")
+    target = conf
+    for part in parts[:-1]:
+        target = target[part]
+    target[parts[-1]] = value
+
+
+def build_parameter_study_runs(
+    exp_config: dict[str, Any], parameter_study_enabled: bool
+) -> list[tuple[dict[str, Any], str, dict[str, str]]]:
+    """Build concrete configs and Hydra override strings for a parameter study.
+
+    Range markers use the YAML shape `[start:stop:count]`, for example
+    `[0.001:0.005:5]`.
+    """
+    ranges = find_parameter_ranges(exp_config)
+    if not ranges:
+        return [(exp_config, "", {})]
+
+    parameter_names = [name for name, _values in ranges]
+    value_lists = [values if parameter_study_enabled else values[:1] for _name, values in ranges]
+
+    runs: list[tuple[dict[str, Any], str, dict[str, str]]] = []
+    for combination in product(*value_lists):
+        concrete_config = copy.deepcopy(exp_config)
+        run_values = dict(zip(parameter_names, combination, strict=True))
+        for name, value in run_values.items():
+            _set_nested_value(concrete_config, name, value)
+
+        overrides = " ".join(f"{name}={value}" for name, value in run_values.items())
+        runs.append((concrete_config, overrides, run_values))
+
+    return runs
+
+
 def get_default_config(slurm_conf: Any, mode_config: Any) -> dict[str, Any]:
     """Return a job configuration dictionary with defaults, updated from the given SLURM config.
 
@@ -492,6 +591,7 @@ def get_default_config(slurm_conf: Any, mode_config: Any) -> dict[str, Any]:
         "scratch_data_path": "/scratch/fdq_data/",
         "results_path": None,
         "submit_file_path": None,
+        "parameter_overrides": "",
     }
 
     for key in job_config:
@@ -558,6 +658,8 @@ def check_config(job_config: dict[str, Any]) -> dict[str, Any]:
         if value is None and key not in mandatory_fields:
             # Only set to "None" for optional fields
             job_config[key] = "None"
+        elif key == "parameter_overrides" and value == "":
+            job_config[key] = ""
         elif value == "":
             job_config[key] = "None"
         elif isinstance(value, str) and value.startswith("~/"):
@@ -592,6 +694,8 @@ def create_submit_file(job_config: dict[str, Any], slurm_conf: Any, submit_path:
         FDQSubmitError: If submit file cannot be created
     """
     try:
+        job_config.setdefault("parameter_overrides", "")
+
         # Ensure log directory exists
         log_dir = job_config["log_path"]
         if not os.path.exists(log_dir):
@@ -733,76 +837,112 @@ def main() -> None:
         log_info(f"Loading experiment configuration: {full_config_path}")
 
         exp_config = load_conf_file(full_config_path)
-        slurm_conf = exp_config.get("slurm_cluster")
-        mode_config = exp_config.get("mode")
-
-        if slurm_conf is None:
-            raise FDQSubmitError(
-                "Missing 'slurm_cluster' section in configuration file. "
-                "This section is required for SLURM job submission."
-            )
-
-        if mode_config is None:
-            raise FDQSubmitError(
-                "Missing 'mode' section in configuration file. This section is required for SLURM job submission."
-            )
-
         config_path = os.path.dirname(full_config_path)
         config_name = os.path.basename(full_config_path).replace(".yaml", "")
+        parameter_study = exp_config.get("parameter_study", False)
+        if not isinstance(parameter_study, bool):
+            raise FDQSubmitError("'parameter_study' must be true or false when defined")
 
-        # Setup job configuration
-        job_config = get_default_config(slurm_conf, mode_config)
-
-        # Set paths and basic info
-        job_config["config_path"] = config_path
-        job_config["config_name"] = config_name
-        job_config["user"] = getpass.getuser()
-
-        job_config["results_path"] = exp_config.get("store", {}).get("results_path")
-        # validate results path
-        if job_config["results_path"] is None:
-            raise FDQSubmitError("Configuration missing 'store.results_path' setting")
-
-        # Setup submit file path
-        base_path = os.path.join(
-            os.path.expanduser(job_config["log_path"]),
-            "submitted_jobs",
-        )
-        os.makedirs(base_path, exist_ok=True)
+        parameter_ranges = find_parameter_ranges(exp_config)
+        parameter_runs = build_parameter_study_runs(exp_config, parameter_study)
+        if parameter_ranges:
+            parameter_names = ", ".join(name for name, _values in parameter_ranges)
+            if parameter_study:
+                log_info(f"Parameter study enabled for {parameter_names}: submitting {len(parameter_runs)} jobs")
+            else:
+                log_info(f"Parameter study disabled for {parameter_names}: using the first value only")
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        submit_filename = f"{timestamp}__{config_name.replace(' ', '_')}.submit"
-        submit_path = os.path.join(base_path, submit_filename)
-        job_config["submit_file_path"] = submit_path
+        submitted_jobs: list[tuple[str, str, str]] = []
+        last_job_config: dict[str, Any] | None = None
 
-        # Configure job type
-        if not job_config["run_train"] and job_config["run_test"]:
-            job_config["is_test"] = True
-            job_config["job_tag"] = "_test"
-            log_info("Configured as test-only job")
-        else:
-            job_config["job_tag"] = "_train"
-            log_info("Configured as training job")
+        for run_index, (run_exp_config, parameter_overrides, run_values) in enumerate(parameter_runs, start=1):
+            slurm_conf = run_exp_config.get("slurm_cluster")
+            mode_config = run_exp_config.get("mode")
 
-        # Validate configuration
-        job_config = check_config(job_config)
+            if slurm_conf is None:
+                raise FDQSubmitError(
+                    "Missing 'slurm_cluster' section in configuration file. "
+                    "This section is required for SLURM job submission."
+                )
 
-        # Create submit file
-        create_submit_file(job_config, slurm_conf, submit_path)
+            if mode_config is None:
+                raise FDQSubmitError(
+                    "Missing 'mode' section in configuration file. This section is required for SLURM job submission."
+                )
 
-        # Submit job
-        job_id = submit_slurm_job(submit_path)
+            # Setup job configuration
+            job_config = get_default_config(slurm_conf, mode_config)
+
+            # Set paths and basic info
+            job_config["config_path"] = config_path
+            job_config["config_name"] = config_name
+            job_config["user"] = getpass.getuser()
+            job_config["parameter_overrides"] = parameter_overrides
+
+            job_config["results_path"] = run_exp_config.get("store", {}).get("results_path")
+            # validate results path
+            if job_config["results_path"] is None:
+                raise FDQSubmitError("Configuration missing 'store.results_path' setting")
+
+            # Setup submit file path
+            base_path = os.path.join(
+                os.path.expanduser(job_config["log_path"]),
+                "submitted_jobs",
+            )
+            os.makedirs(base_path, exist_ok=True)
+
+            run_suffix = ""
+            if parameter_ranges:
+                run_suffix = f"__p{run_index:03d}"
+            submit_filename = f"{timestamp}__{config_name.replace(' ', '_')}{run_suffix}.submit"
+            submit_path = os.path.join(base_path, submit_filename)
+            job_config["submit_file_path"] = submit_path
+
+            # Configure job type
+            if not job_config["run_train"] and job_config["run_test"]:
+                job_config["is_test"] = True
+                job_config["job_tag"] = "_test"
+                log_info("Configured as test-only job")
+            else:
+                job_config["job_tag"] = "_train"
+                log_info("Configured as training job")
+
+            if parameter_ranges:
+                job_config["job_tag"] = f"{job_config['job_tag']}_p{run_index:03d}"
+                run_values_msg = ", ".join(f"{key}={value}" for key, value in run_values.items())
+                log_info(f"Preparing parameter run {run_index}/{len(parameter_runs)}: {run_values_msg}")
+
+            # Validate configuration
+            job_config = check_config(job_config)
+
+            # Create submit file
+            create_submit_file(job_config, slurm_conf, submit_path)
+
+            # Submit job
+            job_id = submit_slurm_job(submit_path)
+            submitted_jobs.append((job_id, submit_path, parameter_overrides))
+            last_job_config = job_config
 
         # Success message
         print(f"\n{'=' * 60}")
         print("FDQ JOB SUBMISSION SUCCESSFUL")
         print(f"{'=' * 60}")
-        print(f"SLURM Job ID:    {job_id}")
-        print(f"Submit File:     {submit_path}")
+        if len(submitted_jobs) == 1:
+            job_id, submit_path, parameter_overrides = submitted_jobs[0]
+            print(f"SLURM Job ID:    {job_id}")
+            print(f"Submit File:     {submit_path}")
+            if parameter_overrides:
+                print(f"Parameters:      {parameter_overrides}")
+        else:
+            print(f"Submitted Jobs:  {len(submitted_jobs)}")
+            for job_id, submit_path, parameter_overrides in submitted_jobs:
+                print(f"  {job_id}: {parameter_overrides} ({submit_path})")
         print(f"Experiment Name: {config_name}")
         print(f"Experiment Path: {config_path}")
-        print(f"Results Path:    {job_config['results_path']}")
-        print(f"Log Path:        {job_config['log_path']}")
+        if last_job_config is not None:
+            print(f"Results Path:    {last_job_config['results_path']}")
+            print(f"Log Path:        {last_job_config['log_path']}")
         print(f"{'=' * 60}")
 
     except FDQSubmitError as exc:
