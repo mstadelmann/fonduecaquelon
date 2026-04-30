@@ -152,6 +152,9 @@ class fdqExperiment:
 
             if self.is_slurm:
                 folder_name += f"__{self.slurm_job_id}"
+                parameter_run_tag = os.getenv("FDQ_PARAMETER_RUN_TAG", "")
+                if parameter_run_tag:
+                    folder_name += parameter_run_tag
                 res_base_path = self.cfg.get("slurm_cluster", {}).get("scratch_results_path")
                 if res_base_path is None:
                     wprint(

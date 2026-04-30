@@ -91,6 +91,7 @@ CUDA_MODULE=#cuda_env_module#
 FDQ_VERSION=#fdq_version#
 FDQ_TEST_REPO=#fdq_test_repo# # if True, install fdq from https://test.pypi.org
 PARAMETER_OVERRIDES="#parameter_overrides#"
+export FDQ_PARAMETER_RUN_TAG="#parameter_run_tag#"
 RETVALUE=1 # will become zero if training is successful, which will launch an optional test job
 
 # Function for safe file operations
@@ -134,6 +135,7 @@ echo "UV MODULE: $UV_MODULE"
 echo "CUDA MODULE: $CUDA_MODULE"
 echo "FDQ VERSION: $FDQ_VERSION"
 echo "PARAMETER OVERRIDES: $PARAMETER_OVERRIDES"
+echo "PARAMETER RUN TAG: $FDQ_PARAMETER_RUN_TAG"
 
 echo -----------------------------------------------------------
 echo "PREPARING ENVIRONMENT"
@@ -592,6 +594,7 @@ def get_default_config(slurm_conf: Any, mode_config: Any) -> dict[str, Any]:
         "results_path": None,
         "submit_file_path": None,
         "parameter_overrides": "",
+        "parameter_run_tag": "",
     }
 
     for key in job_config:
@@ -658,7 +661,7 @@ def check_config(job_config: dict[str, Any]) -> dict[str, Any]:
         if value is None and key not in mandatory_fields:
             # Only set to "None" for optional fields
             job_config[key] = "None"
-        elif key == "parameter_overrides" and value == "":
+        elif key in {"parameter_overrides", "parameter_run_tag"} and value == "":
             job_config[key] = ""
         elif value == "":
             job_config[key] = "None"
@@ -695,6 +698,7 @@ def create_submit_file(job_config: dict[str, Any], slurm_conf: Any, submit_path:
     """
     try:
         job_config.setdefault("parameter_overrides", "")
+        job_config.setdefault("parameter_run_tag", "")
 
         # Ensure log directory exists
         log_dir = job_config["log_path"]
@@ -918,6 +922,11 @@ def main() -> None:
             job_config["user"] = getpass.getuser()
             job_config["parameter_overrides"] = parameter_overrides
 
+            parameter_run_tag = ""
+            if parameter_ranges:
+                parameter_run_tag = f"_p{run_index:03d}"
+            job_config["parameter_run_tag"] = parameter_run_tag
+
             job_config["results_path"] = run_exp_config.get("store", {}).get("results_path")
             # validate results path
             if job_config["results_path"] is None:
@@ -930,10 +939,8 @@ def main() -> None:
             )
             os.makedirs(base_path, exist_ok=True)
 
-            run_suffix = ""
-            if parameter_ranges:
-                run_suffix = f"__p{run_index:03d}"
-            submit_filename = f"{timestamp}__{config_name.replace(' ', '_')}{run_suffix}.submit"
+            submit_suffix = parameter_run_tag.replace("_", "__", 1)
+            submit_filename = f"{timestamp}__{config_name.replace(' ', '_')}{submit_suffix}.submit"
             submit_path = os.path.join(base_path, submit_filename)
             job_config["submit_file_path"] = submit_path
 

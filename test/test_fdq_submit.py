@@ -72,7 +72,9 @@ class TestFdqSubmit(unittest.TestCase):
             self.assertIn("https://test.pypi.org/simple/", content)
             self.assertIn("https://pypi.org/simple", content)
             self.assertIn('PARAMETER_OVERRIDES=""', content)
+            self.assertIn('export FDQ_PARAMETER_RUN_TAG=""', content)
             self.assertNotIn("#parameter_overrides#", content)
+            self.assertNotIn("#parameter_run_tag#", content)
 
     def test_create_submit_file_includes_parameter_overrides(self):
         """Generated submit scripts pass concrete parameter-study overrides to fdq."""
@@ -112,6 +114,7 @@ class TestFdqSubmit(unittest.TestCase):
                 "results_path": temp_dir,
                 "submit_file_path": submit_path,
                 "parameter_overrides": "models.simpleNet.optimizer.args.lr=0.001",
+                "parameter_run_tag": "_p001",
             }
 
             create_submit_file(job_config, {"additional_pip_packages": None}, submit_path)
@@ -120,6 +123,7 @@ class TestFdqSubmit(unittest.TestCase):
                 content = submit_file.read()
 
             self.assertIn('PARAMETER_OVERRIDES="models.simpleNet.optimizer.args.lr=0.001"', content)
+            self.assertIn('export FDQ_PARAMETER_RUN_TAG="_p001"', content)
             self.assertIn("$PARAMETER_OVERRIDES mode.run_test_auto=false", content)
             self.assertIn(
                 r"s|^\(#SBATCH --output=.*\)_train\([^/[:space:]]*\.out\)|\1_test\2|g",
