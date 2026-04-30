@@ -489,4 +489,3 @@ Contributions are welcome! Please open issues or pull requests on [GitHub](https
 ## 🧾 Changelog
 
 - 0.0.74: Configuration files switched from JSON to YAML, using Hydra in the backend for composition and runtime overrides.
-

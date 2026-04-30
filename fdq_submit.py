@@ -92,6 +92,8 @@ FDQ_VERSION=#fdq_version#
 FDQ_TEST_REPO=#fdq_test_repo# # if True, install fdq from https://test.pypi.org
 PARAMETER_OVERRIDES="#parameter_overrides#"
 export FDQ_PARAMETER_RUN_TAG="#parameter_run_tag#"
+export FDQ_PARAMETER_STUDY_PATHS="#parameter_study_paths#"
+export FDQ_TEST_RESULTS_DIR="#test_results_dir#"
 RETVALUE=1 # will become zero if training is successful, which will launch an optional test job
 
 # Function for safe file operations
@@ -136,6 +138,8 @@ echo "CUDA MODULE: $CUDA_MODULE"
 echo "FDQ VERSION: $FDQ_VERSION"
 echo "PARAMETER OVERRIDES: $PARAMETER_OVERRIDES"
 echo "PARAMETER RUN TAG: $FDQ_PARAMETER_RUN_TAG"
+echo "PARAMETER STUDY PATHS: $FDQ_PARAMETER_STUDY_PATHS"
+echo "TEST RESULTS DIR: $FDQ_TEST_RESULTS_DIR"
 
 echo -----------------------------------------------------------
 echo "PREPARING ENVIRONMENT"
@@ -341,11 +345,33 @@ if [ "$RUN_TEST" == True ] && [ $RETVALUE -eq 0 ] && [ "$IS_TEST" == False ]; th
     GRES_TEST=$(awk -F= '/^GRES_TEST=/{print $2}' "$SUBMIT_FILE_PATH")
     MEM_TEST=$(awk -F= '/^MEM_TEST=/{print $2}' "$SUBMIT_FILE_PATH")
     CPUS_TEST=$(awk -F= '/^CPUS_TEST=/{print $2}' "$SUBMIT_FILE_PATH")
+
+    # Find the exact results folder created by this training job.
+    if [ -n "$FDQ_PARAMETER_RUN_TAG" ]; then
+        TRAINED_RESULTS_DIR=$(find "$SCRATCH_RESULTS_PATH" -type d -name "*__${SLURM_JOB_ID}${FDQ_PARAMETER_RUN_TAG}" | head -n 1)
+    else
+        TRAINED_RESULTS_DIR=$(find "$SCRATCH_RESULTS_PATH" -type d -name "*__${SLURM_JOB_ID}" | head -n 1)
+    fi
+
+    if [ -n "$TRAINED_RESULTS_DIR" ]; then
+        TRAINED_RESULTS_DIR="${TRAINED_RESULTS_DIR%/}"
+        SCRATCH_RESULTS_ROOT="${SCRATCH_RESULTS_PATH%/}"
+        RESULTS_ROOT="${RESULTS_PATH%/}"
+        case "$TRAINED_RESULTS_DIR" in
+            "$SCRATCH_RESULTS_ROOT"/*)
+                TRAINED_RESULTS_DIR="$RESULTS_ROOT/${TRAINED_RESULTS_DIR#"$SCRATCH_RESULTS_ROOT"/}"
+                ;;
+        esac
+        echo "Auto-test will load trained results from: $TRAINED_RESULTS_DIR"
+    else
+        echo "WARNING: Could not determine exact trained results directory. Auto-test will fall back to the newest matching experiment."
+    fi
     
     # Create test job submit script
     sed -e "s|IS_TEST=False|IS_TEST=True|g" \
         -e "s|RUN_TRAIN=True|RUN_TRAIN=False|g" \
         -e "s|RUN_TEST=True|RUN_TEST=False|g" \
+        -e "s|^export FDQ_TEST_RESULTS_DIR=.*|export FDQ_TEST_RESULTS_DIR=\"$TRAINED_RESULTS_DIR\"|g" \
         -e "s|job_config[\"job_tag\"] = \"_train\"|job_config[\"job_tag\"] = \"_test\"|g" \
         -e "s|^\\(#SBATCH --output=.*\\)_train\\([^/[:space:]]*\\.out\\)|\\1_test\\2|g" \
         -e "s|^\\(#SBATCH --error=.*\\)_train\\([^/[:space:]]*\\.err\\)|\\1_test\\2|g" \
@@ -595,6 +621,8 @@ def get_default_config(slurm_conf: Any, mode_config: Any) -> dict[str, Any]:
         "submit_file_path": None,
         "parameter_overrides": "",
         "parameter_run_tag": "",
+        "parameter_study_paths": "",
+        "test_results_dir": "",
     }
 
     for key in job_config:
@@ -661,7 +689,7 @@ def check_config(job_config: dict[str, Any]) -> dict[str, Any]:
         if value is None and key not in mandatory_fields:
             # Only set to "None" for optional fields
             job_config[key] = "None"
-        elif key in {"parameter_overrides", "parameter_run_tag"} and value == "":
+        elif key in {"parameter_overrides", "parameter_run_tag", "parameter_study_paths", "test_results_dir"} and value == "":
             job_config[key] = ""
         elif value == "":
             job_config[key] = "None"
@@ -699,6 +727,8 @@ def create_submit_file(job_config: dict[str, Any], slurm_conf: Any, submit_path:
     try:
         job_config.setdefault("parameter_overrides", "")
         job_config.setdefault("parameter_run_tag", "")
+        job_config.setdefault("parameter_study_paths", "")
+        job_config.setdefault("test_results_dir", "")
 
         # Ensure log directory exists
         log_dir = job_config["log_path"]
@@ -921,6 +951,7 @@ def main() -> None:
             job_config["config_name"] = config_name
             job_config["user"] = getpass.getuser()
             job_config["parameter_overrides"] = parameter_overrides
+            job_config["parameter_study_paths"] = " ".join(run_values.keys())
 
             parameter_run_tag = ""
             if parameter_ranges:

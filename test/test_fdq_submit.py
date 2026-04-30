@@ -73,8 +73,12 @@ class TestFdqSubmit(unittest.TestCase):
             self.assertIn("https://pypi.org/simple", content)
             self.assertIn('PARAMETER_OVERRIDES=""', content)
             self.assertIn('export FDQ_PARAMETER_RUN_TAG=""', content)
+            self.assertIn('export FDQ_PARAMETER_STUDY_PATHS=""', content)
+            self.assertIn('export FDQ_TEST_RESULTS_DIR=""', content)
             self.assertNotIn("#parameter_overrides#", content)
             self.assertNotIn("#parameter_run_tag#", content)
+            self.assertNotIn("#parameter_study_paths#", content)
+            self.assertNotIn("#test_results_dir#", content)
 
     def test_create_submit_file_includes_parameter_overrides(self):
         """Generated submit scripts pass concrete parameter-study overrides to fdq."""
@@ -115,6 +119,7 @@ class TestFdqSubmit(unittest.TestCase):
                 "submit_file_path": submit_path,
                 "parameter_overrides": "models.simpleNet.optimizer.args.lr=0.001",
                 "parameter_run_tag": "_p001",
+                "parameter_study_paths": "models.simpleNet.optimizer.args.lr",
             }
 
             create_submit_file(job_config, {"additional_pip_packages": None}, submit_path)
@@ -124,7 +129,11 @@ class TestFdqSubmit(unittest.TestCase):
 
             self.assertIn('PARAMETER_OVERRIDES="models.simpleNet.optimizer.args.lr=0.001"', content)
             self.assertIn('export FDQ_PARAMETER_RUN_TAG="_p001"', content)
+            self.assertIn('export FDQ_PARAMETER_STUDY_PATHS="models.simpleNet.optimizer.args.lr"', content)
+            self.assertIn('export FDQ_TEST_RESULTS_DIR=""', content)
             self.assertIn("$PARAMETER_OVERRIDES mode.run_test_auto=false", content)
+            self.assertIn('TRAINED_RESULTS_DIR=$(find "$SCRATCH_RESULTS_PATH" -type d -name "*__${SLURM_JOB_ID}${FDQ_PARAMETER_RUN_TAG}"', content)
+            self.assertIn('export FDQ_TEST_RESULTS_DIR="$TRAINED_RESULTS_DIR"', content)
             self.assertIn(
                 r"s|^\(#SBATCH --output=.*\)_train\([^/[:space:]]*\.out\)|\1_test\2|g",
                 content,
