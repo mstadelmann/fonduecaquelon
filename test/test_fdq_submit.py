@@ -121,6 +121,14 @@ class TestFdqSubmit(unittest.TestCase):
 
             self.assertIn('PARAMETER_OVERRIDES="models.simpleNet.optimizer.args.lr=0.001"', content)
             self.assertIn("$PARAMETER_OVERRIDES mode.run_test_auto=false", content)
+            self.assertIn(
+                r"s|^\(#SBATCH --output=.*\)_train\([^/[:space:]]*\.out\)|\1_test\2|g",
+                content,
+            )
+            self.assertIn(
+                r"s|^\(#SBATCH --error=.*\)_train\([^/[:space:]]*\.err\)|\1_test\2|g",
+                content,
+            )
 
     def test_parameter_study_expands_range_product(self):
         """Range markers expand to every parameter combination."""
