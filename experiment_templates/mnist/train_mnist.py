@@ -50,6 +50,8 @@ def fdq_train(experiment: fdqExperiment) -> None:
 
         model.eval()
         pbar = startProgBar(data.n_val_samples, "validation...")
+        val_correct = 0
+        val_total = 0
 
         for nb_batch, batch in enumerate(data.val_data_loader):
             pbar.update(nb_batch * experiment.cfg.data.MNIST.args.val_batch_size)
@@ -63,9 +65,15 @@ def fdq_train(experiment: fdqExperiment) -> None:
                 loss_tensor = experiment.losses["cross_ent"](output, targets)
 
             val_loss_sum += loss_tensor.detach().item()
+            _, preds_batch = torch.max(output, 1)
+            val_correct += (preds_batch == targets).sum().item()
+            val_total += targets.size(0)
+
         experiment.valLoss = val_loss_sum / len(data.val_data_loader.dataset)
+        val_accuracy = val_correct / val_total if val_total > 0 else 0.0
 
         pbar.finish()
+        iprint(f"Validation accuracy: {val_accuracy:.4f}")
 
         # Log text predictions
         # only tensorboard!
@@ -80,19 +88,20 @@ def fdq_train(experiment: fdqExperiment) -> None:
         # tensorboard and wandb behave slightly different!
         # here two examples:
         imgs_tb = {
-            "name": "inputs",
+            "name": "val_samples",
             "data": torchvision.utils.make_grid(inputs[:max_log_size, ...]),
             "dataformats": "CHW",
         }
 
         captions = [f"Predicted: {preds[idx].item()}, True: {targets[idx].item()}" for idx in range(len(preds))]
         imgs_wandb = {
-            "name": "inputs",
+            "name": "val_samples",
             "data": inputs[:max_log_size],
             "captions": captions[:max_log_size],
         }
 
         experiment.on_epoch_end(
+            log_scalars={"val_accuracy": val_accuracy},
             log_images_wandb=imgs_wandb,
             log_images_tensorboard=imgs_tb,
             log_text_tensorboard=log_txt,

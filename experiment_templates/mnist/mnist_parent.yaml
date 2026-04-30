@@ -33,7 +33,7 @@ transforms:
 train:
   path: "~/dev/fonduecaquelon/experiment_templates/mnist/train_mnist.py"
   args:
-    epochs: 4
+    epochs: 10
     use_GPU: false
     use_AMP: false
     accumulate_grad_batches: 1

@@ -46,7 +46,7 @@ class TestFdqSubmit(unittest.TestCase):
                 "python_env_module": "python/3.12",
                 "uv_env_module": "uv/0.6",
                 "cuda_env_module": "None",
-                "fdq_version": "0.0.76",
+                "fdq_version": "0.0.77",
                 "fdq_test_repo": True,
                 "config_path": temp_dir,
                 "config_name": "experiment",

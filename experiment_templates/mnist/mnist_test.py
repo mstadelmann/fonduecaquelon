@@ -1,6 +1,7 @@
 """MNIST test evaluation routines for fonduecaquelon experiments."""
 
 import matplotlib
+from fdq.misc import save_wandb
 import torch
 import torch.multiprocessing
 import torch.nn.functional as F
@@ -102,17 +103,36 @@ def auto_test(experiment, test_loader):
         pbar.update(i)
         pred = experiment.models["simpleNet"](inputs)
         pred_sm = F.softmax(pred, dim=1)
-        pred_am = pred_sm.argmax()
+        pred_am = pred_sm.argmax(dim=1)
         labels_gt.append(targets)
         labels_pred.append(pred_am.item())
 
         if labels_gt[-1] == labels_pred[-1]:
             cor_pred += 1
 
+        max_log_size = 8
+        captions = [f"Predicted: {pred_am[idx].item()}, True: {targets[idx].item()}" for idx in range(len(pred_am))]
+        imgs_wandb = {
+            "name": "test imgs",
+            "data": inputs[:max_log_size],
+            "captions": captions[0] if len(captions) == 1 else ", ".join(captions[:max_log_size]),
+        }
+            
+        save_wandb(
+            experiment,
+            images=imgs_wandb,
+        )
+
     pbar.finish()
 
     accuracy = cor_pred / len(labels_pred)
     print(f"\nTotal accuracy: {accuracy}, Nb samples: {len(labels_pred)}")
+
+    save_wandb(
+        experiment,
+        scalars={"test_accuracy": accuracy},
+    )
+
     return accuracy
 
 
