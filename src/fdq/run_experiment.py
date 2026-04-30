@@ -130,10 +130,10 @@ def normalize_parameter_ranges(cfg: DictConfig) -> DictConfig:
     if not ranges:
         return cfg
 
-    train_config = normalized.get("train", {}) or {}
-    parameter_study = train_config.get("parameter_study", False)
+    mode_config = normalized.get("mode", {}) or {}
+    parameter_study = mode_config.get("parameter_study", False)
     if not isinstance(parameter_study, bool):
-        raise ValueError("train.parameter_study must be true or false when defined")
+        raise ValueError("mode.parameter_study must be true or false when defined")
     if parameter_study:
         joined_ranges = ", ".join(ranges)
         raise ValueError(

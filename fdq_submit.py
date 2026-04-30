@@ -14,8 +14,10 @@ from pathlib import Path
 
 try:
     import yaml
+    from yaml.constructor import SafeConstructor
 except ModuleNotFoundError:
     yaml = None
+    SafeConstructor = None
 
 
 class FDQSubmitError(Exception):
@@ -33,6 +35,24 @@ PARAMETER_RANGE_RE = re.compile(
     r"(\d+)"
     r"\s*$"
 )
+
+
+if yaml is not None:
+
+    class FDQYamlLoader(yaml.SafeLoader):
+        """YAML loader that keeps colon-separated parameter ranges as strings."""
+
+        pass
+
+    def _construct_yaml_int(loader: yaml.Loader, node: yaml.Node) -> int | str:
+        value = loader.construct_scalar(node)
+        if ":" in value:
+            return value
+        return SafeConstructor.construct_yaml_int(loader, node)
+
+    FDQYamlLoader.add_constructor("tag:yaml.org,2002:int", _construct_yaml_int)
+else:
+    FDQYamlLoader = None
 
 
 def log_info(message: str) -> None:
@@ -465,7 +485,7 @@ def load_conf_file(path: str, _seen: set[Path] | None = None) -> dict:
         _seen.add(p)
 
         with p.open("r", encoding="utf-8") as f:
-            conf = yaml.safe_load(f)
+            conf = yaml.load(f, Loader=FDQYamlLoader)
         if not isinstance(conf, dict):
             raise ValueError("YAML root must be a mapping/dict")
 
@@ -913,10 +933,10 @@ def main() -> None:
         exp_config = load_conf_file(full_config_path)
         config_path = os.path.dirname(full_config_path)
         config_name = os.path.basename(full_config_path).replace(".yaml", "")
-        train_config = exp_config.get("train", {}) or {}
-        parameter_study = train_config.get("parameter_study", False)
+        mode_config = exp_config.get("mode", {}) or {}
+        parameter_study = mode_config.get("parameter_study", False)
         if not isinstance(parameter_study, bool):
-            raise FDQSubmitError("'train.parameter_study' must be true or false when defined")
+            raise FDQSubmitError("'mode.parameter_study' must be true or false when defined")
 
         parameter_ranges = find_parameter_ranges(exp_config)
         parameter_runs = build_parameter_study_runs(exp_config, parameter_study)

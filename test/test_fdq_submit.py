@@ -233,7 +233,7 @@ class TestFdqSubmit(unittest.TestCase):
 
             with open(parent_path, "w", encoding="utf8") as parent_file:
                 parent_file.write(
-                    "train:\n"
+                    "mode:\n"
                     "  parameter_study: false\n"
                     "models:\n"
                     "  simpleNet:\n"
@@ -246,10 +246,39 @@ class TestFdqSubmit(unittest.TestCase):
                 child_file.write("defaults:\n  - parent\n  - _self_\n")
 
             cfg = load_conf_file(child_path)
-            runs = build_parameter_study_runs(cfg, parameter_study_enabled=cfg["train"]["parameter_study"])
+            runs = build_parameter_study_runs(cfg, parameter_study_enabled=cfg["mode"]["parameter_study"])
 
             self.assertEqual(len(runs), 1)
             self.assertEqual(runs[0][1], "models.simpleNet.optimizer.args.lr=0.001")
+
+    @unittest.skipUnless(HAS_YAML, "PyYAML is not installed")
+    def test_integer_parameter_ranges_are_loaded_as_ranges(self):
+        """Integer ranges like [4:6:2] are not parsed as YAML sexagesimal ints."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = os.path.join(temp_dir, "experiment.yaml")
+
+            with open(config_path, "w", encoding="utf8") as config_file:
+                config_file.write(
+                    "mode:\n"
+                    "  parameter_study: true\n"
+                    "train:\n"
+                    "  args:\n"
+                    "    epochs: [4:6:2]\n"
+                    "models:\n"
+                    "  simpleNet:\n"
+                    "    optimizer:\n"
+                    "      args:\n"
+                    "        lr: [0.001:0.002:2]\n"
+                )
+
+            cfg = load_conf_file(config_path)
+            ranges = find_parameter_ranges(cfg)
+            runs = build_parameter_study_runs(cfg, parameter_study_enabled=cfg["mode"]["parameter_study"])
+
+            self.assertIn(("train.args.epochs", ["4", "6"]), ranges)
+            self.assertEqual(len(runs), 4)
+            self.assertIn("train.args.epochs=4", runs[0][1])
+            self.assertIn("train.args.epochs=6", runs[-1][1])
 
     @unittest.skipUnless(HAS_YAML, "PyYAML is not installed")
     def test_load_conf_file_merges_hydra_defaults(self):
