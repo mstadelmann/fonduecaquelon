@@ -539,7 +539,9 @@ def init_wandb(experiment: Any) -> bool:
     dt_string = experiment.creation_time.strftime("%Y%m%d_%H%M%S")
     parameter_run_tag = _get_parameter_run_tag(experiment)
     if experiment.mode.op_mode.train:
-        wandb_name = f"{dt_string}__{experiment.experimentName[:20]}__{experiment.funky_name}{parameter_run_tag}{slurm_str}"
+        wandb_name = (
+            f"{dt_string}__{experiment.experimentName[:20]}__{experiment.funky_name}{parameter_run_tag}{slurm_str}"
+        )
     else:
         try:
             res_dir_name = os.path.basename(experiment.results_dir).split("_")
