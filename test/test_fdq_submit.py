@@ -1,10 +1,18 @@
 """Tests for the standalone SLURM submission helper."""
 
+import io
 import os
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 
-from fdq_submit import build_parameter_study_runs, create_submit_file, find_parameter_ranges, load_conf_file
+from fdq_submit import (
+    build_parameter_study_runs,
+    create_submit_file,
+    find_parameter_ranges,
+    load_conf_file,
+    print_submission_summary,
+)
 
 try:
     import yaml  # noqa: F401
@@ -166,6 +174,32 @@ class TestFdqSubmit(unittest.TestCase):
         self.assertEqual(runs[0][0]["models"]["simpleNet"]["optimizer"]["args"]["lr"], "0.001")
         self.assertEqual(runs[0][0]["train"]["args"]["epochs"], "1")
 
+    def test_submission_summary_clearly_marks_parameter_study(self):
+        """The success block clearly states when a parameter study was submitted."""
+        stdout = io.StringIO()
+
+        with redirect_stdout(stdout):
+            print_submission_summary(
+                submitted_jobs=[
+                    ("123", "/tmp/run_001.submit", "models.simpleNet.optimizer.args.lr=0.001"),
+                    ("124", "/tmp/run_002.submit", "models.simpleNet.optimizer.args.lr=0.002"),
+                ],
+                config_name="experiment",
+                config_path="/tmp",
+                last_job_config={"results_path": "/tmp/results", "log_path": "/tmp/logs"},
+                parameter_ranges=[
+                    ("models.simpleNet.optimizer.args.lr", ["0.001", "0.002"]),
+                ],
+                parameter_study=True,
+            )
+
+        summary = stdout.getvalue()
+
+        self.assertIn("Parameter Study: enabled", summary)
+        self.assertIn("Parameter Runs:  2", summary)
+        self.assertIn("Sweep Params:    models.simpleNet.optimizer.args.lr", summary)
+        self.assertIn("Submitted Jobs:  2", summary)
+
     @unittest.skipUnless(HAS_YAML, "PyYAML is not installed")
     def test_parameter_study_ranges_are_found_in_parent_defaults(self):
         """Range markers inherited from parent configs still produce scalar overrides."""
@@ -175,7 +209,8 @@ class TestFdqSubmit(unittest.TestCase):
 
             with open(parent_path, "w", encoding="utf8") as parent_file:
                 parent_file.write(
-                    "parameter_study: false\n"
+                    "train:\n"
+                    "  parameter_study: false\n"
                     "models:\n"
                     "  simpleNet:\n"
                     "    optimizer:\n"
@@ -187,7 +222,7 @@ class TestFdqSubmit(unittest.TestCase):
                 child_file.write("defaults:\n  - parent\n  - _self_\n")
 
             cfg = load_conf_file(child_path)
-            runs = build_parameter_study_runs(cfg, parameter_study_enabled=cfg["parameter_study"])
+            runs = build_parameter_study_runs(cfg, parameter_study_enabled=cfg["train"]["parameter_study"])
 
             self.assertEqual(len(runs), 1)
             self.assertEqual(runs[0][1], "models.simpleNet.optimizer.args.lr=0.001")

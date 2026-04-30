@@ -109,10 +109,11 @@ Submit your experiment:
 python /path/to/fdq_submit.py /path/to/config.yaml
 ```
 
-Parameter studies can be launched by setting `parameter_study: true` at the root of the YAML file and replacing scalar values with `[start:stop:count]` ranges. Ranges are inclusive and multiple ranges are submitted as a Cartesian product:
+Parameter studies can be launched by setting `train.parameter_study: true` and replacing scalar values with `[start:stop:count]` ranges. Ranges are inclusive and multiple ranges are submitted as a Cartesian product:
 
 ```yaml
-parameter_study: true
+train:
+  parameter_study: true
 
 models:
   simpleNet:
@@ -121,7 +122,7 @@ models:
         lr: [0.001:0.005:5]
 ```
 
-This submits runs with `lr=0.001`, `0.002`, `0.003`, `0.004`, and `0.005`. When `parameter_study: false`, FDQ submits one job and uses the first value from every range.
+This submits runs with `lr=0.001`, `0.002`, `0.003`, `0.004`, and `0.005`. When `train.parameter_study: false`, FDQ submits one job and uses the first value from every range.
 
 Notes:
 - SLURM logs are written to `slurm_log/`.

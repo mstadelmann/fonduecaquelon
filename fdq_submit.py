@@ -829,6 +829,43 @@ def submit_slurm_job(submit_path: str) -> str:
         raise FDQSubmitError(f"Failed to submit job to SLURM: {exc}") from exc
 
 
+def print_submission_summary(
+    submitted_jobs: list[tuple[str, str, str]],
+    config_name: str,
+    config_path: str,
+    last_job_config: dict[str, Any] | None,
+    parameter_ranges: list[tuple[str, list[str]]],
+    parameter_study: bool,
+) -> None:
+    """Print the final job submission summary."""
+    print(f"\n{'=' * 60}")
+    print("FDQ JOB SUBMISSION SUCCESSFUL")
+    print(f"{'=' * 60}")
+    if parameter_ranges:
+        status = "enabled" if parameter_study else "disabled (first values only)"
+        parameter_names = ", ".join(name for name, _values in parameter_ranges)
+        print(f"Parameter Study: {status}")
+        print(f"Parameter Runs:  {len(submitted_jobs)}")
+        print(f"Sweep Params:    {parameter_names}")
+
+    if len(submitted_jobs) == 1:
+        job_id, submit_path, parameter_overrides = submitted_jobs[0]
+        print(f"SLURM Job ID:    {job_id}")
+        print(f"Submit File:     {submit_path}")
+        if parameter_overrides:
+            print(f"Overrides:       {parameter_overrides}")
+    else:
+        print(f"Submitted Jobs:  {len(submitted_jobs)}")
+        for job_id, submit_path, parameter_overrides in submitted_jobs:
+            print(f"  {job_id}: {parameter_overrides} ({submit_path})")
+    print(f"Experiment Name: {config_name}")
+    print(f"Experiment Path: {config_path}")
+    if last_job_config is not None:
+        print(f"Results Path:    {last_job_config['results_path']}")
+        print(f"Log Path:        {last_job_config['log_path']}")
+    print(f"{'=' * 60}")
+
+
 def main() -> None:
     """Main entry point for submitting a job to SLURM."""
     try:
@@ -839,9 +876,10 @@ def main() -> None:
         exp_config = load_conf_file(full_config_path)
         config_path = os.path.dirname(full_config_path)
         config_name = os.path.basename(full_config_path).replace(".yaml", "")
-        parameter_study = exp_config.get("parameter_study", False)
+        train_config = exp_config.get("train", {}) or {}
+        parameter_study = train_config.get("parameter_study", False)
         if not isinstance(parameter_study, bool):
-            raise FDQSubmitError("'parameter_study' must be true or false when defined")
+            raise FDQSubmitError("'train.parameter_study' must be true or false when defined")
 
         parameter_ranges = find_parameter_ranges(exp_config)
         parameter_runs = build_parameter_study_runs(exp_config, parameter_study)
@@ -924,26 +962,14 @@ def main() -> None:
             submitted_jobs.append((job_id, submit_path, parameter_overrides))
             last_job_config = job_config
 
-        # Success message
-        print(f"\n{'=' * 60}")
-        print("FDQ JOB SUBMISSION SUCCESSFUL")
-        print(f"{'=' * 60}")
-        if len(submitted_jobs) == 1:
-            job_id, submit_path, parameter_overrides = submitted_jobs[0]
-            print(f"SLURM Job ID:    {job_id}")
-            print(f"Submit File:     {submit_path}")
-            if parameter_overrides:
-                print(f"Parameters:      {parameter_overrides}")
-        else:
-            print(f"Submitted Jobs:  {len(submitted_jobs)}")
-            for job_id, submit_path, parameter_overrides in submitted_jobs:
-                print(f"  {job_id}: {parameter_overrides} ({submit_path})")
-        print(f"Experiment Name: {config_name}")
-        print(f"Experiment Path: {config_path}")
-        if last_job_config is not None:
-            print(f"Results Path:    {last_job_config['results_path']}")
-            print(f"Log Path:        {last_job_config['log_path']}")
-        print(f"{'=' * 60}")
+        print_submission_summary(
+            submitted_jobs,
+            config_name,
+            config_path,
+            last_job_config,
+            parameter_ranges,
+            parameter_study,
+        )
 
     except FDQSubmitError as exc:
         log_error(str(exc))
