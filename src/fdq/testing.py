@@ -99,6 +99,35 @@ def manual_experiment_selection(subfolders_dict: dict[str, str], res_root_path: 
 
 def find_model_path(experiment: Any) -> tuple[str, str]:
     """Returns the path to the model file of a previous experiment."""
+    if experiment.mode.test_mode.custom_last or experiment.mode.test_mode.last:
+        search_string = "last_"
+    elif experiment.mode.test_mode.custom_best_train or experiment.mode.test_mode.best_train:
+        search_string = "best_train_"
+    else:
+        search_string = "best_val_"
+
+    exact_results_dir = os.getenv("FDQ_TEST_RESULTS_DIR", "")
+    if exact_results_dir:
+        exact_results_dir = os.path.expanduser(exact_results_dir)
+        if not os.path.isdir(exact_results_dir):
+            raise ValueError(f"FDQ_TEST_RESULTS_DIR points to a missing result folder: '{exact_results_dir}'")
+
+        possible_files: list[str] = []
+        for fn in os.listdir(exact_results_dir):
+            if search_string in fn and fn.endswith(".fdqm"):
+                possible_files.append(fn)
+
+        if len(possible_files) == 0:
+            raise ValueError(f"No corresponding model file was found in FDQ_TEST_RESULTS_DIR '{exact_results_dir}'.")
+
+        if len(possible_files) > 1:
+            wprint(f"Multiple corresponding models files were found in FDQ_TEST_RESULTS_DIR '{exact_results_dir}':")
+            wprint(possible_files)
+            wprint(f"Selecting automatically the first one for testing: '{possible_files[0]}'")
+
+        iprint(f"Auto test: Loading trained results from FDQ_TEST_RESULTS_DIR: {exact_results_dir}")
+        return exact_results_dir, possible_files[0]
+
     experiment_res_path, subfolders = find_experiment_result_dirs(experiment)
 
     subfolders_date_str: list[str] = []
@@ -123,13 +152,6 @@ def find_model_path(experiment: Any) -> tuple[str, str]:
     res = [i for i in subfolders if selected_exp_date_str in i]
     if not len(res) == 1:
         raise ValueError(f"No corresponding result folder was found in '{experiment_res_path}'. Specify path manually!")
-
-    if experiment.mode.test_mode.custom_last or experiment.mode.test_mode.last:
-        search_string = "last_"
-    elif experiment.mode.test_mode.custom_best_train or experiment.mode.test_mode.best_train:
-        search_string = "best_train_"
-    else:
-        search_string = "best_val_"
 
     possible_files: list[str] = []
     for fn in os.listdir(os.path.join(experiment_res_path, res[0])):

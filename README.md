@@ -78,7 +78,7 @@ Minimal example (YAML):
 ```yaml
 slurm_cluster:
   fdq_test_repo: false
-  fdq_version: 0.0.77
+  fdq_version: 0.1.1
   python_env_module: "python/3.12.4"
   uv_env_module: "uv/0.6.12"
   cuda_env_module: "cuda/12.8.0"
@@ -108,6 +108,21 @@ Submit your experiment:
 ```bash
 python /path/to/fdq_submit.py /path/to/config.yaml
 ```
+
+Parameter studies can be launched by setting `mode.parameter_study: true` and replacing scalar values with `[start:stop:count]` ranges. See [mnist_class_dense_param_study.yaml](experiment_templates/mnist/mnist_class_dense_param_study.yaml) for a complete example. Ranges are inclusive and multiple ranges are submitted as a Cartesian product:
+
+```yaml
+mode:
+  parameter_study: true
+
+models:
+  simpleNet:
+    optimizer:
+      args:
+        lr: [0.001:0.005:5]
+```
+
+This submits runs with `lr=0.001`, `0.002`, `0.003`, `0.004`, and `0.005`. When `mode.parameter_study: false`, FDQ submits one job and uses the first value from every range.
 
 Notes:
 - SLURM logs are written to `slurm_log/`.
@@ -397,7 +412,7 @@ Example (YAML):
 
 ```yaml
 slurm_cluster:
-  fdq_version: 0.0.77
+  fdq_version: 0.1.1
   # ... other settings ...
   additional_pip_packages:
     - monai==1.4.0

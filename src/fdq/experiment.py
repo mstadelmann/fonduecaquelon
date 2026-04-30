@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from typing import Any
 import git
 from omegaconf import DictConfig
+from omegaconf import OmegaConf
 
 import torch
 import funkybob
@@ -152,6 +153,9 @@ class fdqExperiment:
 
             if self.is_slurm:
                 folder_name += f"__{self.slurm_job_id}"
+                parameter_run_tag = os.getenv("FDQ_PARAMETER_RUN_TAG", "")
+                if parameter_run_tag:
+                    folder_name += parameter_run_tag
                 res_base_path = self.cfg.get("slurm_cluster", {}).get("scratch_results_path")
                 if res_base_path is None:
                     wprint(
@@ -555,6 +559,7 @@ class fdqExperiment:
         self.cp_to_res_dir(file_path=self.experiment_file_path)
         for p in self.cfg.hydra_paths.parents:
             self.cp_to_res_dir(file_path=p)
+        self.store_parameter_study_config()
 
         store_processing_infos(self)
         self.dist_barrier()
@@ -898,6 +903,43 @@ class fdqExperiment:
         fn = file_path.split("/")[-1]
         iprint(f"Saving {fn} to {self.results_dir}...")
         shutil.copyfile(file_path, f"{self.results_dir}/{fn}")
+
+    def store_parameter_study_config(self) -> None:
+        if not self.is_main_process():
+            return
+
+        parameter_paths = os.getenv("FDQ_PARAMETER_STUDY_PATHS", "").split()
+        if not parameter_paths:
+            return
+
+        parameter_values: dict[str, Any] = {}
+        for parameter_path in parameter_paths:
+            value = OmegaConf.select(self.cfg, parameter_path)
+            if value is None:
+                wprint(f"Parameter-study path '{parameter_path}' was not found in the resolved config.")
+                continue
+            self._set_nested_parameter_value(parameter_values, parameter_path, value)
+
+        if not parameter_values:
+            return
+
+        parameter_run_tag = os.getenv("FDQ_PARAMETER_RUN_TAG", "")
+        filename = "parameter_study"
+        if parameter_run_tag:
+            filename += parameter_run_tag
+        filename += ".yaml"
+
+        output_path = os.path.join(self.results_dir, filename)
+        iprint(f"Saving {filename} to {self.results_dir}...")
+        OmegaConf.save(config=OmegaConf.create(parameter_values), f=output_path)
+
+    @staticmethod
+    def _set_nested_parameter_value(container: dict[str, Any], dotted_path: str, value: Any) -> None:
+        target = container
+        parts = dotted_path.split(".")
+        for part in parts[:-1]:
+            target = target.setdefault(part, {})
+        target[parts[-1]] = value
 
     def cp_to_test_dir(self, file_path: str) -> None:
         fn = file_path.split("/")[-1]

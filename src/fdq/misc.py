@@ -3,6 +3,7 @@ import os
 import copy
 import json
 import random
+import re
 from datetime import datetime
 from typing import Any
 from collections.abc import Callable, Iterator
@@ -506,6 +507,19 @@ def save_tensorboard(
     _log_tb_images(experiment, images)
 
 
+def _get_parameter_run_tag(experiment: Any) -> str:
+    """Return the parameter-study run tag for names such as `_p001`."""
+    parameter_run_tag = os.getenv("FDQ_PARAMETER_RUN_TAG", "")
+    if parameter_run_tag:
+        return parameter_run_tag
+
+    try:
+        match = re.search(r"(_p\d+)$", os.path.basename(experiment.results_dir))
+    except (AttributeError, TypeError):
+        return ""
+    return match.group(1) if match else ""
+
+
 def init_wandb(experiment: Any) -> bool:
     """Initialize weights and biases."""
     if experiment.cfg.store.wandb_project is None:
@@ -523,8 +537,11 @@ def init_wandb(experiment: Any) -> bool:
             slurm_str = f"__{experiment.slurm_job_id}"
 
     dt_string = experiment.creation_time.strftime("%Y%m%d_%H%M%S")
+    parameter_run_tag = _get_parameter_run_tag(experiment)
     if experiment.mode.op_mode.train:
-        wandb_name = f"{dt_string}__{experiment.experimentName[:20]}__{experiment.funky_name}{slurm_str}"
+        wandb_name = (
+            f"{dt_string}__{experiment.experimentName[:20]}__{experiment.funky_name}{parameter_run_tag}{slurm_str}"
+        )
     else:
         try:
             res_dir_name = os.path.basename(experiment.results_dir).split("_")
@@ -533,10 +550,10 @@ def init_wandb(experiment: Any) -> bool:
                 f"{res_dir_name[2]}{res_dir_name[3]}"
                 f"__{experiment.experimentName[:20]}"
                 f"__{res_dir_name[5]}_{res_dir_name[6]}"
-                f"__test{slurm_str}"
+                f"__test{parameter_run_tag}{slurm_str}"
             )
         except (IndexError, AttributeError):
-            wandb_name = f"test__{dt_string}__{experiment.experimentName[:30]}{slurm_str}"
+            wandb_name = f"test__{dt_string}__{experiment.experimentName[:30]}{parameter_run_tag}{slurm_str}"
 
     try:
         wandb.login(key=experiment.cfg.store.wandb_key)

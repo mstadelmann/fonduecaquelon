@@ -117,7 +117,7 @@ def auto_test(experiment, test_loader):
             "data": inputs[:max_log_size],
             "captions": captions[0] if len(captions) == 1 else ", ".join(captions[:max_log_size]),
         }
-            
+
         save_wandb(
             experiment,
             images=imgs_wandb,

@@ -1,0 +1,32 @@
+defaults:
+  - mnist_class_dense
+  - _self_
+
+globals:
+  project: "MNIST classifier"
+  author: "Marc"
+
+models:
+  simpleNet:
+    optimizer:
+      args:
+        lr: [0.001:0.003:2]
+
+mode:
+  parameter_study: true
+  run_train: true
+  run_test_interactive: false
+  run_test_auto: true
+  dump_model: false
+  run_inference: false
+  print_model_summary: false
+  resume_chpt_path: null
+
+data:
+  MNIST:
+    args:
+      subset_train: [0.2:0.4:2]
+
+train:
+  args:
+    epochs: [4:6:2]
