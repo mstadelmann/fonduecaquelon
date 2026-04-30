@@ -10,6 +10,7 @@ submit_job() {
 }
 
 submit_job experiment_templates/mnist/mnist_class_dense.yaml
+submit_job experiment_templates/mnist/mnist_class_dense_param_study.yaml
 
 submit_job experiment_templates/segment_pets/segment_pets_01.yaml
 submit_job experiment_templates/segment_pets/segment_pets_02_noAMP_resubmit.yaml

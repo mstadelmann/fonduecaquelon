@@ -109,7 +109,7 @@ Submit your experiment:
 python /path/to/fdq_submit.py /path/to/config.yaml
 ```
 
-Parameter studies can be launched by setting `mode.parameter_study: true` and replacing scalar values with `[start:stop:count]` ranges. Ranges are inclusive and multiple ranges are submitted as a Cartesian product:
+Parameter studies can be launched by setting `mode.parameter_study: true` and replacing scalar values with `[start:stop:count]` ranges. See [mnist_class_dense_param_study.yaml](experiment_templates/mnist/mnist_class_dense_param_study.yaml) for a complete example. Ranges are inclusive and multiple ranges are submitted as a Cartesian product:
 
 ```yaml
 mode:
