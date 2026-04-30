@@ -22,7 +22,7 @@ A *fonduecaquelon* is the heavy pot that keeps cheeses (e.g. 50% Gruyère and 50
 
 ## 🛠️ Installation
 
-If you simply want to submit jobs to a Slurm cluster, you don't have to install anything. Just download [fdq_submit.py](fdq_submit.py) and launch your job as documented [below](#slurm-cluster-execution).
+If you simply want to submit jobs to a Slurm cluster, download [fdq_submit.py](fdq_submit.py) and launch your job as documented [below](#slurm-cluster-execution). The submit helper reads YAML files, so the Python environment that runs it needs PyYAML available.
 
 To run/debug experiments, install the latest release from PyPI:
 
@@ -41,7 +41,7 @@ For development and the latest features, clone the repository:
 ```bash
 git clone https://github.com/mstadelmann/fonduecaquelon.git
 cd fonduecaquelon
-pip install -e .[dev,gpu]
+pip install -e ".[dev,gpu]"
 ```
 
 
@@ -71,7 +71,7 @@ fdq --config-path /home/marc/dev/fonduecaquelon/experiment_templates/mnist --con
 
 Run experiments on SLURM by adding a `slurm_cluster` section to your config. See [segment_pets_01.yaml](experiment_templates/segment_pets/segment_pets_01.yaml).
 
-Important: When using chained config files, define the `mode`, `slurm_cluster`, and `store` sections in the child config (the one you launch).
+When using chained config files, `fdq_submit.py` merges Hydra-style `defaults` entries before creating the SLURM submit script, so inherited `mode`, `slurm_cluster`, and `store` values are available to the submitter. Values in the launched child config override parent values.
 
 Minimal example (YAML):
 
@@ -119,7 +119,7 @@ After training, export and optimize models for deployment:
 
 ```bash
 # Interactive model dumping with export options (Hydra-style)
-fdq --config-path <path_to_config_dir> --config-name <config_basename> -nt -d
+fdq --config-path <path_to_config_dir> --config-name <config_basename> mode.run_train=false mode.dump_model=true
 ```
 
 This launches an interactive interface where you can:
@@ -288,6 +288,14 @@ Testing is similar. Define:
 def fdq_test(experiment: fdqExperiment):
 ```
 
+Automatic testing loads the validation-best model by default. Configure it with:
+
+```yaml
+test:
+  processor: /path/to/test_script.py
+  test_model: best        # aliases: best_val, best_train, last
+```
+
 See [oxpets\_test.py](experiment_templates/segment_pets/oxpets_test.py) for reference.
 
 ## 💾 Dataset Caching
@@ -303,22 +311,20 @@ FDQ includes a dataset caching system to speed up training by caching preprocess
 
 Enable caching in your config:
 
-```json
-"data": {
-    "OXPET": {
-        "class_name": "experiment_templates.segment_pets.oxpets_data.OxPetsData",
-        "args": {
-            "data_path": "/path/to/data",
-            "batch_size": 8
-        },
-        "caching": {
-            "cache_dir": "/path/to/cache",
-            "shuffle_train": true,
-            "shuffle_val": false,
-            "shuffle_test": false
-        }
-    }
-}
+```yaml
+data:
+  OXPET:
+    processor: /path/to/data_preparator.py
+    args:
+      base_path: /path/to/data
+      train_batch_size: 8
+      val_batch_size: 8
+      test_batch_size: 1
+    caching:
+      cache_dir: /path/to/cache
+      compress_cache: true
+      num_workers: 0
+      pin_memory: false
 ```
 
 ### Custom Augmentations
@@ -327,9 +333,9 @@ Define augmentations:
 
 ```python
 # oxpets_augmentation.py
-def augment(sample, transformers=None):
+def augment(sample, experiment=None):
     """Apply custom augmentations to cached dataset samples."""
-    sample["image"], sample["mask"] = transformers["random_vflip_sync"](
+    sample["image"], sample["mask"] = experiment.transformers["random_vflip_sync"](
         sample["image"], sample["mask"]
     )
     return sample
@@ -339,10 +345,13 @@ Reference in your config:
 
 ```yaml
 data:
-    OXPET:
-        caching:
-            augmentation_script: experiment_templates.segment_pets.oxpets_augmentation
+  OXPET:
+    caching:
+      nondeterministic_transforms:
+        processor: /path/to/oxpets_augmentation.py
 ```
+
+See [segment_pets_07_cached_augmentations.yaml](experiment_templates/segment_pets/segment_pets_07_cached_augmentations.yaml) for the full pattern.
 
 ## 🧮 Mixed precision
 
@@ -359,12 +368,11 @@ Observed speedup on H200sxm GPUs:
 
 To run with [PyTorch DDP](https://docs.pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html), add:
 
-```json
-"slurm_cluster": {
-    "world_size": 2,
-    "cpus_per_task": 16,
-    "gres": "gpu:h200sxm:2",
-}
+```yaml
+slurm_cluster:
+  world_size: 2
+  cpus_per_task: 16
+  gres: gpu:h200sxm:2
 ```
 
 See [segment_pets_04_distributed_w2.yaml](experiment_templates/segment_pets/segment_pets_04_distributed_w2.yaml).
@@ -403,7 +411,14 @@ For debugging, install FDQ in development mode:
 ```bash
 git clone https://github.com/mstadelmann/fonduecaquelon.git
 cd fonduecaquelon
-pip install -e .
+pip install -e ".[dev]"
+```
+
+Run the test suite from the repository root:
+
+```bash
+python -m pytest
+ruff check .
 ```
 
 ### VS Code Setup
@@ -439,7 +454,7 @@ pip install -e .
 * **Config Inheritance:** Use Hydra’s `defaults` list in your YAML configs to include/extend base configs and reduce duplication.
 * **Multiple Models/Losses:** Add multiple models and losses to config dictionaries as needed.
 * **Cluster Submission:** `fdq_submit.py` handles SLURM job script generation, submission, environment setup, and result copying.
-* **Model Export:** Use `-d` or `--dump` for interactive model export and optimization.
+* **Model Export:** Set `mode.run_train=false mode.dump_model=true` for interactive model export and optimization.
 
 ## 📚 Resources
 

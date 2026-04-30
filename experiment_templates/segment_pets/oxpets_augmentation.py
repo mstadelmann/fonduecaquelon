@@ -1,7 +1,7 @@
 def augment(sample, experiment=None):
     """Apply custom augmentations to cached dataset samples. This function is not mandatory!
 
-    See 'experiment_templates/segment_pets/segment_pets_cached.json' for an example of how to use it.
+    See 'experiment_templates/segment_pets/segment_pets_07_cached_augmentations.yaml' for an example of how to use it.
 
     This function implements the FDQ dataset caching augmentation interface. It applies
     random transformations on-the-fly to samples that have already been processed
@@ -29,7 +29,7 @@ def augment(sample, experiment=None):
 
     # random_vertical_flip_sync is defined in 'experiment_templates/segment_pets/segment_pets_07_cached_augmentations.yaml'
     # This function applies a synchronized vertical flip to both the image and mask tensors.
-    # You can of course define your own operations directly in this script, or add additional transformations in the JSON file.
+    # You can of course define your own operations directly in this script, or add additional transformations in the YAML file.
     # See 'src/fdq/transformers.py' for all available predefined transformations.
 
     return sample
