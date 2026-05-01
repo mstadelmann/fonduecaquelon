@@ -513,16 +513,29 @@ def load_conf_file(path: str, _seen: set[Path] | None = None) -> dict:
         _seen.discard(Path(path).expanduser().resolve())
 
 
-def _format_decimal(value: Decimal) -> str:
-    """Format a decimal for a Hydra CLI override without trailing noise."""
-    formatted = format(value.normalize(), "f")
-    if "." in formatted:
-        formatted = formatted.rstrip("0").rstrip(".")
-    return "0" if formatted in {"", "-0"} else formatted
+def _decimal_to_parameter_value(value: Decimal) -> int | float:
+    """Return a YAML-safe numeric scalar for a parsed parameter range value."""
+    if value == value.to_integral_value():
+        return int(value)
+    return float(value)
 
 
-def _parse_parameter_values(value: Any) -> list[str] | None:
-    """Parse a parameter-study value list into Hydra override values."""
+def _parse_scalar_parameter_value(value: Any) -> Any:
+    """Parse a parameter-study scalar into the type Hydra/YAML would normally use."""
+    if not isinstance(value, str) or yaml is None:
+        return value
+    if value == "":
+        return value
+
+    try:
+        parsed = yaml.safe_load(value)
+    except yaml.YAMLError:
+        return value
+    return value if isinstance(parsed, dict | list) else parsed
+
+
+def _parse_parameter_values(value: Any) -> list[Any] | None:
+    """Parse a parameter-study value list into concrete config values."""
     if not isinstance(value, list):
         return None
 
@@ -535,10 +548,10 @@ def _parse_parameter_values(value: Any) -> list[str] | None:
             if count < 1:
                 raise FDQSubmitError(f"Parameter-study range '{value[0]}' must use a count of at least 1")
             if count == 1:
-                return [_format_decimal(start)]
+                return [_decimal_to_parameter_value(start)]
 
             step = (stop - start) / Decimal(count - 1)
-            return [_format_decimal(start + step * Decimal(index)) for index in range(count)]
+            return [_decimal_to_parameter_value(start + step * Decimal(index)) for index in range(count)]
 
     categorical_values = _parse_categorical_parameter_values(value)
     if categorical_values is None:
@@ -546,15 +559,15 @@ def _parse_parameter_values(value: Any) -> list[str] | None:
     return categorical_values
 
 
-def _parse_categorical_parameter_values(value: list[Any]) -> list[str] | None:
+def _parse_categorical_parameter_values(value: list[Any]) -> list[Any] | None:
     """Parse non-numeric `@p` values."""
     if _is_single_scalar_mapping(value):
         first, second = next(iter(value[0].items()))
-        values = [_format_parameter_value(first), _format_parameter_value(second)]
+        values = [first, second]
     elif len(value) == 1 and isinstance(value[0], str):
-        values = [part.strip() for part in value[0].split(":")]
+        values = [_parse_scalar_parameter_value(part.strip()) for part in value[0].split(":")]
     else:
-        values = [_format_parameter_value(part) for part in value]
+        values = [_parse_scalar_parameter_value(part) for part in value]
 
     if len(values) < 2:
         return None
@@ -602,9 +615,9 @@ def _is_parameter_key(key: Any) -> bool:
     return isinstance(key, str) and key.endswith(PARAMETER_STUDY_SUFFIX)
 
 
-def find_parameter_ranges(conf: dict[str, Any]) -> list[tuple[str, list[str]]]:
+def find_parameter_ranges(conf: dict[str, Any]) -> list[tuple[str, list[Any]]]:
     """Find all parameter-study markers in a merged experiment configuration."""
-    ranges: list[tuple[str, list[str]]] = []
+    ranges: list[tuple[str, list[Any]]] = []
 
     def visit(node: Any, path: tuple[str, ...]) -> None:
         if isinstance(node, dict):
@@ -622,7 +635,7 @@ def find_parameter_ranges(conf: dict[str, Any]) -> list[tuple[str, list[str]]]:
     return ranges
 
 
-def _materialize_parameter_run(node: Any, path: tuple[str, ...], run_values: dict[str, str]) -> Any:
+def _materialize_parameter_run(node: Any, path: tuple[str, ...], run_values: dict[str, Any]) -> Any:
     """Return a config copy with `@p` keys replaced by concrete unmarked keys."""
     if isinstance(node, dict):
         materialized: dict[str, Any] = {}
@@ -671,7 +684,7 @@ def _write_concrete_parameter_config(
     return os.path.splitext(concrete_name)[0]
 
 
-def build_parameter_study_runs(exp_config: dict[str, Any]) -> list[tuple[dict[str, Any], str, dict[str, str]]]:
+def build_parameter_study_runs(exp_config: dict[str, Any]) -> list[tuple[dict[str, Any], str, dict[str, Any]]]:
     """Build concrete configs and Hydra override strings for a parameter study.
 
     Study markers use config keys ending in `@p`, for example
@@ -684,11 +697,11 @@ def build_parameter_study_runs(exp_config: dict[str, Any]) -> list[tuple[dict[st
     parameter_names = [name for name, _values in ranges]
     value_lists = [values for _name, values in ranges]
 
-    runs: list[tuple[dict[str, Any], str, dict[str, str]]] = []
+    runs: list[tuple[dict[str, Any], str, dict[str, Any]]] = []
     for combination in product(*value_lists):
         run_values = dict(zip(parameter_names, combination, strict=True))
         concrete_config = _materialize_parameter_run(exp_config, (), run_values)
-        overrides = " ".join(f"{name}={value}" for name, value in run_values.items())
+        overrides = " ".join(f"{name}={_format_parameter_value(value)}" for name, value in run_values.items())
         runs.append((concrete_config, overrides, run_values))
 
     return runs
@@ -989,7 +1002,7 @@ def print_submission_summary(
     config_name: str,
     config_path: str,
     last_job_config: dict[str, Any] | None,
-    parameter_ranges: list[tuple[str, list[str]]],
+    parameter_ranges: list[tuple[str, list[Any]]],
 ) -> None:
     """Print the final job submission summary."""
     print(f"\n{'=' * 60}")

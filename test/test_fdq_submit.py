@@ -181,8 +181,8 @@ class TestFdqSubmit(unittest.TestCase):
         self.assertEqual(stem, "20260501_120000__mnist_class_dense_param_study__p001")
         optimizer = generated_config["models"]["simpleNet"]["optimizer"]
         self.assertEqual(optimizer["class_name"], "torch.optim.Adam")
-        self.assertEqual(optimizer["args"]["lr"], "0.001")
-        self.assertEqual(generated_config["train"]["args"]["epochs"], "4")
+        self.assertEqual(optimizer["args"]["lr"], 0.001)
+        self.assertEqual(generated_config["train"]["args"]["epochs"], 4)
         self.assertNotIn("class_name@p", optimizer)
         self.assertNotIn("lr@p", optimizer["args"])
         self.assertNotIn("epochs@p", generated_config["train"]["args"])
@@ -204,7 +204,7 @@ class TestFdqSubmit(unittest.TestCase):
                     "  account: account\n"
                     "  python_env_module: python/3.12\n"
                     "  uv_env_module: uv/0.6\n"
-                    "  fdq_version: 0.1.2.dev0\n"
+                    "  fdq_version: 0.1.2.dev1\n"
                     "  job_time: 1\n"
                     "mode:\n"
                     "  run_train: true\n"
@@ -237,7 +237,7 @@ class TestFdqSubmit(unittest.TestCase):
 
         self.assertEqual(len(generated_configs), 2)
         self.assertEqual(len(generated_submits), 2)
-        self.assertEqual(generated_config["models"]["simpleNet"]["optimizer"]["args"]["lr"], "0.001")
+        self.assertEqual(generated_config["models"]["simpleNet"]["optimizer"]["args"]["lr"], 0.001)
         self.assertNotIn("lr@p", generated_config["models"]["simpleNet"]["optimizer"]["args"])
         self.assertIn(f"CONFIG_PATH={submitted_dir}", submit_content)
         self.assertIn(f"CONFIG_NAME={first_config_stem}", submit_content)
@@ -267,12 +267,12 @@ class TestFdqSubmit(unittest.TestCase):
         self.assertEqual(
             ranges,
             [
-                ("models.simpleNet.optimizer.args.lr", ["0.001", "0.002", "0.003", "0.004", "0.005"]),
-                ("train.args.epochs", ["1", "2", "3"]),
+                ("models.simpleNet.optimizer.args.lr", [0.001, 0.002, 0.003, 0.004, 0.005]),
+                ("train.args.epochs", [1, 2, 3]),
             ],
         )
         self.assertEqual(len(runs), 15)
-        self.assertEqual(runs[0][0]["models"]["simpleNet"]["optimizer"]["args"]["lr"], "0.001")
+        self.assertEqual(runs[0][0]["models"]["simpleNet"]["optimizer"]["args"]["lr"], 0.001)
         self.assertNotIn("lr@p", runs[0][0]["models"]["simpleNet"]["optimizer"]["args"])
         self.assertEqual(
             runs[0][1],
@@ -323,12 +323,12 @@ class TestFdqSubmit(unittest.TestCase):
         self.assertEqual(
             ranges,
             [
-                ("data.OXPET.args.shuffle_train", ["true", "false"]),
+                ("data.OXPET.args.shuffle_train", [True, False]),
                 ("models.simpleNet.optimizer.class_name", ["torch.optim.Adam", "torch.optim.SGD"]),
             ],
         )
         self.assertEqual(len(runs), 4)
-        self.assertEqual(runs[0][0]["data"]["OXPET"]["args"]["shuffle_train"], "true")
+        self.assertEqual(runs[0][0]["data"]["OXPET"]["args"]["shuffle_train"], True)
         self.assertNotIn("shuffle_train@p", runs[0][0]["data"]["OXPET"]["args"])
         self.assertEqual(
             runs[0][1],
@@ -384,7 +384,7 @@ class TestFdqSubmit(unittest.TestCase):
                 config_path="/tmp",
                 last_job_config={"results_path": "/tmp/results", "log_path": "/tmp/logs"},
                 parameter_ranges=[
-                    ("models.simpleNet.optimizer.args.lr", ["0.001", "0.002"]),
+                    ("models.simpleNet.optimizer.args.lr", [0.001, 0.002]),
                 ],
             )
 
@@ -436,7 +436,7 @@ class TestFdqSubmit(unittest.TestCase):
             ranges = find_parameter_ranges(cfg)
             runs = build_parameter_study_runs(cfg)
 
-            self.assertIn(("train.args.epochs", ["4", "6"]), ranges)
+            self.assertIn(("train.args.epochs", [4, 6]), ranges)
             self.assertEqual(len(runs), 4)
             self.assertIn("train.args.epochs=4", runs[0][1])
             self.assertIn("train.args.epochs=6", runs[-1][1])
@@ -463,7 +463,7 @@ class TestFdqSubmit(unittest.TestCase):
             ranges = find_parameter_ranges(cfg)
             runs = build_parameter_study_runs(cfg)
 
-            self.assertIn(("data.OXPET.args.shuffle_train", ["true", "false"]), ranges)
+            self.assertIn(("data.OXPET.args.shuffle_train", [True, False]), ranges)
             self.assertIn(("models.simpleNet.optimizer.class_name", ["torch.optim.Adam", "torch.optim.SGD"]), ranges)
             self.assertEqual(len(runs), 4)
 
