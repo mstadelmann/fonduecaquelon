@@ -2,6 +2,11 @@ import torch
 from fdq.misc import save_wandb
 from fdq.ui_functions import startProgBar, iprint
 
+try:
+    from train_oxpets import multiclass_dice_score
+except ModuleNotFoundError:
+    from experiment_templates.segment_pets.train_oxpets import multiclass_dice_score
+
 
 @torch.no_grad()
 def fdq_test(experiment):
@@ -12,6 +17,7 @@ def fdq_test(experiment):
     nb_test_samples = targs.get("nb_test_samples", 50)
 
     losses = []
+    dice_scores = []
 
     iprint(f"Testset sample size: {experiment.data['OXPET'].n_test_samples}")
     pbar = startProgBar(experiment.data["OXPET"].n_test_samples, "evaluation...")
@@ -32,7 +38,9 @@ def fdq_test(experiment):
         pbar.update(nb_tbatch)
         output = experiment.models["ccUNET"](inputs)
         current_loss = float(experiment.losses["cross_ent"](output, targets))
+        current_dice = multiclass_dice_score(output, targets).item()
         losses.append(current_loss)
+        dice_scores.append(current_dice)
 
         imgs_to_log = [
             {"name": "test_in", "data": inputs},
@@ -41,13 +49,20 @@ def fdq_test(experiment):
         ]
         save_wandb(
             experiment,
-            scalars={"img_nb": nb_tbatch, "cross_ent_loss": current_loss},
+            scalars={"img_nb": nb_tbatch, "cross_ent_loss": current_loss, "dice": current_dice},
             images=imgs_to_log,
         )
 
     pbar.finish()
 
     accuracy = float(torch.tensor(losses).mean())
+    mean_dice = float(torch.tensor(dice_scores).mean())
     iprint(f"\nTotal accuracy: {accuracy}")
+    iprint(f"Mean Dice: {mean_dice}")
+
+    save_wandb(
+        experiment,
+        scalars={"test_cross_ent_loss": accuracy, "mean_dice": mean_dice},
+    )
 
     return accuracy
