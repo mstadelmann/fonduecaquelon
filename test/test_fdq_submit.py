@@ -324,7 +324,7 @@ class TestFdqSubmit(unittest.TestCase):
                     "models:\n"
                     "  simpleNet:\n"
                     "    optimizer:\n"
-                    "      class_name: [\"torch.optim.Adam\":\"torch.optim.SGD\"]\n"
+                    '      class_name: ["torch.optim.Adam":"torch.optim.SGD"]\n'
                 )
 
             cfg = load_conf_file(config_path)
