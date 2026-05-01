@@ -30,6 +30,9 @@ PARAMETER_RANGE_RE = re.compile(
     r"\s*$"
 )
 
+INTEGER_RE = re.compile(r"^[+-]?\d+$")
+FLOAT_RE = re.compile(r"^[+-]?(?:(?:\d+\.\d*)|(?:\.\d+))(?:[eE][+-]?\d+)?$|^[+-]?\d+[eE][+-]?\d+$")
+
 
 def start(rank: int, cfg: DictConfig = None, cfg_container=None) -> None:
     """Main entry point for running an FDQ experiment based on command-line arguments."""
@@ -83,14 +86,42 @@ def _range_value_to_number(value: Decimal, force_float: bool) -> int | float:
     return int(value)
 
 
-def _parse_parameter_range(value: Any) -> list[int | float] | None:
-    """Parse a `[start:stop:count]` parameter-study marker into scalar values."""
+def _parse_parameter_scalar(value: Any) -> Any:
+    """Parse a categorical parameter-study value to the scalar type Hydra would normally infer."""
+    if not isinstance(value, str):
+        return value
+
+    stripped = value.strip()
+    lowered = stripped.lower()
+    if lowered == "true":
+        return True
+    if lowered == "false":
+        return False
+    if lowered in {"null", "none"}:
+        return None
+    if INTEGER_RE.match(stripped):
+        return int(stripped)
+    if FLOAT_RE.match(stripped):
+        return float(stripped)
+    return stripped
+
+
+def _parse_parameter_range(value: Any) -> list[Any] | None:
+    """Parse a parameter-study marker into scalar values."""
     if not (isinstance(value, list) and len(value) == 1 and isinstance(value[0], str)):
+        if isinstance(value, list) and len(value) == 1 and isinstance(value[0], dict) and len(value[0]) == 1:
+            first, second = next(iter(value[0].items()))
+            return [_parse_parameter_scalar(first), _parse_parameter_scalar(second)]
         return None
 
     match = PARAMETER_RANGE_RE.match(value[0])
     if not match:
-        return None
+        categorical_values = [part.strip() for part in value[0].split(":")]
+        if len(categorical_values) < 2:
+            return None
+        if any(part == "" for part in categorical_values):
+            raise ValueError(f"Parameter-study list '{value[0]}' must not contain empty values")
+        return [_parse_parameter_scalar(part) for part in categorical_values]
 
     start_text, stop_text, count_text = match.groups()
     start = Decimal(start_text)

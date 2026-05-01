@@ -521,13 +521,21 @@ def _format_decimal(value: Decimal) -> str:
 
 
 def _parse_parameter_range(value: Any) -> list[str] | None:
-    """Parse a `[start:stop:count]` parameter-study marker into override values."""
+    """Parse a parameter-study marker into Hydra override values."""
     if not (isinstance(value, list) and len(value) == 1 and isinstance(value[0], str)):
+        if isinstance(value, list) and len(value) == 1 and isinstance(value[0], dict) and len(value[0]) == 1:
+            first, second = next(iter(value[0].items()))
+            return [_format_parameter_value(first), _format_parameter_value(second)]
         return None
 
     match = PARAMETER_RANGE_RE.match(value[0])
     if not match:
-        return None
+        categorical_values = [part.strip() for part in value[0].split(":")]
+        if len(categorical_values) < 2:
+            return None
+        if any(part == "" for part in categorical_values):
+            raise FDQSubmitError(f"Parameter-study list '{value[0]}' must not contain empty values")
+        return categorical_values
 
     start = Decimal(match.group(1))
     stop = Decimal(match.group(2))
@@ -539,6 +547,15 @@ def _parse_parameter_range(value: Any) -> list[str] | None:
 
     step = (stop - start) / Decimal(count - 1)
     return [_format_decimal(start + step * Decimal(index)) for index in range(count)]
+
+
+def _format_parameter_value(value: Any) -> str:
+    """Format a categorical parameter-study value for a Hydra CLI override."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if value is None:
+        return "null"
+    return str(value)
 
 
 def find_parameter_ranges(conf: dict[str, Any]) -> list[tuple[str, list[str]]]:
@@ -574,7 +591,8 @@ def build_parameter_study_runs(
     """Build concrete configs and Hydra override strings for a parameter study.
 
     Range markers use the YAML shape `[start:stop:count]`, for example
-    `[0.001:0.005:5]`.
+    `[0.001:0.005:5]`. Categorical markers use colon-separated values,
+    for example `[true:false]` or `["torch.optim.Adam":"torch.optim.SGD"]`.
     """
     ranges = find_parameter_ranges(exp_config)
     if not ranges:

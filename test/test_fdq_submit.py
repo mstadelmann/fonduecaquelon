@@ -198,6 +198,33 @@ class TestFdqSubmit(unittest.TestCase):
         self.assertEqual(runs[0][0]["models"]["simpleNet"]["optimizer"]["args"]["lr"], "0.001")
         self.assertEqual(runs[0][0]["train"]["args"]["epochs"], "1")
 
+    def test_parameter_study_expands_categorical_values(self):
+        """Categorical markers expand to every listed non-numeric value."""
+        cfg = {
+            "data": {"OXPET": {"args": {"shuffle_train": ["true:false"]}}},
+            "models": {"simpleNet": {"optimizer": {"class_name": [{"torch.optim.Adam": "torch.optim.SGD"}]}}},
+        }
+
+        ranges = find_parameter_ranges(cfg)
+        runs = build_parameter_study_runs(cfg, parameter_study_enabled=True)
+
+        self.assertEqual(
+            ranges,
+            [
+                ("data.OXPET.args.shuffle_train", ["true", "false"]),
+                ("models.simpleNet.optimizer.class_name", ["torch.optim.Adam", "torch.optim.SGD"]),
+            ],
+        )
+        self.assertEqual(len(runs), 4)
+        self.assertEqual(
+            runs[0][1],
+            "data.OXPET.args.shuffle_train=true models.simpleNet.optimizer.class_name=torch.optim.Adam",
+        )
+        self.assertEqual(
+            runs[-1][1],
+            "data.OXPET.args.shuffle_train=false models.simpleNet.optimizer.class_name=torch.optim.SGD",
+        )
+
     def test_submission_summary_clearly_marks_parameter_study(self):
         """The success block clearly states when a parameter study was submitted."""
         stdout = io.StringIO()
@@ -279,6 +306,34 @@ class TestFdqSubmit(unittest.TestCase):
             self.assertEqual(len(runs), 4)
             self.assertIn("train.args.epochs=4", runs[0][1])
             self.assertIn("train.args.epochs=6", runs[-1][1])
+
+    @unittest.skipUnless(HAS_YAML, "PyYAML is not installed")
+    def test_categorical_parameter_studies_are_loaded_from_yaml(self):
+        """Categorical study markers survive YAML loading in both supported forms."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = os.path.join(temp_dir, "experiment.yaml")
+
+            with open(config_path, "w", encoding="utf8") as config_file:
+                config_file.write(
+                    "mode:\n"
+                    "  parameter_study: true\n"
+                    "data:\n"
+                    "  OXPET:\n"
+                    "    args:\n"
+                    "      shuffle_train: [true:false]\n"
+                    "models:\n"
+                    "  simpleNet:\n"
+                    "    optimizer:\n"
+                    '      class_name: ["torch.optim.Adam":"torch.optim.SGD"]\n'
+                )
+
+            cfg = load_conf_file(config_path)
+            ranges = find_parameter_ranges(cfg)
+            runs = build_parameter_study_runs(cfg, parameter_study_enabled=cfg["mode"]["parameter_study"])
+
+            self.assertIn(("data.OXPET.args.shuffle_train", ["true", "false"]), ranges)
+            self.assertIn(("models.simpleNet.optimizer.class_name", ["torch.optim.Adam", "torch.optim.SGD"]), ranges)
+            self.assertEqual(len(runs), 4)
 
     @unittest.skipUnless(HAS_YAML, "PyYAML is not installed")
     def test_load_conf_file_merges_hydra_defaults(self):
