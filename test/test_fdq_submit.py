@@ -5,8 +5,11 @@ import os
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from unittest.mock import patch
 
+import fdq_submit
 from fdq_submit import (
+    _write_concrete_parameter_config,
     build_parameter_study_runs,
     create_submit_file,
     find_parameter_ranges,
@@ -15,7 +18,7 @@ from fdq_submit import (
 )
 
 try:
-    import yaml  # noqa: F401
+    import yaml
 
     HAS_YAML = True
 except ModuleNotFoundError:
@@ -145,6 +148,100 @@ class TestFdqSubmit(unittest.TestCase):
                 r"s|^\(#SBATCH --error=.*\)_train\([^/[:space:]]*\.err\)|\1_test\2|g",
                 content,
             )
+
+    @unittest.skipUnless(HAS_YAML, "PyYAML is not installed")
+    def test_concrete_parameter_config_is_written_without_study_markers(self):
+        """Parameter-study submissions run generated configs without @p keys."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = {
+                "models": {
+                    "simpleNet": {
+                        "optimizer": {
+                            "class_name@p": [{"torch.optim.Adam": "torch.optim.SGD"}],
+                            "args": {"lr@p": ["0.001:0.003:2"]},
+                        }
+                    }
+                },
+                "train": {"args": {"epochs@p": ["4:6:2"]}},
+            }
+
+            runs = build_parameter_study_runs(config)
+            stem = _write_concrete_parameter_config(
+                runs[0][0],
+                temp_dir,
+                "20260501_120000",
+                "mnist_class_dense_param_study",
+                1,
+            )
+            generated_path = os.path.join(temp_dir, f"{stem}.yaml")
+
+            with open(generated_path, encoding="utf8") as config_file:
+                generated_config = yaml.safe_load(config_file)
+
+        self.assertEqual(stem, "20260501_120000__mnist_class_dense_param_study__p001")
+        optimizer = generated_config["models"]["simpleNet"]["optimizer"]
+        self.assertEqual(optimizer["class_name"], "torch.optim.Adam")
+        self.assertEqual(optimizer["args"]["lr"], "0.001")
+        self.assertEqual(generated_config["train"]["args"]["epochs"], "4")
+        self.assertNotIn("class_name@p", optimizer)
+        self.assertNotIn("lr@p", optimizer["args"])
+        self.assertNotIn("epochs@p", generated_config["train"]["args"])
+
+    @unittest.skipUnless(HAS_YAML, "PyYAML is not installed")
+    def test_main_parameter_study_submits_generated_configs(self):
+        """End-to-end submit generation points Slurm at concrete configs."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            results_dir = os.path.join(temp_dir, "results")
+            log_dir = os.path.join(temp_dir, "logs")
+            config_path = os.path.join(temp_dir, "experiment.yaml")
+            with open(config_path, "w", encoding="utf8") as config_file:
+                config_file.write(
+                    "store:\n"
+                    f"  results_path: {results_dir}\n"
+                    "slurm_cluster:\n"
+                    f"  log_path: {log_dir}\n"
+                    "  partition: gpu\n"
+                    "  account: account\n"
+                    "  python_env_module: python/3.12\n"
+                    "  uv_env_module: uv/0.6\n"
+                    "  fdq_version: 0.1.2.dev0\n"
+                    "  job_time: 1\n"
+                    "mode:\n"
+                    "  run_train: true\n"
+                    "  run_test_auto: false\n"
+                    "models:\n"
+                    "  simpleNet:\n"
+                    "    optimizer:\n"
+                    "      args:\n"
+                    "        lr@p: [0.001:0.003:2]\n"
+                )
+
+            with (
+                patch("sys.argv", ["fdq_submit.py", config_path]),
+                patch("fdq_submit.submit_slurm_job", return_value="12345"),
+                redirect_stdout(io.StringIO()),
+            ):
+                fdq_submit.main()
+
+            submitted_dir = os.path.join(log_dir, "submitted_jobs")
+            generated_configs = sorted(name for name in os.listdir(submitted_dir) if name.endswith(".yaml"))
+            generated_submits = sorted(name for name in os.listdir(submitted_dir) if name.endswith(".submit"))
+            first_config_path = os.path.join(submitted_dir, generated_configs[0])
+            first_config_stem = os.path.splitext(generated_configs[0])[0]
+            first_submit_path = os.path.join(submitted_dir, generated_submits[0])
+
+            with open(first_config_path, encoding="utf8") as config_file:
+                generated_config = yaml.safe_load(config_file)
+            with open(first_submit_path, encoding="utf8") as submit_file:
+                submit_content = submit_file.read()
+
+        self.assertEqual(len(generated_configs), 2)
+        self.assertEqual(len(generated_submits), 2)
+        self.assertEqual(generated_config["models"]["simpleNet"]["optimizer"]["args"]["lr"], "0.001")
+        self.assertNotIn("lr@p", generated_config["models"]["simpleNet"]["optimizer"]["args"])
+        self.assertIn(f"CONFIG_PATH={submitted_dir}", submit_content)
+        self.assertIn(f"CONFIG_NAME={first_config_stem}", submit_content)
+        self.assertIn('PARAMETER_OVERRIDES=""', submit_content)
 
     @unittest.skipUnless(HAS_YAML, "PyYAML is not installed")
     def test_parameter_study_expands_range_product(self):

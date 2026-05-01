@@ -648,6 +648,29 @@ def _materialize_parameter_run(node: Any, path: tuple[str, ...], run_values: dic
     return copy.deepcopy(node)
 
 
+def _write_concrete_parameter_config(
+    config: dict[str, Any],
+    submit_dir: str,
+    timestamp: str,
+    config_name: str,
+    run_index: int,
+) -> str:
+    """Write a materialized parameter-study config and return its basename without extension."""
+    if yaml is None:
+        raise FDQSubmitError("PyYAML is required to write parameter-study configs")
+
+    concrete_name = f"{timestamp}__{config_name.replace(' ', '_')}__p{run_index:03d}.yaml"
+    concrete_path = os.path.join(submit_dir, concrete_name)
+    try:
+        with open(concrete_path, "w", encoding="utf8") as config_file:
+            yaml.safe_dump(config, config_file, sort_keys=False)
+    except OSError as exc:
+        raise FDQSubmitError(f"Cannot create concrete parameter-study config {concrete_path}: {exc}") from exc
+
+    log_info(f"Created concrete parameter-study config: {concrete_path}")
+    return os.path.splitext(concrete_name)[0]
+
+
 def build_parameter_study_runs(exp_config: dict[str, Any]) -> list[tuple[dict[str, Any], str, dict[str, str]]]:
     """Build concrete configs and Hydra override strings for a parameter study.
 
@@ -1059,10 +1082,23 @@ def main() -> None:
             )
             os.makedirs(base_path, exist_ok=True)
 
+            run_config_name = config_name
+            if parameter_ranges:
+                run_config_name = _write_concrete_parameter_config(
+                    run_exp_config,
+                    base_path,
+                    timestamp,
+                    config_name,
+                    run_index,
+                )
+                job_config["parameter_overrides"] = ""
+
             submit_suffix = parameter_run_tag.replace("_", "__", 1)
             submit_filename = f"{timestamp}__{config_name.replace(' ', '_')}{submit_suffix}.submit"
             submit_path = os.path.join(base_path, submit_filename)
             job_config["submit_file_path"] = submit_path
+            job_config["config_path"] = base_path if parameter_ranges else config_path
+            job_config["config_name"] = run_config_name
 
             # Configure job type
             if not job_config["run_train"] and job_config["run_test"]:
