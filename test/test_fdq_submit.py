@@ -306,13 +306,7 @@ class TestFdqSubmit(unittest.TestCase):
             child_path = os.path.join(temp_dir, "child.yaml")
 
             with open(parent_path, "w", encoding="utf8") as parent_file:
-                parent_file.write(
-                    "models:\n"
-                    "  simpleNet:\n"
-                    "    optimizer:\n"
-                    "      args:\n"
-                    "        lr@p: [0.001:0.005:5]\n"
-                )
+                parent_file.write("models:\n  simpleNet:\n    optimizer:\n      args:\n        lr@p: [0.001:0.005:5]\n")
 
             with open(child_path, "w", encoding="utf8") as child_file:
                 child_file.write("defaults:\n  - parent\n  - _self_\n")

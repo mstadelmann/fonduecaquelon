@@ -586,7 +586,9 @@ def _unmarked_parameter_name(key: str) -> str:
         return key
     unmarked = key[: -len(PARAMETER_STUDY_SUFFIX)]
     if not unmarked:
-        raise FDQSubmitError(f"Parameter-study key '{key}' must include a parameter name before '{PARAMETER_STUDY_SUFFIX}'")
+        raise FDQSubmitError(
+            f"Parameter-study key '{key}' must include a parameter name before '{PARAMETER_STUDY_SUFFIX}'"
+        )
     return unmarked
 
 
