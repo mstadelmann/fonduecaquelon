@@ -109,7 +109,7 @@ def _parse_parameter_scalar(value: Any) -> Any:
 def _parse_parameter_range(value: Any) -> list[Any] | None:
     """Parse a parameter-study marker into scalar values."""
     if not (isinstance(value, list) and len(value) == 1 and isinstance(value[0], str)):
-        if isinstance(value, list) and len(value) == 1 and isinstance(value[0], dict) and len(value[0]) == 1:
+        if _is_single_scalar_mapping(value):
             first, second = next(iter(value[0].items()))
             return [_parse_parameter_scalar(first), _parse_parameter_scalar(second)]
         return None
@@ -139,6 +139,14 @@ def _parse_parameter_range(value: Any) -> list[Any] | None:
     force_float = any("." in number_text or "e" in number_text.lower() for number_text in (start_text, stop_text))
     force_float = force_float or any(value != value.to_integral_value() for value in decimal_values)
     return [_range_value_to_number(value, force_float) for value in decimal_values]
+
+
+def _is_single_scalar_mapping(value: Any) -> bool:
+    """Return whether a YAML list contains one scalar-to-scalar mapping."""
+    if not (isinstance(value, list) and len(value) == 1 and isinstance(value[0], dict) and len(value[0]) == 1):
+        return False
+    first, second = next(iter(value[0].items()))
+    return not isinstance(first, dict | list) and not isinstance(second, dict | list)
 
 
 def normalize_parameter_ranges(cfg: DictConfig) -> DictConfig:

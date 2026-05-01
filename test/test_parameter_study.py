@@ -29,6 +29,31 @@ class TestParameterStudyNormalization(unittest.TestCase):
         self.assertIs(normalized.data.OXPET.args.shuffle_train, True)
         self.assertEqual(normalized.models.simpleNet.optimizer.class_name, "torch.optim.Adam")
 
+    def test_transform_definitions_are_not_normalized_as_parameter_studies(self):
+        """One-item transform lists with parameter dictionaries stay untouched."""
+        cfg = OmegaConf.create(
+            {
+                "mode": {"parameter_study": False},
+                "transforms": {
+                    "resize_and_pad_bilinear": [
+                        {
+                            "ResizeMaxDimPad": {
+                                "max_dim": 256,
+                                "interpol_mode": "bilinear",
+                            }
+                        }
+                    ]
+                },
+            }
+        )
+
+        normalized = normalize_parameter_ranges(cfg)
+
+        self.assertEqual(
+            OmegaConf.to_container(normalized.transforms.resize_and_pad_bilinear, resolve=True),
+            [{"ResizeMaxDimPad": {"max_dim": 256, "interpol_mode": "bilinear"}}],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

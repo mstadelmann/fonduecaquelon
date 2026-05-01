@@ -523,7 +523,7 @@ def _format_decimal(value: Decimal) -> str:
 def _parse_parameter_range(value: Any) -> list[str] | None:
     """Parse a parameter-study marker into Hydra override values."""
     if not (isinstance(value, list) and len(value) == 1 and isinstance(value[0], str)):
-        if isinstance(value, list) and len(value) == 1 and isinstance(value[0], dict) and len(value[0]) == 1:
+        if _is_single_scalar_mapping(value):
             first, second = next(iter(value[0].items()))
             return [_format_parameter_value(first), _format_parameter_value(second)]
         return None
@@ -547,6 +547,14 @@ def _parse_parameter_range(value: Any) -> list[str] | None:
 
     step = (stop - start) / Decimal(count - 1)
     return [_format_decimal(start + step * Decimal(index)) for index in range(count)]
+
+
+def _is_single_scalar_mapping(value: Any) -> bool:
+    """Return whether a YAML list contains one scalar-to-scalar mapping."""
+    if not (isinstance(value, list) and len(value) == 1 and isinstance(value[0], dict) and len(value[0]) == 1):
+        return False
+    first, second = next(iter(value[0].items()))
+    return not isinstance(first, dict | list) and not isinstance(second, dict | list)
 
 
 def _format_parameter_value(value: Any) -> str:

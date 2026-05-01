@@ -225,6 +225,37 @@ class TestFdqSubmit(unittest.TestCase):
             "data.OXPET.args.shuffle_train=false models.simpleNet.optimizer.class_name=torch.optim.SGD",
         )
 
+    def test_parameter_study_ignores_single_transform_definition(self):
+        """One-item transform lists with parameter dictionaries are regular config, not sweeps."""
+        cfg = {
+            "transforms": {
+                "resize_and_pad_bilinear": [
+                    {
+                        "ResizeMaxDimPad": {
+                            "max_dim": 256,
+                            "interpol_mode": "bilinear",
+                        }
+                    }
+                ],
+                "resize_and_pad_nearest": [
+                    {
+                        "ResizeMaxDimPad": {
+                            "max_dim": 256,
+                            "interpol_mode": "nearest",
+                        }
+                    }
+                ],
+            }
+        }
+
+        ranges = find_parameter_ranges(cfg)
+        runs = build_parameter_study_runs(cfg, parameter_study_enabled=True)
+
+        self.assertEqual(ranges, [])
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0][1], "")
+        self.assertEqual(runs[0][0], cfg)
+
     def test_submission_summary_clearly_marks_parameter_study(self):
         """The success block clearly states when a parameter study was submitted."""
         stdout = io.StringIO()
