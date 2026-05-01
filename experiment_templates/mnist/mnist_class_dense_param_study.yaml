@@ -9,6 +9,7 @@ globals:
 models:
   simpleNet:
     optimizer:
+      class_name: ["torch.optim.Adam":"torch.optim.SGD"]
       args:
         lr: [0.001:0.003:2]
 
@@ -21,11 +22,6 @@ mode:
   run_inference: false
   print_model_summary: false
   resume_chpt_path: null
-
-data:
-  MNIST:
-    args:
-      subset_train: [0.2:0.4:2]
 
 train:
   args:
