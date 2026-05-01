@@ -35,6 +35,7 @@ PARAMETER_RANGE_RE = re.compile(
     r"(\d+)"
     r"\s*$"
 )
+PARAMETER_STUDY_SUFFIX = "@p"
 
 
 if yaml is not None:
@@ -520,37 +521,50 @@ def _format_decimal(value: Decimal) -> str:
     return "0" if formatted in {"", "-0"} else formatted
 
 
-def _parse_parameter_range(value: Any) -> list[str] | None:
-    """Parse a parameter-study marker into Hydra override values."""
-    if not (isinstance(value, list) and len(value) == 1 and isinstance(value[0], str)):
-        if _is_single_scalar_mapping(value):
-            first, second = next(iter(value[0].items()))
-            return [_format_parameter_value(first), _format_parameter_value(second)]
+def _parse_parameter_values(value: Any) -> list[str] | None:
+    """Parse a parameter-study value list into Hydra override values."""
+    if not isinstance(value, list):
         return None
 
-    match = PARAMETER_RANGE_RE.match(value[0])
-    if not match:
-        categorical_values = [part.strip() for part in value[0].split(":")]
-        if len(categorical_values) < 2:
-            return None
-        if any(part == "" for part in categorical_values):
-            raise FDQSubmitError(f"Parameter-study list '{value[0]}' must not contain empty values")
-        return categorical_values
+    if len(value) == 1 and isinstance(value[0], str):
+        match = PARAMETER_RANGE_RE.match(value[0])
+        if match:
+            start = Decimal(match.group(1))
+            stop = Decimal(match.group(2))
+            count = int(match.group(3))
+            if count < 1:
+                raise FDQSubmitError(f"Parameter-study range '{value[0]}' must use a count of at least 1")
+            if count == 1:
+                return [_format_decimal(start)]
 
-    start = Decimal(match.group(1))
-    stop = Decimal(match.group(2))
-    count = int(match.group(3))
-    if count < 1:
-        raise FDQSubmitError(f"Parameter-study range '{value[0]}' must use a count of at least 1")
-    if count == 1:
-        return [_format_decimal(start)]
+            step = (stop - start) / Decimal(count - 1)
+            return [_format_decimal(start + step * Decimal(index)) for index in range(count)]
 
-    step = (stop - start) / Decimal(count - 1)
-    return [_format_decimal(start + step * Decimal(index)) for index in range(count)]
+    categorical_values = _parse_categorical_parameter_values(value)
+    if categorical_values is None:
+        return None
+    return categorical_values
+
+
+def _parse_categorical_parameter_values(value: list[Any]) -> list[str] | None:
+    """Parse non-numeric `@p` values."""
+    if _is_single_scalar_mapping(value):
+        first, second = next(iter(value[0].items()))
+        values = [_format_parameter_value(first), _format_parameter_value(second)]
+    elif len(value) == 1 and isinstance(value[0], str):
+        values = [part.strip() for part in value[0].split(":")]
+    else:
+        values = [_format_parameter_value(part) for part in value]
+
+    if len(values) < 2:
+        return None
+    if any(item == "" for item in values):
+        raise FDQSubmitError(f"Parameter-study list '{value}' must not contain empty values")
+    return values
 
 
 def _is_single_scalar_mapping(value: Any) -> bool:
-    """Return whether a YAML list contains one scalar-to-scalar mapping."""
+    """Return whether a loaded marker contains one scalar-to-scalar mapping."""
     if not (isinstance(value, list) and len(value) == 1 and isinstance(value[0], dict) and len(value[0]) == 1):
         return False
     first, second = next(iter(value[0].items()))
@@ -566,56 +580,89 @@ def _format_parameter_value(value: Any) -> str:
     return str(value)
 
 
+def _unmarked_parameter_name(key: str) -> str:
+    """Return a config key without the parameter-study suffix."""
+    if not key.endswith(PARAMETER_STUDY_SUFFIX):
+        return key
+    unmarked = key[: -len(PARAMETER_STUDY_SUFFIX)]
+    if not unmarked:
+        raise FDQSubmitError(f"Parameter-study key '{key}' must include a parameter name before '{PARAMETER_STUDY_SUFFIX}'")
+    return unmarked
+
+
+def _parameter_path(path: tuple[str, ...], key: str) -> str:
+    """Return the dotted output path for a parameter-study key."""
+    return ".".join((*path, _unmarked_parameter_name(key)))
+
+
+def _is_parameter_key(key: Any) -> bool:
+    """Return whether a config key marks a parameter study."""
+    return isinstance(key, str) and key.endswith(PARAMETER_STUDY_SUFFIX)
+
+
 def find_parameter_ranges(conf: dict[str, Any]) -> list[tuple[str, list[str]]]:
-    """Find all parameter-study range markers in a merged experiment configuration."""
+    """Find all parameter-study markers in a merged experiment configuration."""
     ranges: list[tuple[str, list[str]]] = []
 
     def visit(node: Any, path: tuple[str, ...]) -> None:
-        parsed_range = _parse_parameter_range(node)
-        if parsed_range is not None:
-            ranges.append((".".join(path), parsed_range))
-            return
-
         if isinstance(node, dict):
-            for key, value in node.items():
-                visit(value, (*path, str(key)))
+            for key, child in node.items():
+                if _is_parameter_key(key):
+                    parameter_path = _parameter_path(path, key)
+                    parsed_range = _parse_parameter_values(child)
+                    if parsed_range is None:
+                        raise FDQSubmitError(f"Parameter-study key '{parameter_path}' must use a list of values")
+                    ranges.append((parameter_path, parsed_range))
+                else:
+                    visit(child, (*path, str(key)))
 
     visit(conf, ())
     return ranges
 
 
-def _set_nested_value(conf: dict[str, Any], dotted_path: str, value: str) -> None:
-    """Set a concrete parameter-study value in a copied config dictionary."""
-    parts = dotted_path.split(".")
-    target = conf
-    for part in parts[:-1]:
-        target = target[part]
-    target[parts[-1]] = value
+def _materialize_parameter_run(node: Any, path: tuple[str, ...], run_values: dict[str, str]) -> Any:
+    """Return a config copy with `@p` keys replaced by concrete unmarked keys."""
+    if isinstance(node, dict):
+        materialized: dict[str, Any] = {}
+        parameter_keys = {_unmarked_parameter_name(key) for key in node if _is_parameter_key(key)}
+        for key, value in node.items():
+            if _is_parameter_key(key):
+                unmarked_key = _unmarked_parameter_name(key)
+                parameter_path = ".".join((*path, unmarked_key))
+                if unmarked_key in materialized:
+                    raise FDQSubmitError(
+                        f"Parameter-study key '{parameter_path}' conflicts with an existing '{unmarked_key}' key"
+                    )
+                materialized[unmarked_key] = run_values[parameter_path]
+            else:
+                if key in parameter_keys:
+                    continue
+                if key in materialized:
+                    raise FDQSubmitError(f"Duplicate materialized key '{'.'.join((*path, str(key)))}'")
+                materialized[key] = _materialize_parameter_run(value, (*path, str(key)), run_values)
+        return materialized
+    if isinstance(node, list):
+        return [_materialize_parameter_run(value, (*path, str(index)), run_values) for index, value in enumerate(node)]
+    return copy.deepcopy(node)
 
 
-def build_parameter_study_runs(
-    exp_config: dict[str, Any], parameter_study_enabled: bool
-) -> list[tuple[dict[str, Any], str, dict[str, str]]]:
+def build_parameter_study_runs(exp_config: dict[str, Any]) -> list[tuple[dict[str, Any], str, dict[str, str]]]:
     """Build concrete configs and Hydra override strings for a parameter study.
 
-    Range markers use the YAML shape `[start:stop:count]`, for example
-    `[0.001:0.005:5]`. Categorical markers use colon-separated values,
-    for example `[true:false]` or `["torch.optim.Adam":"torch.optim.SGD"]`.
+    Study markers use config keys ending in `@p`, for example
+    `lr@p: [0.001:0.005:5]` or `class_name@p: ["torch.optim.Adam":"torch.optim.SGD"]`.
     """
     ranges = find_parameter_ranges(exp_config)
     if not ranges:
         return [(exp_config, "", {})]
 
     parameter_names = [name for name, _values in ranges]
-    value_lists = [values if parameter_study_enabled else values[:1] for _name, values in ranges]
+    value_lists = [values for _name, values in ranges]
 
     runs: list[tuple[dict[str, Any], str, dict[str, str]]] = []
     for combination in product(*value_lists):
-        concrete_config = copy.deepcopy(exp_config)
         run_values = dict(zip(parameter_names, combination, strict=True))
-        for name, value in run_values.items():
-            _set_nested_value(concrete_config, name, value)
-
+        concrete_config = _materialize_parameter_run(exp_config, (), run_values)
         overrides = " ".join(f"{name}={value}" for name, value in run_values.items())
         runs.append((concrete_config, overrides, run_values))
 
@@ -918,16 +965,14 @@ def print_submission_summary(
     config_path: str,
     last_job_config: dict[str, Any] | None,
     parameter_ranges: list[tuple[str, list[str]]],
-    parameter_study: bool,
 ) -> None:
     """Print the final job submission summary."""
     print(f"\n{'=' * 60}")
     print("FDQ JOB SUBMISSION SUCCESSFUL")
     print(f"{'=' * 60}")
     if parameter_ranges:
-        status = "enabled" if parameter_study else "disabled (first values only)"
         parameter_names = ", ".join(name for name, _values in parameter_ranges)
-        print(f"Parameter Study: {status}")
+        print("Parameter Study: enabled")
         print(f"Parameter Runs:  {len(submitted_jobs)}")
         print(f"Sweep Params:    {parameter_names}")
 
@@ -959,19 +1004,12 @@ def main() -> None:
         exp_config = load_conf_file(full_config_path)
         config_path = os.path.dirname(full_config_path)
         config_name = os.path.basename(full_config_path).replace(".yaml", "")
-        mode_config = exp_config.get("mode", {}) or {}
-        parameter_study = mode_config.get("parameter_study", False)
-        if not isinstance(parameter_study, bool):
-            raise FDQSubmitError("'mode.parameter_study' must be true or false when defined")
 
         parameter_ranges = find_parameter_ranges(exp_config)
-        parameter_runs = build_parameter_study_runs(exp_config, parameter_study)
+        parameter_runs = build_parameter_study_runs(exp_config)
         if parameter_ranges:
             parameter_names = ", ".join(name for name, _values in parameter_ranges)
-            if parameter_study:
-                log_info(f"Parameter study enabled for {parameter_names}: submitting {len(parameter_runs)} jobs")
-            else:
-                log_info(f"Parameter study disabled for {parameter_names}: using the first value only")
+            log_info(f"Parameter study enabled for {parameter_names}: submitting {len(parameter_runs)} jobs")
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         submitted_jobs: list[tuple[str, str, str]] = []
@@ -1055,7 +1093,6 @@ def main() -> None:
             config_path,
             last_job_config,
             parameter_ranges,
-            parameter_study,
         )
 
     except FDQSubmitError as exc:

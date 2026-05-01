@@ -1,10 +1,8 @@
 import random
 import sys
 import os
-import re
 import hydra
 from hydra.core.hydra_config import HydraConfig
-from decimal import Decimal
 from typing import Any
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
@@ -20,18 +18,7 @@ from fdq.dump import dump_model
 from fdq.inference import inference_model
 
 
-PARAMETER_RANGE_RE = re.compile(
-    r"^\s*"
-    r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)"
-    r"\s*:\s*"
-    r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)"
-    r"\s*:\s*"
-    r"(\d+)"
-    r"\s*$"
-)
-
-INTEGER_RE = re.compile(r"^[+-]?\d+$")
-FLOAT_RE = re.compile(r"^[+-]?(?:(?:\d+\.\d*)|(?:\.\d+))(?:[eE][+-]?\d+)?$|^[+-]?\d+[eE][+-]?\d+$")
+PARAMETER_STUDY_SUFFIX = "@p"
 
 
 def start(rank: int, cfg: DictConfig = None, cfg_container=None) -> None:
@@ -79,108 +66,35 @@ def start(rank: int, cfg: DictConfig = None, cfg_container=None) -> None:
         sys.exit(1)
 
 
-def _range_value_to_number(value: Decimal, force_float: bool) -> int | float:
-    """Convert a Decimal range value to the scalar type Hydra would normally infer."""
-    if force_float:
-        return float(value)
-    return int(value)
+def _is_parameter_key(key: Any) -> bool:
+    """Return whether a config key marks a parameter study."""
+    return isinstance(key, str) and key.endswith(PARAMETER_STUDY_SUFFIX)
 
 
-def _parse_parameter_scalar(value: Any) -> Any:
-    """Parse a categorical parameter-study value to the scalar type Hydra would normally infer."""
-    if not isinstance(value, str):
-        return value
-
-    stripped = value.strip()
-    lowered = stripped.lower()
-    if lowered == "true":
-        return True
-    if lowered == "false":
-        return False
-    if lowered in {"null", "none"}:
-        return None
-    if INTEGER_RE.match(stripped):
-        return int(stripped)
-    if FLOAT_RE.match(stripped):
-        return float(stripped)
-    return stripped
-
-
-def _parse_parameter_range(value: Any) -> list[Any] | None:
-    """Parse a parameter-study marker into scalar values."""
-    if not (isinstance(value, list) and len(value) == 1 and isinstance(value[0], str)):
-        if _is_single_scalar_mapping(value):
-            first, second = next(iter(value[0].items()))
-            return [_parse_parameter_scalar(first), _parse_parameter_scalar(second)]
-        return None
-
-    match = PARAMETER_RANGE_RE.match(value[0])
-    if not match:
-        categorical_values = [part.strip() for part in value[0].split(":")]
-        if len(categorical_values) < 2:
-            return None
-        if any(part == "" for part in categorical_values):
-            raise ValueError(f"Parameter-study list '{value[0]}' must not contain empty values")
-        return [_parse_parameter_scalar(part) for part in categorical_values]
-
-    start_text, stop_text, count_text = match.groups()
-    start = Decimal(start_text)
-    stop = Decimal(stop_text)
-    count = int(count_text)
-    if count < 1:
-        raise ValueError(f"Parameter-study range '{value[0]}' must use a count of at least 1")
-
-    if count == 1:
-        force_float = any("." in number_text or "e" in number_text.lower() for number_text in (start_text, stop_text))
-        return [_range_value_to_number(start, force_float)]
-
-    step = (stop - start) / Decimal(count - 1)
-    decimal_values = [start + step * Decimal(index) for index in range(count)]
-    force_float = any("." in number_text or "e" in number_text.lower() for number_text in (start_text, stop_text))
-    force_float = force_float or any(value != value.to_integral_value() for value in decimal_values)
-    return [_range_value_to_number(value, force_float) for value in decimal_values]
-
-
-def _is_single_scalar_mapping(value: Any) -> bool:
-    """Return whether a YAML list contains one scalar-to-scalar mapping."""
-    if not (isinstance(value, list) and len(value) == 1 and isinstance(value[0], dict) and len(value[0]) == 1):
-        return False
-    first, second = next(iter(value[0].items()))
-    return not isinstance(first, dict | list) and not isinstance(second, dict | list)
-
-
-def normalize_parameter_ranges(cfg: DictConfig) -> DictConfig:
-    """Collapse disabled parameter-study ranges before the experiment is instantiated."""
+def reject_unexpanded_parameter_studies(cfg: DictConfig) -> DictConfig:
+    """Reject unexpanded parameter-study keys before the experiment is instantiated."""
     container = OmegaConf.to_container(cfg, resolve=True)
-    ranges: list[str] = []
+    markers: list[str] = []
 
     def visit(node: Any, path: tuple[str, ...]) -> Any:
-        values = _parse_parameter_range(node)
-        if values is not None:
-            ranges.append(".".join(path))
-            return values[0]
         if isinstance(node, list):
             return [visit(value, (*path, str(index))) for index, value in enumerate(node)]
         if isinstance(node, dict):
+            for key in node:
+                if _is_parameter_key(key):
+                    markers.append(".".join((*path, str(key))))
             return {key: visit(value, (*path, str(key))) for key, value in node.items()}
         return node
 
-    normalized = visit(container, ())
-    if not ranges:
+    visit(container, ())
+    if not markers:
         return cfg
 
-    mode_config = normalized.get("mode", {}) or {}
-    parameter_study = mode_config.get("parameter_study", False)
-    if not isinstance(parameter_study, bool):
-        raise ValueError("mode.parameter_study must be true or false when defined")
-    if parameter_study:
-        joined_ranges = ", ".join(ranges)
-        raise ValueError(
-            "Parameter-study ranges must be expanded by fdq_submit.py before running fdq. "
-            f"Unexpanded ranges: {joined_ranges}"
-        )
-
-    return OmegaConf.create(normalized)
+    joined_markers = ", ".join(markers)
+    raise ValueError(
+        "Parameter-study markers must be expanded by fdq_submit.py before running fdq. "
+        f"Unexpanded markers: {joined_markers}"
+    )
 
 
 def expand_paths(cfg):
@@ -277,7 +191,7 @@ def get_hydra_paths():
 def main(cfg: DictConfig) -> None:
     """Main function to parse arguments, load configuration, and run the FDQ experiment."""
     cfg = expand_paths(cfg)
-    cfg = normalize_parameter_ranges(cfg)
+    cfg = reject_unexpanded_parameter_studies(cfg)
     use_GPU = cfg.train.args.use_GPU
     use_slurm_cluster = cfg.get("slurm_cluster") is not None and os.getenv("SLURM_JOB_ID") is not None
 
