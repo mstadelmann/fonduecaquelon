@@ -561,7 +561,7 @@ def init_wandb(experiment: Any) -> bool:
             project=experiment.cfg.store.wandb_project,
             entity=experiment.cfg.store.wandb_entity,
             name=wandb_name,
-            config=experiment.cfg,
+            config=OmegaConf.to_container(experiment.cfg, resolve=True),
         )
         experiment.wandb_initialized = True
         iprint(f"Init Wandb -  log path: {wandb.run.dir}")
