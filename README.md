@@ -78,7 +78,7 @@ Minimal example (YAML):
 ```yaml
 slurm_cluster:
   fdq_test_repo: false
-  fdq_version: 0.1.2
+  fdq_version: 0.1.3
   python_env_module: "python/3.12.4"
   uv_env_module: "uv/0.6.12"
   cuda_env_module: "cuda/12.8.0"
@@ -90,7 +90,7 @@ slurm_cluster:
   cpus_per_task: 8
   gres: "gpu:1"
   mem: "20G"
-  partition: "gpu"
+  partition: gpu
   account: "cai_ivs"
   auto_resubmit: true
 ```
@@ -109,33 +109,30 @@ Submit your experiment:
 python /path/to/fdq_submit.py /path/to/config.yaml
 ```
 
-Parameter studies can be launched by setting `mode.parameter_study: true` and replacing scalar values with `[start:stop:count]` ranges or categorical value lists. See [mnist_class_dense_param_study.yaml](experiment_templates/mnist/mnist_class_dense_param_study.yaml) for a complete example. Ranges are inclusive and multiple study parameters are submitted as a Cartesian product:
+Parameter studies can be launched by marking scalar keys with `@p`. Numeric ranges use `[start:stop:count]`, and categorical values use colon-separated entries. See [mnist_class_dense_param_study.yaml](experiment_templates/mnist/mnist_class_dense_param_study.yaml) for a complete example. Ranges are inclusive and multiple study parameters are submitted as a Cartesian product:
 
 ```yaml
-mode:
-  parameter_study: true
-
 models:
   simpleNet:
     optimizer:
       args:
-        lr: [0.001:0.005:5]
+        lr@p: [0.001:0.005:5]
 ```
 
-This submits runs with `lr=0.001`, `0.002`, `0.003`, `0.004`, and `0.005`. When `mode.parameter_study: false`, FDQ submits one job and uses the first value from every range.
+This submits runs with `lr=0.001`, `0.002`, `0.003`, `0.004`, and `0.005`. Values whose keys do not end in `@p` are regular config values, even if they look like lists or contain colons.
 
-Categorical values can be written as colon-separated values inside the same single-item list syntax:
+Categorical values can be written as colon-separated values on `@p` keys:
 
 ```yaml
 data:
   OXPET:
     args:
-      shuffle_train: [true:false]
+      shuffle_train@p: [true:false]
 
 models:
   simpleNet:
     optimizer:
-      class_name: ["torch.optim.Adam":"torch.optim.SGD"]
+      class_name@p: ["torch.optim.Adam":"torch.optim.SGD"]
 ```
 
 This submits all combinations of `shuffle_train=true|false` and `class_name=torch.optim.Adam|torch.optim.SGD`.
@@ -428,7 +425,7 @@ Example (YAML):
 
 ```yaml
 slurm_cluster:
-  fdq_version: 0.1.2
+  fdq_version: 0.1.3
   # ... other settings ...
   additional_pip_packages:
     - monai==1.4.0

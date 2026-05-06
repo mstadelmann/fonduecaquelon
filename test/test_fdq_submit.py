@@ -5,8 +5,11 @@ import os
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from unittest.mock import patch
 
+import fdq_submit
 from fdq_submit import (
+    _write_concrete_parameter_config,
     build_parameter_study_runs,
     create_submit_file,
     find_parameter_ranges,
@@ -15,7 +18,7 @@ from fdq_submit import (
 )
 
 try:
-    import yaml  # noqa: F401
+    import yaml
 
     HAS_YAML = True
 except ModuleNotFoundError:
@@ -146,32 +149,131 @@ class TestFdqSubmit(unittest.TestCase):
                 content,
             )
 
-    def test_parameter_study_expands_range_product(self):
-        """Range markers expand to every parameter combination."""
-        cfg = {
-            "models": {
-                "simpleNet": {
-                    "optimizer": {
-                        "args": {
-                            "lr": ["0.001:0.005:5"],
+    @unittest.skipUnless(HAS_YAML, "PyYAML is not installed")
+    def test_concrete_parameter_config_is_written_without_study_markers(self):
+        """Parameter-study submissions run generated configs without @p keys."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = {
+                "models": {
+                    "simpleNet": {
+                        "optimizer": {
+                            "class_name@p": [{"torch.optim.Adam": "torch.optim.SGD"}],
+                            "args": {"lr@p": ["0.001:0.003:2"]},
                         }
                     }
-                }
-            },
-            "train": {"args": {"epochs": ["1:3:3"]}},
-        }
+                },
+                "train": {"args": {"epochs@p": ["4:6:2"]}},
+            }
 
-        ranges = find_parameter_ranges(cfg)
-        runs = build_parameter_study_runs(cfg, parameter_study_enabled=True)
+            runs = build_parameter_study_runs(config)
+            stem = _write_concrete_parameter_config(
+                runs[0][0],
+                temp_dir,
+                "20260501_120000",
+                "mnist_class_dense_param_study",
+                1,
+            )
+            generated_path = os.path.join(temp_dir, f"{stem}.yaml")
+
+            with open(generated_path, encoding="utf8") as config_file:
+                generated_config = yaml.safe_load(config_file)
+
+        self.assertEqual(stem, "20260501_120000__mnist_class_dense_param_study__p001")
+        optimizer = generated_config["models"]["simpleNet"]["optimizer"]
+        self.assertEqual(optimizer["class_name"], "torch.optim.Adam")
+        self.assertEqual(optimizer["args"]["lr"], 0.001)
+        self.assertEqual(generated_config["train"]["args"]["epochs"], 4)
+        self.assertNotIn("class_name@p", optimizer)
+        self.assertNotIn("lr@p", optimizer["args"])
+        self.assertNotIn("epochs@p", generated_config["train"]["args"])
+
+    @unittest.skipUnless(HAS_YAML, "PyYAML is not installed")
+    def test_main_parameter_study_submits_generated_configs(self):
+        """End-to-end submit generation points Slurm at concrete configs."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            results_dir = os.path.join(temp_dir, "results")
+            log_dir = os.path.join(temp_dir, "logs")
+            config_path = os.path.join(temp_dir, "experiment.yaml")
+            with open(config_path, "w", encoding="utf8") as config_file:
+                config_file.write(
+                    "store:\n"
+                    f"  results_path: {results_dir}\n"
+                    "slurm_cluster:\n"
+                    f"  log_path: {log_dir}\n"
+                    "  partition: gpu\n"
+                    "  account: account\n"
+                    "  python_env_module: python/3.12\n"
+                    "  uv_env_module: uv/0.6\n"
+                    "  fdq_version: 0.1.3\n"
+                    "  job_time: 1\n"
+                    "mode:\n"
+                    "  run_train: true\n"
+                    "  run_test_auto: false\n"
+                    "models:\n"
+                    "  simpleNet:\n"
+                    "    optimizer:\n"
+                    "      args:\n"
+                    "        lr@p: [0.001:0.003:2]\n"
+                )
+
+            with (
+                patch("sys.argv", ["fdq_submit.py", config_path]),
+                patch("fdq_submit.submit_slurm_job", return_value="12345"),
+                redirect_stdout(io.StringIO()),
+            ):
+                fdq_submit.main()
+
+            submitted_dir = os.path.join(log_dir, "submitted_jobs")
+            generated_configs = sorted(name for name in os.listdir(submitted_dir) if name.endswith(".yaml"))
+            generated_submits = sorted(name for name in os.listdir(submitted_dir) if name.endswith(".submit"))
+            first_config_path = os.path.join(submitted_dir, generated_configs[0])
+            first_config_stem = os.path.splitext(generated_configs[0])[0]
+            first_submit_path = os.path.join(submitted_dir, generated_submits[0])
+
+            with open(first_config_path, encoding="utf8") as config_file:
+                generated_config = yaml.safe_load(config_file)
+            with open(first_submit_path, encoding="utf8") as submit_file:
+                submit_content = submit_file.read()
+
+        self.assertEqual(len(generated_configs), 2)
+        self.assertEqual(len(generated_submits), 2)
+        self.assertEqual(generated_config["models"]["simpleNet"]["optimizer"]["args"]["lr"], 0.001)
+        self.assertNotIn("lr@p", generated_config["models"]["simpleNet"]["optimizer"]["args"])
+        self.assertIn(f"CONFIG_PATH={submitted_dir}", submit_content)
+        self.assertIn(f"CONFIG_NAME={first_config_stem}", submit_content)
+        self.assertIn('PARAMETER_OVERRIDES=""', submit_content)
+
+    @unittest.skipUnless(HAS_YAML, "PyYAML is not installed")
+    def test_parameter_study_expands_range_product(self):
+        """Marked numeric ranges expand to every parameter combination."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = os.path.join(temp_dir, "experiment.yaml")
+            with open(config_path, "w", encoding="utf8") as config_file:
+                config_file.write(
+                    "models:\n"
+                    "  simpleNet:\n"
+                    "    optimizer:\n"
+                    "      args:\n"
+                    "        lr@p: [0.001:0.005:5]\n"
+                    "train:\n"
+                    "  args:\n"
+                    "    epochs@p: [1:3:3]\n"
+                )
+
+            cfg = load_conf_file(config_path)
+            ranges = find_parameter_ranges(cfg)
+            runs = build_parameter_study_runs(cfg)
 
         self.assertEqual(
             ranges,
             [
-                ("models.simpleNet.optimizer.args.lr", ["0.001", "0.002", "0.003", "0.004", "0.005"]),
-                ("train.args.epochs", ["1", "2", "3"]),
+                ("models.simpleNet.optimizer.args.lr", [0.001, 0.002, 0.003, 0.004, 0.005]),
+                ("train.args.epochs", [1, 2, 3]),
             ],
         )
         self.assertEqual(len(runs), 15)
+        self.assertEqual(runs[0][0]["models"]["simpleNet"]["optimizer"]["args"]["lr"], 0.001)
+        self.assertNotIn("lr@p", runs[0][0]["models"]["simpleNet"]["optimizer"]["args"])
         self.assertEqual(
             runs[0][1],
             "models.simpleNet.optimizer.args.lr=0.001 train.args.epochs=1",
@@ -181,41 +283,53 @@ class TestFdqSubmit(unittest.TestCase):
             "models.simpleNet.optimizer.args.lr=0.005 train.args.epochs=3",
         )
 
-    def test_parameter_study_disabled_uses_first_values(self):
-        """Disabled parameter studies keep one job with the first value from each range."""
+    def test_unmarked_range_like_lists_are_regular_config(self):
+        """Range-like lists are not study markers unless their key ends in @p."""
         cfg = {
             "models": {"simpleNet": {"optimizer": {"args": {"lr": ["0.001:0.005:5"]}}}},
             "train": {"args": {"epochs": ["1:3:3"]}},
         }
 
-        runs = build_parameter_study_runs(cfg, parameter_study_enabled=False)
+        ranges = find_parameter_ranges(cfg)
+        runs = build_parameter_study_runs(cfg)
 
+        self.assertEqual(ranges, [])
         self.assertEqual(len(runs), 1)
-        self.assertEqual(
-            runs[0][1],
-            "models.simpleNet.optimizer.args.lr=0.001 train.args.epochs=1",
-        )
-        self.assertEqual(runs[0][0]["models"]["simpleNet"]["optimizer"]["args"]["lr"], "0.001")
-        self.assertEqual(runs[0][0]["train"]["args"]["epochs"], "1")
+        self.assertEqual(runs[0][1], "")
+        self.assertEqual(runs[0][0]["models"]["simpleNet"]["optimizer"]["args"]["lr"], ["0.001:0.005:5"])
+        self.assertEqual(runs[0][0]["train"]["args"]["epochs"], ["1:3:3"])
 
+    @unittest.skipUnless(HAS_YAML, "PyYAML is not installed")
     def test_parameter_study_expands_categorical_values(self):
         """Categorical markers expand to every listed non-numeric value."""
-        cfg = {
-            "data": {"OXPET": {"args": {"shuffle_train": ["true:false"]}}},
-            "models": {"simpleNet": {"optimizer": {"class_name": [{"torch.optim.Adam": "torch.optim.SGD"}]}}},
-        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = os.path.join(temp_dir, "experiment.yaml")
+            with open(config_path, "w", encoding="utf8") as config_file:
+                config_file.write(
+                    "data:\n"
+                    "  OXPET:\n"
+                    "    args:\n"
+                    "      shuffle_train@p: [true:false]\n"
+                    "models:\n"
+                    "  simpleNet:\n"
+                    "    optimizer:\n"
+                    '      class_name@p: ["torch.optim.Adam":"torch.optim.SGD"]\n'
+                )
 
-        ranges = find_parameter_ranges(cfg)
-        runs = build_parameter_study_runs(cfg, parameter_study_enabled=True)
+            cfg = load_conf_file(config_path)
+            ranges = find_parameter_ranges(cfg)
+            runs = build_parameter_study_runs(cfg)
 
         self.assertEqual(
             ranges,
             [
-                ("data.OXPET.args.shuffle_train", ["true", "false"]),
+                ("data.OXPET.args.shuffle_train", [True, False]),
                 ("models.simpleNet.optimizer.class_name", ["torch.optim.Adam", "torch.optim.SGD"]),
             ],
         )
         self.assertEqual(len(runs), 4)
+        self.assertEqual(runs[0][0]["data"]["OXPET"]["args"]["shuffle_train"], True)
+        self.assertNotIn("shuffle_train@p", runs[0][0]["data"]["OXPET"]["args"])
         self.assertEqual(
             runs[0][1],
             "data.OXPET.args.shuffle_train=true models.simpleNet.optimizer.class_name=torch.optim.Adam",
@@ -224,6 +338,37 @@ class TestFdqSubmit(unittest.TestCase):
             runs[-1][1],
             "data.OXPET.args.shuffle_train=false models.simpleNet.optimizer.class_name=torch.optim.SGD",
         )
+
+    def test_parameter_study_ignores_single_transform_definition(self):
+        """One-item transform lists with parameter dictionaries are regular config, not sweeps."""
+        cfg = {
+            "transforms": {
+                "resize_and_pad_bilinear": [
+                    {
+                        "ResizeMaxDimPad": {
+                            "max_dim": 256,
+                            "interpol_mode": "bilinear",
+                        }
+                    }
+                ],
+                "resize_and_pad_nearest": [
+                    {
+                        "ResizeMaxDimPad": {
+                            "max_dim": 256,
+                            "interpol_mode": "nearest",
+                        }
+                    }
+                ],
+            }
+        }
+
+        ranges = find_parameter_ranges(cfg)
+        runs = build_parameter_study_runs(cfg)
+
+        self.assertEqual(ranges, [])
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0][1], "")
+        self.assertEqual(runs[0][0], cfg)
 
     def test_submission_summary_clearly_marks_parameter_study(self):
         """The success block clearly states when a parameter study was submitted."""
@@ -239,9 +384,8 @@ class TestFdqSubmit(unittest.TestCase):
                 config_path="/tmp",
                 last_job_config={"results_path": "/tmp/results", "log_path": "/tmp/logs"},
                 parameter_ranges=[
-                    ("models.simpleNet.optimizer.args.lr", ["0.001", "0.002"]),
+                    ("models.simpleNet.optimizer.args.lr", [0.001, 0.002]),
                 ],
-                parameter_study=True,
             )
 
         summary = stdout.getvalue()
@@ -253,29 +397,21 @@ class TestFdqSubmit(unittest.TestCase):
 
     @unittest.skipUnless(HAS_YAML, "PyYAML is not installed")
     def test_parameter_study_ranges_are_found_in_parent_defaults(self):
-        """Range markers inherited from parent configs still produce scalar overrides."""
+        """Marked ranges inherited from parent configs still produce scalar overrides."""
         with tempfile.TemporaryDirectory() as temp_dir:
             parent_path = os.path.join(temp_dir, "parent.yaml")
             child_path = os.path.join(temp_dir, "child.yaml")
 
             with open(parent_path, "w", encoding="utf8") as parent_file:
-                parent_file.write(
-                    "mode:\n"
-                    "  parameter_study: false\n"
-                    "models:\n"
-                    "  simpleNet:\n"
-                    "    optimizer:\n"
-                    "      args:\n"
-                    "        lr: [0.001:0.005:5]\n"
-                )
+                parent_file.write("models:\n  simpleNet:\n    optimizer:\n      args:\n        lr@p: [0.001:0.005:5]\n")
 
             with open(child_path, "w", encoding="utf8") as child_file:
                 child_file.write("defaults:\n  - parent\n  - _self_\n")
 
             cfg = load_conf_file(child_path)
-            runs = build_parameter_study_runs(cfg, parameter_study_enabled=cfg["mode"]["parameter_study"])
+            runs = build_parameter_study_runs(cfg)
 
-            self.assertEqual(len(runs), 1)
+            self.assertEqual(len(runs), 5)
             self.assertEqual(runs[0][1], "models.simpleNet.optimizer.args.lr=0.001")
 
     @unittest.skipUnless(HAS_YAML, "PyYAML is not installed")
@@ -286,23 +422,21 @@ class TestFdqSubmit(unittest.TestCase):
 
             with open(config_path, "w", encoding="utf8") as config_file:
                 config_file.write(
-                    "mode:\n"
-                    "  parameter_study: true\n"
                     "train:\n"
                     "  args:\n"
-                    "    epochs: [4:6:2]\n"
+                    "    epochs@p: [4:6:2]\n"
                     "models:\n"
                     "  simpleNet:\n"
                     "    optimizer:\n"
                     "      args:\n"
-                    "        lr: [0.001:0.002:2]\n"
+                    "        lr@p: [0.001:0.002:2]\n"
                 )
 
             cfg = load_conf_file(config_path)
             ranges = find_parameter_ranges(cfg)
-            runs = build_parameter_study_runs(cfg, parameter_study_enabled=cfg["mode"]["parameter_study"])
+            runs = build_parameter_study_runs(cfg)
 
-            self.assertIn(("train.args.epochs", ["4", "6"]), ranges)
+            self.assertIn(("train.args.epochs", [4, 6]), ranges)
             self.assertEqual(len(runs), 4)
             self.assertIn("train.args.epochs=4", runs[0][1])
             self.assertIn("train.args.epochs=6", runs[-1][1])
@@ -315,23 +449,21 @@ class TestFdqSubmit(unittest.TestCase):
 
             with open(config_path, "w", encoding="utf8") as config_file:
                 config_file.write(
-                    "mode:\n"
-                    "  parameter_study: true\n"
                     "data:\n"
                     "  OXPET:\n"
                     "    args:\n"
-                    "      shuffle_train: [true:false]\n"
+                    "      shuffle_train@p: [true:false]\n"
                     "models:\n"
                     "  simpleNet:\n"
                     "    optimizer:\n"
-                    '      class_name: ["torch.optim.Adam":"torch.optim.SGD"]\n'
+                    '      class_name@p: ["torch.optim.Adam":"torch.optim.SGD"]\n'
                 )
 
             cfg = load_conf_file(config_path)
             ranges = find_parameter_ranges(cfg)
-            runs = build_parameter_study_runs(cfg, parameter_study_enabled=cfg["mode"]["parameter_study"])
+            runs = build_parameter_study_runs(cfg)
 
-            self.assertIn(("data.OXPET.args.shuffle_train", ["true", "false"]), ranges)
+            self.assertIn(("data.OXPET.args.shuffle_train", [True, False]), ranges)
             self.assertIn(("models.simpleNet.optimizer.class_name", ["torch.optim.Adam", "torch.optim.SGD"]), ranges)
             self.assertEqual(len(runs), 4)
 
