@@ -45,7 +45,6 @@ pip install -e ".[dev,gpu]"
 ```
 
 
-
 ## 📖 Usage
 
 ### Table of Contents
