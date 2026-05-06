@@ -9,12 +9,11 @@ globals:
 models:
   simpleNet:
     optimizer:
-      class_name: ["torch.optim.Adam":"torch.optim.SGD"]
+      class_name@p: ["torch.optim.Adam":"torch.optim.SGD"]
       args:
-        lr: [0.001:0.003:2]
+        lr@p: [0.001:0.003:2]
 
 mode:
-  parameter_study: true
   run_train: true
   run_test_interactive: false
   run_test_auto: true
@@ -25,4 +24,4 @@ mode:
 
 train:
   args:
-    epochs: [4:6:2]
+    epochs@p: [4:6:2]
