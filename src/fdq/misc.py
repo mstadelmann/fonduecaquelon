@@ -580,6 +580,23 @@ def init_wandb(experiment: Any) -> bool:
 
 
 @torch.no_grad()
+def _prepare_wandb_image_data(img: Any) -> Any:
+    if not torch.is_tensor(img) or not torch.is_floating_point(img):
+        return img
+
+    img_min = img.amin()
+    img_max = img.amax()
+    if img_min >= 0 and img_max <= 1:
+        return img
+
+    value_range = img_max - img_min
+    if value_range == 0:
+        return torch.zeros_like(img)
+
+    return (img - img_min) / value_range
+
+
+@torch.no_grad()
 def _log_wandb_images(images: list | dict | None) -> None:
     if images is not None:
         if not isinstance(images, list):
@@ -598,7 +615,18 @@ def _log_wandb_images(images: list | dict | None) -> None:
             else:
                 continue
 
-            wandb.log({image["name"]: wandb.Image(img, caption=captions)})
+            if hasattr(img, "shape") and len(img.shape) == 4:
+                wandb_images = []
+                for idx, img_slice in enumerate(img):
+                    if isinstance(captions, list | tuple):
+                        caption = captions[idx] if idx < len(captions) else None
+                    else:
+                        caption = captions
+                    wandb_images.append(wandb.Image(_prepare_wandb_image_data(img_slice), caption=caption))
+
+                wandb.log({image["name"]: wandb_images})
+            else:
+                wandb.log({image["name"]: wandb.Image(_prepare_wandb_image_data(img), caption=captions)})
 
 
 @torch.no_grad()

@@ -80,6 +80,28 @@ class TestLogWandbImages(unittest.TestCase):
             for i in range(batch_size):
                 self.assertEqual(mock_wandb.Image.call_args_list[i][1]["caption"], caption)
 
+    def test_4d_normalized_float_tensor_is_rescaled_for_display(self):
+        """A normalized float tensor should be rescaled before being passed to wandb.Image."""
+        img = torch.tensor(
+            [
+                [[[-0.4, 0.0], [0.4, 0.8]]],
+                [[[1.0, 1.6], [2.2, 2.8]]],
+            ],
+            dtype=torch.float32,
+        )
+        images = {"name": "val_samples", "data": img}
+
+        with patch("fdq.misc.wandb") as mock_wandb:
+            mock_wandb.Image.return_value = MagicMock()
+            _log_wandb_images(images)
+
+            for idx in range(img.shape[0]):
+                logged_img = mock_wandb.Image.call_args_list[idx][0][0]
+                self.assertGreaterEqual(float(logged_img.min()), 0)
+                self.assertLessEqual(float(logged_img.max()), 1)
+                self.assertAlmostEqual(float(logged_img.min()), 0)
+                self.assertAlmostEqual(float(logged_img.max()), 1)
+
     def test_path_based_image_is_passed_directly(self):
         """An image dict with a file path should pass the path to wandb.Image unchanged."""
         images = {"name": "file_img", "path": "/tmp/image.png"}
