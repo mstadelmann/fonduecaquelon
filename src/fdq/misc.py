@@ -598,14 +598,7 @@ def _log_wandb_images(images: list | dict | None) -> None:
             else:
                 continue
 
-            if isinstance(img, torch.Tensor) and img.dim() == 4:
-                if isinstance(captions, list):
-                    wandb_imgs = [wandb.Image(img[i], caption=captions[i]) for i in range(img.shape[0])]
-                else:
-                    wandb_imgs = [wandb.Image(img[i], caption=captions) for i in range(img.shape[0])]
-                wandb.log({image["name"]: wandb_imgs})
-            else:
-                wandb.log({image["name"]: wandb.Image(img, caption=captions)})
+            wandb.log({image["name"]: wandb.Image(img, caption=captions)})
 
 
 @torch.no_grad()
