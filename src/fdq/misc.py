@@ -569,7 +569,9 @@ def init_wandb(experiment: Any) -> bool:
         except (IndexError, AttributeError):
             wandb_name = f"test__{dt_string}__{experiment.experimentName[:30]}{parameter_run_tag}{slurm_str}"
 
-    wandb_config = OmegaConf.to_container(experiment.cfg, resolve=True) if OmegaConf.is_config(experiment.cfg) else experiment.cfg
+    wandb_config = (
+        OmegaConf.to_container(experiment.cfg, resolve=True) if OmegaConf.is_config(experiment.cfg) else experiment.cfg
+    )
 
     try:
         _patch_wandb_wait_with_progress()
