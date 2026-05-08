@@ -521,7 +521,7 @@ def _get_parameter_run_tag(experiment: Any) -> str:
 
 
 def _patch_wandb_wait_with_progress() -> None:
-    """Bypass a wandb 0.26.1 progress-polling coroutine bug."""
+    """Bypass wandb 0.26.1 progress-polling coroutine bug."""
     try:
         from wandb.sdk import wandb_init, wandb_run
     except (ImportError, AttributeError):
@@ -532,6 +532,17 @@ def _patch_wandb_wait_with_progress() -> None:
 
     wandb_init.wait_with_progress = wait_without_progress
     wandb_run.wait_with_progress = wait_without_progress
+
+    # The NetStatThr thread captures `self.check_network_status` as a bound method
+    # inside RunStatusChecker.__init__, so it must be patched at the class level
+    # BEFORE wandb.init() instantiates RunStatusChecker.
+    try:
+        def _noop_check_network_status(self: Any) -> None:  # noqa: ARG001
+            pass
+
+        wandb_run.RunStatusChecker.check_network_status = _noop_check_network_status
+    except (AttributeError, TypeError):
+        pass
 
 
 def init_wandb(experiment: Any) -> bool:
