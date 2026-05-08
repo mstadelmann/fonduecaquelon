@@ -21,7 +21,3 @@ mode:
   run_inference: false
   print_model_summary: false
   resume_chpt_path: null
-
-train:
-  args:
-    epochs@p: [4:6:2]
