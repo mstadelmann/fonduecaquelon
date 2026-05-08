@@ -75,7 +75,7 @@ def get_template() -> str:
     """Return the SLURM job submission script template as a string."""
     return """#!/bin/bash
 #SBATCH --time=#job_time#
-#SBATCH --job-name=fdq-#config_name#
+#SBATCH --job-name=fdq-#job_name#
 #SBATCH --ntasks=#ntasks#
 #SBATCH --cpus-per-task=#cpus_per_task#
 #SBATCH --nodes=#nodes#
@@ -85,8 +85,8 @@ def get_template() -> str:
 #SBATCH --partition=#partition#
 #SBATCH --account=#account#
 #SBATCH --mail-user=#user#@zhaw.ch
-#SBATCH --output=#log_path#/%j_%N__#config_name##job_tag#.out
-#SBATCH --error=#log_path#/%j_%N__#config_name##job_tag#.err
+#SBATCH --output=#log_path#/%j_%N__#job_name##job_tag#.out
+#SBATCH --error=#log_path#/%j_%N__#job_name##job_tag#.err
 #SBATCH --signal=B:SIGUSR1@#stop_grace_time#
 
 script_start=$(date +%s.%N)
@@ -115,6 +115,7 @@ PARAMETER_OVERRIDES="#parameter_overrides#"
 export FDQ_PARAMETER_RUN_TAG="#parameter_run_tag#"
 export FDQ_PARAMETER_STUDY_PATHS="#parameter_study_paths#"
 export FDQ_TEST_RESULTS_DIR="#test_results_dir#"
+export FDQ_EXPERIMENT_NAME="#experiment_name#"
 RETVALUE=1 # will become zero if training is successful, which will launch an optional test job
 
 # Function for safe file operations
@@ -746,6 +747,8 @@ def get_default_config(slurm_conf: Any, mode_config: Any) -> dict[str, Any]:
         "fdq_test_repo": False,
         "config_path": None,
         "config_name": None,
+        "job_name": None,
+        "experiment_name": None,
         "scratch_results_path": "/scratch/fdq_results/",
         "scratch_data_path": "/scratch/fdq_data/",
         "results_path": None,
@@ -863,6 +866,8 @@ def create_submit_file(job_config: dict[str, Any], slurm_conf: Any, submit_path:
         job_config.setdefault("parameter_run_tag", "")
         job_config.setdefault("parameter_study_paths", "")
         job_config.setdefault("test_results_dir", "")
+        job_config.setdefault("job_name", job_config.get("config_name", ""))
+        job_config.setdefault("experiment_name", job_config.get("job_name", job_config.get("config_name", "")))
 
         # Ensure log directory exists
         log_dir = job_config["log_path"]
@@ -1074,6 +1079,8 @@ def main() -> None:
             # Set paths and basic info
             job_config["config_path"] = config_path
             job_config["config_name"] = config_name
+            job_config["job_name"] = config_name
+            job_config["experiment_name"] = config_name
             job_config["user"] = getpass.getuser()
             job_config["parameter_overrides"] = parameter_overrides
             job_config["parameter_study_paths"] = " ".join(run_values.keys())

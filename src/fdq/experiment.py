@@ -54,7 +54,7 @@ class fdqExperiment:
         self.experiment_file_path = self.get_config_file_path()
         self.globals = self.cfg.globals
         self.project: str = self.cfg.globals.project.replace(" ", "_")
-        self.experimentName: str = cfg.hydra_paths.config_name
+        self.experimentName: str = os.getenv("FDQ_EXPERIMENT_NAME") or cfg.hydra_paths.config_name
         self.funky_name: str | None = None
         self.checkpoint_frequency: int = cfg.store.checkpoint_frequency
         self.mode: FDQmode = FDQmode()

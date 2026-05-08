@@ -78,10 +78,14 @@ class TestFdqSubmit(unittest.TestCase):
             self.assertIn('export FDQ_PARAMETER_RUN_TAG=""', content)
             self.assertIn('export FDQ_PARAMETER_STUDY_PATHS=""', content)
             self.assertIn('export FDQ_TEST_RESULTS_DIR=""', content)
+            self.assertIn('export FDQ_EXPERIMENT_NAME="experiment"', content)
+            self.assertIn(f"#SBATCH --output={temp_dir}/%j_%N__experiment_train.out", content)
             self.assertNotIn("#parameter_overrides#", content)
             self.assertNotIn("#parameter_run_tag#", content)
             self.assertNotIn("#parameter_study_paths#", content)
             self.assertNotIn("#test_results_dir#", content)
+            self.assertNotIn("#experiment_name#", content)
+            self.assertNotIn("#job_name#", content)
 
     def test_create_submit_file_includes_parameter_overrides(self):
         """Generated submit scripts pass concrete parameter-study overrides to fdq."""
@@ -134,6 +138,8 @@ class TestFdqSubmit(unittest.TestCase):
             self.assertIn('export FDQ_PARAMETER_RUN_TAG="_p001"', content)
             self.assertIn('export FDQ_PARAMETER_STUDY_PATHS="models.simpleNet.optimizer.args.lr"', content)
             self.assertIn('export FDQ_TEST_RESULTS_DIR=""', content)
+            self.assertIn('export FDQ_EXPERIMENT_NAME="experiment"', content)
+            self.assertIn(f"#SBATCH --output={temp_dir}/%j_%N__experiment_train_p001.out", content)
             self.assertIn("$PARAMETER_OVERRIDES mode.run_test_auto=false", content)
             self.assertIn(
                 'TRAINED_RESULTS_DIR=$(find "$SCRATCH_RESULTS_PATH" -type d -name "*__${SLURM_JOB_ID}${FDQ_PARAMETER_RUN_TAG}"',
@@ -241,6 +247,9 @@ class TestFdqSubmit(unittest.TestCase):
         self.assertNotIn("lr@p", generated_config["models"]["simpleNet"]["optimizer"]["args"])
         self.assertIn(f"CONFIG_PATH={submitted_dir}", submit_content)
         self.assertIn(f"CONFIG_NAME={first_config_stem}", submit_content)
+        self.assertIn('export FDQ_EXPERIMENT_NAME="experiment"', submit_content)
+        self.assertIn(f"#SBATCH --output={log_dir}/%j_%N__experiment_train_p001.out", submit_content)
+        self.assertNotIn(f"#SBATCH --output={log_dir}/%j_%N__{first_config_stem}_train_p001.out", submit_content)
         self.assertIn('PARAMETER_OVERRIDES=""', submit_content)
 
     @unittest.skipUnless(HAS_YAML, "PyYAML is not installed")
