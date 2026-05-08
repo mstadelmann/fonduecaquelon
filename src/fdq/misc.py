@@ -520,6 +520,20 @@ def _get_parameter_run_tag(experiment: Any) -> str:
     return match.group(1) if match else ""
 
 
+def _patch_wandb_wait_with_progress() -> None:
+    """Bypass a wandb 0.26.1 progress-polling coroutine bug."""
+    try:
+        from wandb.sdk import wandb_init, wandb_run
+    except (ImportError, AttributeError):
+        return
+
+    def wait_without_progress(handle: Any, *, timeout: float | None, display_progress: Any) -> Any:
+        return handle.wait_or(timeout=timeout)
+
+    wandb_init.wait_with_progress = wait_without_progress
+    wandb_run.wait_with_progress = wait_without_progress
+
+
 def init_wandb(experiment: Any) -> bool:
     """Initialize weights and biases."""
     if experiment.cfg.store.wandb_project is None:
@@ -555,13 +569,16 @@ def init_wandb(experiment: Any) -> bool:
         except (IndexError, AttributeError):
             wandb_name = f"test__{dt_string}__{experiment.experimentName[:30]}{parameter_run_tag}{slurm_str}"
 
+    wandb_config = OmegaConf.to_container(experiment.cfg, resolve=True) if OmegaConf.is_config(experiment.cfg) else experiment.cfg
+
     try:
+        _patch_wandb_wait_with_progress()
         wandb.login(key=experiment.cfg.store.wandb_key)
         wandb.init(
             project=experiment.cfg.store.wandb_project,
             entity=experiment.cfg.store.wandb_entity,
             name=wandb_name,
-            config=experiment.cfg,
+            config=wandb_config,
         )
         experiment.wandb_initialized = True
         iprint(f"Init Wandb -  log path: {wandb.run.dir}")
@@ -570,7 +587,6 @@ def init_wandb(experiment: Any) -> bool:
     except (
         wandb.errors.UsageError,
         wandb.errors.CommError,
-        AttributeError,
         ValueError,
     ) as e:
         eprint("Unable to initialize wandb!")

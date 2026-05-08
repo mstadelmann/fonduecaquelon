@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, call
 
 import torch
+from omegaconf import OmegaConf
 
 from fdq.misc import _log_wandb_images, init_wandb
 
@@ -168,6 +169,44 @@ class TestInitWandb(unittest.TestCase):
             "20260508_081153__mnist_class_dense_pa__clever_chebyshev_p001__15298",
         )
         self.assertEqual(wandb_name.count("20260508_"), 1)
+
+    def test_omegaconf_config_is_converted_before_passing_to_wandb(self):
+        """Wandb receives a plain resolved config rather than a DictConfig."""
+        cfg = OmegaConf.create(
+            {
+                "store": {
+                    "wandb_project": "mnist_classifier",
+                    "wandb_entity": "stmd",
+                    "wandb_key": "secret",
+                },
+                "train": {
+                    "args": {
+                        "lr": 0.01,
+                    }
+                },
+            }
+        )
+        experiment = SimpleNamespace(
+            cfg=cfg,
+            is_slurm=False,
+            previous_slurm_job_id=None,
+            slurm_job_id=None,
+            creation_time=datetime(2026, 5, 8, 8, 11, 53),
+            experimentName="mnist_class_dense",
+            funky_name="clever_chebyshev",
+            mode=SimpleNamespace(op_mode=SimpleNamespace(train=True)),
+            wandb_initialized=False,
+        )
+
+        with patch("fdq.misc.wandb") as mock_wandb:
+            mock_wandb.run.dir = "/tmp/wandb"
+
+            self.assertTrue(init_wandb(experiment))
+
+        wandb_config = mock_wandb.init.call_args.kwargs["config"]
+        self.assertIsInstance(wandb_config, dict)
+        self.assertEqual(wandb_config["store"]["wandb_project"], "mnist_classifier")
+        self.assertEqual(wandb_config["train"]["args"]["lr"], 0.01)
 
 
 if __name__ == "__main__":
