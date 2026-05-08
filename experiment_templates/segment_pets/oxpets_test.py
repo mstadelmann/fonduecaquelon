@@ -42,9 +42,11 @@ def fdq_test(experiment):
         losses.append(current_loss)
         dice_scores.append(current_dice)
 
+        pred_argmax = output.argmax(dim=1, keepdim=True).float()
         imgs_to_log = [
             {"name": "test_in", "data": inputs},
             {"name": "test_out", "data": output},
+            {"name": "test_pred", "data": pred_argmax},
             {"name": "test_targ", "data": targets},
         ]
         save_wandb(

@@ -1,11 +1,14 @@
 """Unit tests for utility functions in fdq.misc module."""
 
+import os
 import unittest
+from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, call
 
 import torch
 
-from fdq.misc import _log_wandb_images
+from fdq.misc import _log_wandb_images, init_wandb
 
 
 class TestLogWandbImages(unittest.TestCase):
@@ -127,6 +130,44 @@ class TestLogWandbImages(unittest.TestCase):
         """Non-dict, non-list input should raise ValueError."""
         with self.assertRaises(ValueError):
             _log_wandb_images("not_a_valid_input")
+
+
+class TestInitWandb(unittest.TestCase):
+    """Tests for wandb run naming."""
+
+    def test_parameter_study_wandb_name_uses_one_timestamp_and_run_tag(self):
+        """Parameter study names keep the run timestamp once and append the parameter tag."""
+        experiment = SimpleNamespace(
+            cfg=SimpleNamespace(
+                store=SimpleNamespace(
+                    wandb_project="mnist_classifier",
+                    wandb_entity="stmd",
+                    wandb_key="secret",
+                )
+            ),
+            is_slurm=True,
+            previous_slurm_job_id=None,
+            slurm_job_id="15298",
+            creation_time=datetime(2026, 5, 8, 8, 11, 53),
+            experimentName="mnist_class_dense_param_study",
+            funky_name="clever_chebyshev",
+            mode=SimpleNamespace(op_mode=SimpleNamespace(train=True)),
+            wandb_initialized=False,
+        )
+
+        with patch.dict(os.environ, {"FDQ_PARAMETER_RUN_TAG": "_p001"}, clear=False):
+            with patch("fdq.misc.wandb") as mock_wandb:
+                mock_wandb.run.dir = "/tmp/wandb"
+
+                self.assertTrue(init_wandb(experiment))
+
+        mock_wandb.init.assert_called_once()
+        wandb_name = mock_wandb.init.call_args.kwargs["name"]
+        self.assertEqual(
+            wandb_name,
+            "20260508_081153__mnist_class_dense_pa__clever_chebyshev_p001__15298",
+        )
+        self.assertEqual(wandb_name.count("20260508_"), 1)
 
 
 if __name__ == "__main__":

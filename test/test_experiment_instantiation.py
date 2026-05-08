@@ -6,6 +6,7 @@ can be instantiated without errors.
 
 import os
 import unittest
+from unittest.mock import patch
 from omegaconf import DictConfig, open_dict
 from hydra import compose
 from hydra import initialize_config_dir
@@ -68,6 +69,16 @@ class TestFdqExperimentInstantiation(unittest.TestCase):
         self.assertEqual(experiment.rank, 0)
         self.assertIsNotNone(experiment.project)
         self.assertIsNotNone(experiment.experimentName)
+
+    def test_experiment_name_can_be_overridden_for_generated_configs(self) -> None:
+        """Generated parameter-study config filenames should not leak into run names."""
+        cfg = self._compose_cfg()
+        cfg.hydra_paths.config_name = "20260508_080633__mnist_class_dense_param_study__p001"
+
+        with patch.dict(os.environ, {"FDQ_EXPERIMENT_NAME": "mnist_class_dense_param_study"}, clear=False):
+            experiment = fdqExperiment(cfg, rank=0)
+
+        self.assertEqual(experiment.experimentName, "mnist_class_dense_param_study")
 
     def test_experiment_with_different_ranks(self):
         """Instantiate with different ranks (non-distributed)."""
