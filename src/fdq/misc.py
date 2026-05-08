@@ -537,6 +537,7 @@ def _patch_wandb_wait_with_progress() -> None:
     # inside RunStatusChecker.__init__, so it must be patched at the class level
     # BEFORE wandb.init() instantiates RunStatusChecker.
     try:
+
         def _noop_check_network_status(self: Any) -> None:  # noqa: ARG001
             pass
 
