@@ -1,6 +1,7 @@
 """Unit tests for utility functions in fdq.misc module."""
 
 import os
+import pickle
 import unittest
 from datetime import datetime
 from types import SimpleNamespace
@@ -9,7 +10,24 @@ from unittest.mock import MagicMock, patch, call
 import torch
 from omegaconf import OmegaConf
 
-from fdq.misc import _log_wandb_images, init_wandb
+from fdq.misc import FDQmode, _log_wandb_images, init_wandb
+
+
+class TestFDQmode(unittest.TestCase):
+    """Tests for FDQ mode state helpers."""
+
+    def test_mode_is_pickleable_with_dynamic_setters(self):
+        """Dynamic mode setters should survive multiprocessing pickling."""
+        mode = FDQmode()
+        mode.train()
+        mode.best_train()
+
+        loaded = pickle.loads(pickle.dumps(mode))
+
+        self.assertTrue(loaded.op_mode.train)
+        self.assertTrue(loaded.test_mode.best_train)
+        loaded.test()
+        self.assertTrue(loaded.op_mode.test)
 
 
 class TestLogWandbImages(unittest.TestCase):

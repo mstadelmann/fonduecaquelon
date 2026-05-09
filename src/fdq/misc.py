@@ -46,12 +46,27 @@ class FDQmode:
         ]
         self._locked: bool = False  # Flag to lock the mode when set to unittest
 
-        # Dynamically create setter methods
+        self._install_setters()
+
+    def _install_setters(self) -> None:
+        """Install mode setter methods."""
         for mode in self.allowed_op_modes:
             setattr(self, mode, self._create_setter("_op_mode", mode))
 
         for mode in self.allowed_test_modes:
             setattr(self, mode, self._create_setter("_test_mode", mode))
+
+    def __getstate__(self) -> dict[str, Any]:
+        """Drop dynamically-created closure setters before pickling."""
+        state = self.__dict__.copy()
+        for mode in self.allowed_op_modes + self.allowed_test_modes:
+            state.pop(mode, None)
+        return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        """Restore state and recreate dynamic setters after unpickling."""
+        self.__dict__.update(state)
+        self._install_setters()
 
     def __repr__(self) -> str:
         """Return the string representation of the FDQmode object."""

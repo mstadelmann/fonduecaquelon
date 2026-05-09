@@ -3,6 +3,7 @@ import tempfile
 import shutil
 import sys
 import os
+import pickle
 import numpy as np
 import torch
 import h5py
@@ -30,7 +31,7 @@ from fdq.dataset_caching import (
     cache_dataloader,
     reconfig_orig_dataloader,
 )
-from fdq.misc import DictToObj, build_dummy_hydra_paths
+from fdq.misc import DictToObj, FDQmode, build_dummy_hydra_paths
 
 
 class MockDataset(Dataset):
@@ -276,6 +277,23 @@ class TestDatasetCaching(unittest.TestCase):
         self.assertIsInstance(label, torch.Tensor)
         self.assertEqual(label.dim(), 0)
         self.assertEqual(label.item(), 1)
+
+    def test_cached_dataset_without_augmenter_does_not_pickle_experiment(self):
+        """Cached DataLoader workers should not pickle the full experiment unless needed."""
+        samples = [(np.random.randn(3, 32, 32), np.array(1))]
+
+        cache_file = os.path.join(self.temp_dir, "test_pickle_cache.h5")
+        _save_samples_to_hdf5(samples, cache_file, "test_hash")
+
+        data_source = DictToObj({"caching": DictToObj({"nondeterministic_transforms": DictToObj({"processor": None})})})
+        experiment = MockExperiment(cfg=self.cfg)
+        experiment.mode = FDQmode()
+
+        cached_dataset = CachedDataset(cache_file, data_source, experiment)
+        loaded_dataset = pickle.loads(pickle.dumps(cached_dataset))
+
+        self.assertIsNone(loaded_dataset.experiment)
+        self.assertEqual(len(loaded_dataset), 1)
 
     def test_cache_dataloader(self):
         """Test caching a DataLoader."""

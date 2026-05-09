@@ -84,12 +84,13 @@ class CachedDataset(Dataset):
             data_source: Data source configuration object
             experiment: The experiment object containing class imports and configuration
         """
-        self.experiment = experiment
         self.augmenter_path = data_source.caching.get("nondeterministic_transforms", {}).get("processor", None)
         if self.augmenter_path is not None:
             self.augmenter = experiment.import_class(file_path=self.augmenter_path)
+            self.experiment = experiment
         else:
             self.augmenter = None
+            self.experiment = None
 
         self.cache_file_path = cache_file_path
         with h5py.File(cache_file_path, "r") as f:
