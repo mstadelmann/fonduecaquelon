@@ -22,12 +22,16 @@ A *fonduecaquelon* is the heavy pot that keeps cheeses (e.g. 50% Gruyère and 50
 
 ## 🛠️ Installation
 
-If you simply want to submit jobs to a Slurm cluster, download [fdq_submit.py](fdq_submit.py) and launch your job as documented [below](#slurm-cluster-execution). The submit helper reads YAML files, so the Python environment that runs it needs PyYAML available.
+If you simply want to submit jobs to a Slurm cluster, install the lightweight submit extra and launch your job with the `fdq_submit` command as documented [below](#slurm-cluster-execution):
+
+```bash
+pip install fdq[submit]
+```
 
 To run/debug experiments, install the latest release from PyPI:
 
 ```bash
-pip install fdq
+pip install fdq[full]
 ```
 
 If you have an NVIDIA GPU and want to run inference, install GPU dependencies:
@@ -105,8 +109,10 @@ The remaining actions have to be run in an interactive session.
 Submit your experiment:
 
 ```bash
-python /path/to/fdq_submit.py /path/to/config.yaml
+fdq_submit /path/to/config.yaml
 ```
+
+The repository also keeps [fdq_submit.py](fdq_submit.py) as a standalone helper, so `python /path/to/fdq_submit.py /path/to/config.yaml` still works from a checkout.
 
 Parameter studies can be launched by marking scalar keys with `@p`. Numeric ranges use `[start:stop:count]`, and categorical values use colon-separated entries. See [mnist_class_dense_param_study.yaml](experiment_templates/mnist/mnist_class_dense_param_study.yaml) for a complete example. Ranges are inclusive and multiple study parameters are submitted as a Cartesian product:
 
