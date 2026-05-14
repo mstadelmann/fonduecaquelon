@@ -1,4 +1,7 @@
-"""SLURM job submission utility for fonduecaquelon experiments."""
+"""SLURM job submission utility for fonduecaquelon experiments.
+
+https://github.com/mstadelmann/fonduecaquelon
+"""
 
 import sys
 import os

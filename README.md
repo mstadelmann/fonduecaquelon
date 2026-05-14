@@ -444,7 +444,7 @@ For debugging, install FDQ in development mode:
 ```bash
 git clone https://github.com/mstadelmann/fonduecaquelon.git
 cd fonduecaquelon
-pip install -e ".[dev]"
+pip install -e ".[dev,full]"
 ```
 
 Run the test suite from the repository root:
