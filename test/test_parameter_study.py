@@ -24,7 +24,7 @@ class TestParameterStudyNormalization(unittest.TestCase):
             }
         )
 
-        with self.assertRaisesRegex(ValueError, "must be expanded by fdq_submit.py"):
+        with self.assertRaisesRegex(ValueError, "must be expanded by submit.py"):
             reject_unexpanded_parameter_studies(cfg)
 
     def test_unmarked_range_like_lists_stay_untouched(self):
