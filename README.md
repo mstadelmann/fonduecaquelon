@@ -506,6 +506,7 @@ Contributions are welcome! Please open issues or pull requests on [GitHub](https
 
 ## 🧾 Changelog
 
+- **Unreleased:** Package `fdq_submit` as an installed console command, add lightweight `fdq[submit]` installation for Slurm login nodes, move the full ML runtime dependencies to `fdq[full]`, and update CI/development installs to use the full extra for tests.
 - **0.1.7:** Various wandb bugfixes.
 - **0.1.1 – 0.1.3:** Parameter study support: numeric ranges (`[start:stop:count]`) and categorical values via `@p`-suffixed config keys; submissions are the Cartesian product of all study parameters.
 - **0.0.75:** Fix crash when no transforms are defined in config.
