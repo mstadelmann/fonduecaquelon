@@ -22,12 +22,16 @@ A *fonduecaquelon* is the heavy pot that keeps cheeses (e.g. 50% Gruyère and 50
 
 ## 🛠️ Installation
 
-If you simply want to submit jobs to a Slurm cluster, download [fdq_submit.py](fdq_submit.py) and launch your job as documented [below](#slurm-cluster-execution). The submit helper reads YAML files, so the Python environment that runs it needs PyYAML available.
+FDQ supports two ways to submit jobs to a Slurm cluster. The recommended option is to install the lightweight submit extra, which provides the `fdq_submit` command without pulling in PyTorch or the full ML runtime:
+
+```bash
+pip install fdq[submit]
+```
 
 To run/debug experiments, install the latest release from PyPI:
 
 ```bash
-pip install fdq
+pip install fdq[full]
 ```
 
 If you have an NVIDIA GPU and want to run inference, install GPU dependencies:
@@ -70,14 +74,14 @@ fdq --config-path /home/marc/dev/fonduecaquelon/experiment_templates/mnist --con
 
 Run experiments on SLURM by adding a `slurm_cluster` section to your config. See [segment_pets_01.yaml](experiment_templates/segment_pets/segment_pets_01.yaml).
 
-When using chained config files, `fdq_submit.py` merges Hydra-style `defaults` entries before creating the SLURM submit script, so inherited `mode`, `slurm_cluster`, and `store` values are available to the submitter. Values in the launched child config override parent values.
+When using chained config files, `submit.py` merges Hydra-style `defaults` entries before creating the SLURM submit script, so inherited `mode`, `slurm_cluster`, and `store` values are available to the submitter. Values in the launched child config override parent values.
 
 Minimal example (YAML):
 
 ```yaml
 slurm_cluster:
   fdq_test_repo: false
-  fdq_version: 0.1.8
+  fdq_version: 0.1.9
   python_env_module: "python/3.12.4"
   uv_env_module: "uv/0.6.12"
   cuda_env_module: "cuda/12.8.0"
@@ -102,11 +106,26 @@ mode:
 ```
 The remaining actions have to be run in an interactive session.
 
-Submit your experiment:
+There are two ways to submit an experiment.
+
+**Option 1: installed command**
 
 ```bash
-python /path/to/fdq_submit.py /path/to/config.yaml
+fdq_submit /path/to/config.yaml
 ```
+
+This is the recommended path when you can install either `fdq[submit]` or `fdq[full]` on the machine that submits the job. It keeps the command short and uses the same package entry-point mechanism as `fdq`.
+
+**Option 2: standalone script**
+
+Some clusters restrict package installation on login nodes. In that case, download the standalone submit script and run it directly with Python:
+
+```bash
+wget https://raw.githubusercontent.com/mstadelmann/fonduecaquelon/refs/heads/main/src/fdq/submit.py
+python submit.py /path/to/config.yaml
+```
+
+Both commands use the same submit helper. The installed `fdq_submit` command is the cleaner option when installation is possible; the standalone script is a fallback for constrained login-node environments.
 
 Parameter studies can be launched by marking scalar keys with `@p`. Numeric ranges use `[start:stop:count]`, and categorical values use colon-separated entries. See [mnist_class_dense_param_study.yaml](experiment_templates/mnist/mnist_class_dense_param_study.yaml) for a complete example. Ranges are inclusive and multiple study parameters are submitted as a Cartesian product:
 
@@ -138,7 +157,7 @@ This submits all combinations of `shuffle_train=true|false` and `class_name=torc
 
 Notes:
 - SLURM logs are written to `slurm_log/`.
-- Results are organized under the configured `store.results_path` (when using `fdq_submit.py` on Slurm cluster, to `scratch_results_path`, which are then automatically copied back to `store.results_path` at job termination).
+- Results are organized under the configured `store.results_path` (when using `submit.py` on Slurm cluster, to `scratch_results_path`, which are then automatically copied back to `store.results_path` at job termination).
 
 ### Model Export and Optimization
 
@@ -424,7 +443,7 @@ Example (YAML):
 
 ```yaml
 slurm_cluster:
-  fdq_version: 0.1.8
+  fdq_version: 0.1.9
   # ... other settings ...
   additional_pip_packages:
     - monai==1.4.0
@@ -438,7 +457,7 @@ For debugging, install FDQ in development mode:
 ```bash
 git clone https://github.com/mstadelmann/fonduecaquelon.git
 cd fonduecaquelon
-pip install -e ".[dev]"
+pip install -e ".[dev,full]"
 ```
 
 Run the test suite from the repository root:
@@ -480,7 +499,7 @@ ruff check .
 
 * **Config Inheritance:** Use Hydra’s `defaults` list in your YAML configs to include/extend base configs and reduce duplication.
 * **Multiple Models/Losses:** Add multiple models and losses to config dictionaries as needed.
-* **Cluster Submission:** `fdq_submit.py` handles SLURM job script generation, submission, environment setup, and result copying.
+* **Cluster Submission:** `submit.py` handles SLURM job script generation, submission, environment setup, and result copying.
 * **Model Export:** Set `mode.run_train=false mode.dump_model=true` for interactive model export and optimization.
 
 ## 📚 Resources
@@ -500,6 +519,7 @@ Contributions are welcome! Please open issues or pull requests on [GitHub](https
 
 ## 🧾 Changelog
 
+- **Unreleased:** Package `fdq_submit` as an installed console command, add lightweight `fdq[submit]` installation for Slurm login nodes, move the full ML runtime dependencies to `fdq[full]`, and update CI/development installs to use the full extra for tests.
 - **0.1.7:** Various wandb bugfixes.
 - **0.1.1 – 0.1.3:** Parameter study support: numeric ranges (`[start:stop:count]`) and categorical values via `@p`-suffixed config keys; submissions are the Cartesian product of all study parameters.
 - **0.0.75:** Fix crash when no transforms are defined in config.

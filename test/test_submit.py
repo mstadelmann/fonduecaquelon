@@ -7,8 +7,8 @@ import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
-import fdq_submit
-from fdq_submit import (
+import fdq.submit as submit
+from fdq.submit import (
     _write_concrete_parameter_config,
     build_parameter_study_runs,
     create_submit_file,
@@ -26,7 +26,7 @@ except ModuleNotFoundError:
 
 
 class TestFdqSubmit(unittest.TestCase):
-    """Unit tests for fdq_submit.py helpers."""
+    """Unit tests for submit.py helpers."""
 
     def test_create_submit_file_preserves_package_index_urls(self):
         """The generated submit script must keep https:// URLs intact."""
@@ -210,7 +210,7 @@ class TestFdqSubmit(unittest.TestCase):
                     "  account: account\n"
                     "  python_env_module: python/3.12\n"
                     "  uv_env_module: uv/0.6\n"
-                    "  fdq_version: 0.1.8\n"
+                    "  fdq_version: 0.1.9\n"
                     "  job_time: 1\n"
                     "mode:\n"
                     "  run_train: true\n"
@@ -223,11 +223,11 @@ class TestFdqSubmit(unittest.TestCase):
                 )
 
             with (
-                patch("sys.argv", ["fdq_submit.py", config_path]),
-                patch("fdq_submit.submit_slurm_job", return_value="12345"),
+                patch("sys.argv", ["submit.py", config_path]),
+                patch("fdq.submit.submit_slurm_job", return_value="12345"),
                 redirect_stdout(io.StringIO()),
             ):
-                fdq_submit.main()
+                submit.main()
 
             submitted_dir = os.path.join(log_dir, "submitted_jobs")
             generated_configs = sorted(name for name in os.listdir(submitted_dir) if name.endswith(".yaml"))
@@ -478,7 +478,7 @@ class TestFdqSubmit(unittest.TestCase):
 
     @unittest.skipUnless(HAS_YAML, "PyYAML is not installed")
     def test_load_conf_file_merges_hydra_defaults(self):
-        """fdq_submit uses inherited config values the same way Hydra configs do."""
+        """submit.py uses inherited config values the same way Hydra configs do."""
         with tempfile.TemporaryDirectory() as temp_dir:
             parent_path = os.path.join(temp_dir, "parent.yaml")
             child_path = os.path.join(temp_dir, "child.yaml")

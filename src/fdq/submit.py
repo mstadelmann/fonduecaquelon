@@ -1,4 +1,7 @@
-"""SLURM job submission utility for fonduecaquelon experiments."""
+"""SLURM job submission utility for fonduecaquelon experiments.
+
+https://github.com/mstadelmann/fonduecaquelon
+"""
 
 import sys
 import os
@@ -935,8 +938,8 @@ def get_config_path() -> str:
     """
     if len(sys.argv) != 2:
         raise FDQSubmitError(
-            "Usage: python fdq_submit.py <path_to_experiment_config.json>\n"
-            "Exactly one argument is required: the path to the experiment JSON file."
+            "Usage: python submit.py <path_to_experiment_config.yaml>\n"
+            "Exactly one argument is required: the path to the experiment YAML file."
         )
 
     config_path = sys.argv[1]

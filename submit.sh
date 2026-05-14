@@ -6,7 +6,13 @@
 
 submit_job() {
     root_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    python3 "$root_path/fdq_submit.py" "$root_path/$1"
+    if command -v fdq_submit >/dev/null 2>&1; then
+        # this only works if fdq was installed (pip install fdq[submit])
+        fdq_submit "$root_path/$1"
+    else
+        # alternatively, you can run the submit module directly (without installing fdq)
+        PYTHONPATH="$root_path/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m fdq.submit "$root_path/$1"
+    fi
 }
 
 submit_job experiment_templates/mnist/mnist_class_dense.yaml

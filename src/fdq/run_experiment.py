@@ -92,7 +92,7 @@ def reject_unexpanded_parameter_studies(cfg: DictConfig) -> DictConfig:
 
     joined_markers = ", ".join(markers)
     raise ValueError(
-        "Parameter-study markers must be expanded by fdq_submit.py before running fdq. "
+        "Parameter-study markers must be expanded by submit.py before running fdq. "
         f"Unexpanded markers: {joined_markers}"
     )
 
