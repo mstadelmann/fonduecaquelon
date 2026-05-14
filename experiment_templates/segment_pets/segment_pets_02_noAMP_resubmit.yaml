@@ -26,7 +26,7 @@ store:
 
 slurm_cluster:
   fdq_test_repo: false # Pull FDQ from https://test.pypi.org instead of the official PyPI - for debugging purposes only
-  fdq_version: 0.1.8
+  fdq_version: 0.1.9
   python_env_module: python/3.12.4
   uv_env_module: uv/0.6.12
   cuda_env_module: cuda/12.8.0
