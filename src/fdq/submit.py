@@ -939,7 +939,7 @@ def get_config_path() -> str:
     if len(sys.argv) != 2:
         raise FDQSubmitError(
             "Usage: python submit.py <path_to_experiment_config.yaml>\n"
-            "Exactly one argument is required: the path to the experiment JSON file."
+            "Exactly one argument is required: the path to the experiment YAML file."
         )
 
     config_path = sys.argv[1]
