@@ -210,7 +210,7 @@ class TestFdqSubmit(unittest.TestCase):
                     "  account: account\n"
                     "  python_env_module: python/3.12\n"
                     "  uv_env_module: uv/0.6\n"
-                    "  fdq_version: 0.1.7.dev1\n"
+                    "  fdq_version: 0.1.8\n"
                     "  job_time: 1\n"
                     "mode:\n"
                     "  run_train: true\n"
