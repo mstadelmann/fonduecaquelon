@@ -77,7 +77,7 @@ Minimal example (YAML):
 ```yaml
 slurm_cluster:
   fdq_test_repo: false
-  fdq_version: 0.1.7
+  fdq_version: 0.1.8
   python_env_module: "python/3.12.4"
   uv_env_module: "uv/0.6.12"
   cuda_env_module: "cuda/12.8.0"
@@ -424,7 +424,7 @@ Example (YAML):
 
 ```yaml
 slurm_cluster:
-  fdq_version: 0.1.7
+  fdq_version: 0.1.8
   # ... other settings ...
   additional_pip_packages:
     - monai==1.4.0
@@ -500,4 +500,7 @@ Contributions are welcome! Please open issues or pull requests on [GitHub](https
 
 ## 🧾 Changelog
 
-- 0.0.74: Configuration files switched from JSON to YAML, using Hydra in the backend for composition and runtime overrides.
+- **0.1.7:** Various wandb bugfixes.
+- **0.1.1 – 0.1.3:** Parameter study support: numeric ranges (`[start:stop:count]`) and categorical values via `@p`-suffixed config keys; submissions are the Cartesian product of all study parameters.
+- **0.0.75:** Fix crash when no transforms are defined in config.
+- **0.0.74:** Configuration files switched from JSON to YAML, using Hydra in the backend for composition and runtime overrides.

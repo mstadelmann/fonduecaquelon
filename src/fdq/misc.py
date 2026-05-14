@@ -46,12 +46,27 @@ class FDQmode:
         ]
         self._locked: bool = False  # Flag to lock the mode when set to unittest
 
-        # Dynamically create setter methods
+        self._install_setters()
+
+    def _install_setters(self) -> None:
+        """Install mode setter methods."""
         for mode in self.allowed_op_modes:
             setattr(self, mode, self._create_setter("_op_mode", mode))
 
         for mode in self.allowed_test_modes:
             setattr(self, mode, self._create_setter("_test_mode", mode))
+
+    def __getstate__(self) -> dict[str, Any]:
+        """Drop dynamically-created closure setters before pickling."""
+        state = self.__dict__.copy()
+        for mode in self.allowed_op_modes + self.allowed_test_modes:
+            state.pop(mode, None)
+        return state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        """Restore state and recreate dynamic setters after unpickling."""
+        self.__dict__.update(state)
+        self._install_setters()
 
     def __repr__(self) -> str:
         """Return the string representation of the FDQmode object."""
@@ -520,6 +535,32 @@ def _get_parameter_run_tag(experiment: Any) -> str:
     return match.group(1) if match else ""
 
 
+def _patch_wandb_wait_with_progress() -> None:
+    """Bypass wandb 0.26.1 progress-polling coroutine bug."""
+    try:
+        from wandb.sdk import wandb_init, wandb_run
+    except (ImportError, AttributeError):
+        return
+
+    def wait_without_progress(handle: Any, *, timeout: float | None, display_progress: Any) -> Any:
+        return handle.wait_or(timeout=timeout)
+
+    wandb_init.wait_with_progress = wait_without_progress
+    wandb_run.wait_with_progress = wait_without_progress
+
+    # The NetStatThr thread captures `self.check_network_status` as a bound method
+    # inside RunStatusChecker.__init__, so it must be patched at the class level
+    # BEFORE wandb.init() instantiates RunStatusChecker.
+    try:
+
+        def _noop_check_network_status(self: Any) -> None:  # noqa: ARG001
+            pass
+
+        wandb_run.RunStatusChecker.check_network_status = _noop_check_network_status
+    except (AttributeError, TypeError):
+        pass
+
+
 def init_wandb(experiment: Any) -> bool:
     """Initialize weights and biases."""
     if experiment.cfg.store.wandb_project is None:
@@ -555,13 +596,18 @@ def init_wandb(experiment: Any) -> bool:
         except (IndexError, AttributeError):
             wandb_name = f"test__{dt_string}__{experiment.experimentName[:30]}{parameter_run_tag}{slurm_str}"
 
+    wandb_config = (
+        OmegaConf.to_container(experiment.cfg, resolve=True) if OmegaConf.is_config(experiment.cfg) else experiment.cfg
+    )
+
     try:
+        _patch_wandb_wait_with_progress()
         wandb.login(key=experiment.cfg.store.wandb_key)
         wandb.init(
             project=experiment.cfg.store.wandb_project,
             entity=experiment.cfg.store.wandb_entity,
             name=wandb_name,
-            config=experiment.cfg,
+            config=wandb_config,
         )
         experiment.wandb_initialized = True
         iprint(f"Init Wandb -  log path: {wandb.run.dir}")
@@ -570,7 +616,6 @@ def init_wandb(experiment: Any) -> bool:
     except (
         wandb.errors.UsageError,
         wandb.errors.CommError,
-        AttributeError,
         ValueError,
     ) as e:
         eprint("Unable to initialize wandb!")
