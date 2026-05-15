@@ -566,7 +566,7 @@ class fdqExperiment:
 
     def createOptimizer(self) -> None:
         for model_name, margs in self.cfg.models.items():
-            if margs.optimizer is None:
+            if margs.get("optimizer") is None:
                 iprint(f"No optimizer defined for model {model_name}")
                 # -> either its frozen, or manually defined within train loop
                 self.optimizers[model_name] = None
