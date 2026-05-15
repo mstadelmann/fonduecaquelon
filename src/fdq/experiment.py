@@ -431,7 +431,7 @@ class fdqExperiment:
         """
         if not self.is_main_process():
             return
-        for model_name, _ in self.cfg.models.items():
+        for model_name, model_def in self.cfg.models.items():
             if self.mode.test_mode.custom_path:
                 while True:
                     model_path = input(f"Enter path to model for '{model_name}' (or 'q' to quit).")
@@ -441,6 +441,10 @@ class fdqExperiment:
                         break
                     else:
                         eprint(f"Error: File {model_path} not found.")
+
+            # load trained model from path defined in exp file
+            elif model_def.get("trained_model_path") is not None:
+                model_path = model_def.get("trained_model_path")
             else:
                 self._results_dir, net_name = find_model_path(self)
                 model_path = os.path.join(self._results_dir, net_name)
