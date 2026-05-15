@@ -441,7 +441,7 @@ class fdqExperiment:
                         break
                     else:
                         eprint(f"Error: File {model_path} not found.")
-            
+
             # load trained model from path defined in exp file
             elif model_def.get("trained_model_path") is not None:
                 model_path = model_def.get("trained_model_path")
