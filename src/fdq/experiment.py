@@ -244,7 +244,7 @@ class fdqExperiment:
 
     def is_distributed(self) -> bool:
         """Check if the current setup is distributed."""
-        return self.world_size > 1
+        return getattr(self, "world_size", 1) > 1
 
     def dist_barrier(self) -> None:
         """Barrier for distributed training."""
@@ -821,6 +821,9 @@ class fdqExperiment:
         if not self.is_distributed():
             return local_stop
 
+        # DDP ranks must either all stop or all continue. A MAX all-reduce
+        # acts like a distributed OR, so one rank's early-stop decision is
+        # propagated before any peer can enter the next backward/all-reduce.
         stop_tensor = torch.tensor([int(local_stop)], device=self.device)
         torch.distributed.all_reduce(stop_tensor, op=torch.distributed.ReduceOp.MAX)
         should_stop = bool(stop_tensor.item())
