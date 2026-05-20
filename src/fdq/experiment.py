@@ -249,7 +249,10 @@ class fdqExperiment:
     def dist_barrier(self) -> None:
         """Barrier for distributed training."""
         if self.is_distributed():
-            torch.distributed.barrier()
+            if torch.cuda.is_available():
+                torch.distributed.barrier(device_ids=[self.rank])
+            else:
+                torch.distributed.barrier()
 
     def init_distributed_mode(self):
         # if "SLURM_PROCID" not in os.environ or os.environ["SLURM_JOB_NAME"] == "bash":
@@ -275,7 +278,7 @@ class fdqExperiment:
             world_size=self.world_size,
             rank=self.rank,
             # timeout=timedelta(minutes=15),
-            # device_id=torch.device("cuda", self.rank),
+            device_id=torch.device("cuda", self.rank),
         )
 
         print(f"Distributed mode initialized on rank {self.rank}.")
@@ -757,8 +760,8 @@ class fdqExperiment:
         if self.is_distributed():
             torch.distributed.destroy_process_group()
 
-    def check_early_stop(self) -> bool:
-        """Check if training should be stopped.
+    def _check_early_stop_local(self) -> bool:
+        """Check if training should be stopped on this rank.
 
         1) Stop training if the validation los over last last N epochs did not further decrease.
         We want at least N epochs in each training start, also if its a resume from checkpoint training.
@@ -811,6 +814,23 @@ class fdqExperiment:
 
         return False
 
+    def check_early_stop(self) -> bool:
+        """Check if training should stop and synchronize the decision across ranks."""
+        local_stop = self._check_early_stop_local()
+
+        if not self.is_distributed():
+            return local_stop
+
+        stop_tensor = torch.tensor([int(local_stop)], device=self.device)
+        torch.distributed.all_reduce(stop_tensor, op=torch.distributed.ReduceOp.MAX)
+        should_stop = bool(stop_tensor.item())
+
+        if should_stop and not local_stop:
+            self.early_stop_detected = True
+            self.early_stop_reason = "DDP_peer_early_stop"
+
+        return should_stop
+
     def update_gradients(self, b_idx: int, loader_name: str, model_name: str) -> None:
         length_loader = self.data[loader_name].n_train_batches
 
@@ -846,6 +866,8 @@ class fdqExperiment:
                     if self.data[data_name].val_sampler is not None:
                         self.data[data_name].val_sampler.set_epoch(epoch)
 
+            self.dist_barrier()
+
     def on_epoch_end(
         self,
         log_scalars: dict[str, float] | None = None,
@@ -863,43 +885,44 @@ class fdqExperiment:
                 if current_LR != new_LR:
                     iprint(f"Updating LR of {model_name} from {current_LR} to {new_LR}")
 
-        if not self.is_main_process():
-            return
-
-        show_train_progress(self)
-        save_tensorboard(
-            experiment=self,
-            images=log_images_tensorboard,
-            scalars=log_scalars,
-            text=log_text_tensorboard,
-        )
-        save_wandb(
-            experiment=self,
-            images=log_images_wandb,
-            scalars=log_scalars,
-        )
-
         try:
-            current_ep_time = datetime.now() - self.current_ep_start_time
-            self.total_run_time = datetime.now() - self.creation_time
+            if self.is_main_process():
+                show_train_progress(self)
+                save_tensorboard(
+                    experiment=self,
+                    images=log_images_tensorboard,
+                    scalars=log_scalars,
+                    text=log_text_tensorboard,
+                )
+                save_wandb(
+                    experiment=self,
+                    images=log_images_wandb,
+                    scalars=log_scalars,
+                )
 
-            iprint(
-                f"Total run time: {self.total_run_time.days} days, "
-                f"{self.total_run_time.seconds // 3600} hours, "
-                f"{self.total_run_time.seconds % 3600 / 60.0:.0f} minutes | "
-                f"current epoch: {int(current_ep_time.total_seconds() // 60)} minutes {int(current_ep_time.total_seconds() % 60)} seconds"
-            )
-        except (AttributeError, ValueError, TypeError):
-            iprint("Error calculating epoch time - skipping.")
+                try:
+                    current_ep_time = datetime.now() - self.current_ep_start_time
+                    self.total_run_time = datetime.now() - self.creation_time
 
-        store_processing_infos(self)
+                    iprint(
+                        f"Total run time: {self.total_run_time.days} days, "
+                        f"{self.total_run_time.seconds // 3600} hours, "
+                        f"{self.total_run_time.seconds % 3600 / 60.0:.0f} minutes | "
+                        f"current epoch: {int(current_ep_time.total_seconds() // 60)} minutes {int(current_ep_time.total_seconds() % 60)} seconds"
+                    )
+                except (AttributeError, ValueError, TypeError):
+                    iprint("Error calculating epoch time - skipping.")
 
-        if self.current_epoch == self.nb_epochs - 1:
-            self.finish_time = datetime.now()
+                store_processing_infos(self)
 
-        save_train_history(self)
-        self.save_checkpoint()
-        self.save_current_model()
+                if self.current_epoch == self.nb_epochs - 1:
+                    self.finish_time = datetime.now()
+
+                save_train_history(self)
+                self.save_checkpoint()
+                self.save_current_model()
+        finally:
+            self.dist_barrier()
 
     def cp_to_res_dir(self, file_path: str) -> None:
         if not self.is_main_process():
