@@ -456,6 +456,33 @@ class fdqExperiment:
         self.init_models(instantiate=False)
         [self.models[model_name].eval() for model_name, _ in self.cfg.models.items()]
 
+    def _prepare_ddp_data_args(self, data_name: str, data_source: Any) -> None:
+        if not self.is_distributed() or data_source.get("args") is None:
+            return
+
+        args = data_source.args
+        if args.get("num_workers") is None:
+            return
+
+        ddp_num_workers = args.get("ddp_num_workers")
+        if ddp_num_workers is not None:
+            if args.num_workers != ddp_num_workers:
+                wprint(
+                    f"DDP dataset {data_name}: setting num_workers={ddp_num_workers} "
+                    "from ddp_num_workers."
+                )
+                args.num_workers = ddp_num_workers
+            return
+
+        if args.num_workers != 0:
+            # Multiprocess DataLoader workers can leave one DDP rank blocked in
+            # data fetching while another rank enters backward, which surfaces
+            # later as an NCCL all-reduce timeout rather than a Python error.
+            wprint(
+                f"DDP dataset {data_name}: forcing num_workers=0 to avoid worker/rank stalls."
+            )
+            args.num_workers = 0
+
     def setupData(self) -> None:
         if self.cfg.data is None:
             wprint(
@@ -469,6 +496,7 @@ class fdqExperiment:
         self.copy_data_to_scratch()
 
         for data_name, data_source in self.cfg.data.items():
+            self._prepare_ddp_data_args(data_name, data_source)
             processor = self.import_class(file_path=data_source.processor)
 
             if data_source.get("caching") is None:
