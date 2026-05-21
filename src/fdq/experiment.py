@@ -467,10 +467,7 @@ class fdqExperiment:
         ddp_num_workers = args.get("ddp_num_workers")
         if ddp_num_workers is not None:
             if args.num_workers != ddp_num_workers:
-                wprint(
-                    f"DDP dataset {data_name}: setting num_workers={ddp_num_workers} "
-                    "from ddp_num_workers."
-                )
+                wprint(f"DDP dataset {data_name}: setting num_workers={ddp_num_workers} from ddp_num_workers.")
                 args.num_workers = ddp_num_workers
             return
 
@@ -478,9 +475,7 @@ class fdqExperiment:
             # Multiprocess DataLoader workers can leave one DDP rank blocked in
             # data fetching while another rank enters backward, which surfaces
             # later as an NCCL all-reduce timeout rather than a Python error.
-            wprint(
-                f"DDP dataset {data_name}: forcing num_workers=0 to avoid worker/rank stalls."
-            )
+            wprint(f"DDP dataset {data_name}: forcing num_workers=0 to avoid worker/rank stalls.")
             args.num_workers = 0
 
     def setupData(self) -> None:
