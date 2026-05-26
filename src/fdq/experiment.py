@@ -410,6 +410,7 @@ class fdqExperiment:
                     self.models[model_name] = DDP(
                         self.models[model_name].cuda(self.rank),
                         device_ids=[self.rank],
+                        gradient_as_bucket_view=True,
                         # find_unused_parameters=True,
                     )
                     iprint(
