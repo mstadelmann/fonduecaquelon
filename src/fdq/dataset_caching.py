@@ -347,8 +347,14 @@ def cache_datasets(experiment, processor, data_name, data_source):
 
         cached_num_workers = data_source.caching.get("num_workers", 0)
         if experiment.is_distributed() and cached_num_workers != 0:
-            wprint("DDP cached datasets are already in RAM; forcing num_workers=0 to avoid worker/rank hangs.")
-            cached_num_workers = 0
+            ddp_num_workers = data_source.caching.get("ddp_num_workers")
+            if ddp_num_workers is not None:
+                if cached_num_workers != ddp_num_workers:
+                    wprint(f"DDP cached dataset: setting num_workers={ddp_num_workers} from ddp_num_workers.")
+                    cached_num_workers = ddp_num_workers
+            else:
+                wprint("DDP cached datasets are already in RAM; forcing num_workers=0 to avoid worker/rank hangs.")
+                cached_num_workers = 0
 
         cached_loader = DataLoader(
             dataset=cached_dataset,
