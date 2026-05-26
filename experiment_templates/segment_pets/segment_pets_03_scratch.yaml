@@ -1,0 +1,20 @@
+defaults:
+  - segment_pets_01
+  - _self_
+
+globals:
+  project: Segment OXPET
+  author: Marc
+  comment: "Same experiment as segment_pets_01.yaml, but without initially copying datasets to scratch. This has only an influence if dealing with heavy datasets and un-cached dataloaders (i.e. if the dataloader becomes the bottleneck because it reads from disk every epoch)."
+
+mode:
+  run_train: true
+  run_test_interactive: false
+  run_test_auto: false
+  dump_model: false
+  run_inference: false
+  print_model_summary: false
+  resume_chpt_path: null
+    
+slurm_cluster:
+  scratch_data_path: /scratch/fdq_data/

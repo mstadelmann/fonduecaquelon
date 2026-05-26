@@ -10,7 +10,7 @@ globals:
 mode:
   run_train: true
   run_test_interactive: false
-  run_test_auto: true
+  run_test_auto: false
   dump_model: false
   run_inference: false
   print_model_summary: false
@@ -20,19 +20,19 @@ store:
   results_path: ~/data_ML/results
 
 slurm_cluster:
-  fdq_test_repo: false
-  fdq_version: 0.1.11
+  fdq_test_repo: true
+  fdq_version: 0.1.11.dev1
   python_env_module: python/3.12.4
   uv_env_module: uv/0.6.12
   cuda_env_module: cuda/12.8.0
   scratch_results_path: /scratch/fdq_results/
   scratch_data_path: /scratch/fdq_data/
   log_path: ~/dev/fonduecaquelon/slurm_log
-  job_time: 15
+  job_time: 30
   stop_grace_time: 3
   cpus_per_task: 16
   cpus_per_task_test: 8
-  gres: gpu:2
+  gres: gpu:a100sxm:2
   gres_test: gpu:1
   mem: 200G
   mem_test: 200G

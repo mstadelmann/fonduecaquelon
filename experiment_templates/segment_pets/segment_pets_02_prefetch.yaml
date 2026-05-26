@@ -1,0 +1,23 @@
+defaults:
+  - segment_pets_01
+  - _self_
+
+globals:
+  project: Segment OXPET
+  author: Marc
+  comment: ""
+
+mode:
+  run_train: true
+  run_test_interactive: false
+  run_test_auto: false
+  dump_model: false
+  run_inference: false
+  print_model_summary: false
+  resume_chpt_path: null
+    
+data:
+  OXPET:
+    args:
+      prefetch_factor: 4
+    

@@ -1,0 +1,31 @@
+defaults:
+  - segment_pets_05_large
+  - _self_
+
+globals:
+  project: Segment OXPET
+  author: Marc
+  comment: "Same experiment as segment_pets_01.yaml, but with DDP enabled over 2 GPUs. This is only faster if the model is large enough to benefit from parallelism (check segment_pets_00_large.yaml)."
+
+mode:
+  run_train: true
+  run_test_interactive: false
+  run_test_auto: false
+  dump_model: false
+  run_inference: false
+  print_model_summary: false
+  resume_chpt_path: null
+
+
+    
+slurm_cluster:
+  comment: "Assign the same number of GPUs to your job as your world size. Also, this will require more CPU cores and more memory, as multiple dataloaders will be launched."
+  cpus_per_task: 16
+  cpus_per_task_test: 8
+  gres: gpu:a100sxm:2
+  gres_test: gpu:1
+  mem: 120G
+  mem_test: 120G
+  world_size: 2
+
+

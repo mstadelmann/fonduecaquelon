@@ -1,7 +1,38 @@
+defaults:
+  - segment_pets_01
+  - _self_
+
 globals:
   project: Segment OXPET
   author: Marc
-  comment: Huge model to demonstrate advantages of DDP.
+
+mode:
+  run_train: true
+  run_test_interactive: false
+  run_test_auto: false
+  dump_model: false
+  run_inference: false
+  print_model_summary: false
+  resume_chpt_path: null
+
+transforms:
+  resize_and_pad_bilinear:
+    - ResizeMaxDimPad:
+        max_dim: 256
+        interpol_mode: bilinear
+  resize_and_pad_nearest:
+    - ResizeMaxDimPad:
+        max_dim: 256
+        interpol_mode: nearest
+
+data:
+  OXPET:
+    args:
+      num_workers: 4
+      prefetch_factor: null
+      train_batch_size: 8
+      val_batch_size: 8
+
 
 models:
   ccUNET:
@@ -15,11 +46,9 @@ models:
         - DownBlock
         - AttnDownBlock
         - AttnDownBlock
-        - AttnDownBlock
       up_block_types:
         - UpBlock
         - UpBlock
-        - AttnUpBlock
         - AttnUpBlock
         - AttnUpBlock
       block_out_channel_mults:
@@ -27,7 +56,6 @@ models:
         - 2
         - 2
         - 2
-        - 4
       n_channels: 256
       attn_n_heads: 8
       attn_head_dim: 96
@@ -41,3 +69,4 @@ models:
       args:
         step_size: 2
         gamma: 0.95
+        
