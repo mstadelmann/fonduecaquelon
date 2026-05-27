@@ -10,7 +10,7 @@ globals:
 mode:
   run_train: true
   run_test_interactive: false
-  run_test_auto: false
+  run_test_auto: true
   dump_model: false
   run_inference: false
   print_model_summary: false
