@@ -619,6 +619,9 @@ class fdqExperiment:
         """Estimate total VRAM requirements: parameters, gradients, optimizer state, and activations."""
         if not self.is_main_process():
             return
+        if self.is_distributed():
+            iprint("Skipping VRAM estimation in DDP mode (dummy forward pass on rank 0 only can desync NCCL state).")
+            return
 
         iprint("-----------------------------------------------------------")
         iprint("VRAM Estimation (model + gradients + optimizer state + activations)")
