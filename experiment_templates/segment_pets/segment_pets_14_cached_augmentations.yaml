@@ -1,0 +1,31 @@
+defaults:
+  - segment_pets_13_cached
+  - _self_
+
+globals:
+  project: Segment OXPET
+  author: Marc
+  comment: "Same experiment as segment_pets_13_cached, but with additional non-deterministic augmentations applied on-the-fly after cache retrieval. This lets you cache the expensive deterministic transforms while still benefiting from random augmentations each epoch."
+
+mode:
+  run_train: true
+  run_test_interactive: false
+  run_test_auto: true
+  dump_model: false
+  run_inference: false
+  print_model_summary: false
+  resume_chpt_path: null
+    
+transforms:
+  random_vertical_flip_sync: # key referenced by name in oxpets_augmentation.py; applies a random vertical flip to image and mask in sync (same flip decision for both)
+    - SynchronizedRandomVerticalFlip:
+        p: 0.5
+    
+data:
+  OXPET:
+    args:
+      slow: true
+    caching:
+      nondeterministic_transforms:
+        processor: ~/dev/fonduecaquelon/experiment_templates/segment_pets/oxpets_augmentation.py
+

@@ -1,0 +1,31 @@
+defaults:
+  - segment_pets_10
+  - _self_
+
+globals:
+  project: Segment OXPET
+  author: Marc
+  comment: "Same experiment as parent (segment_pets_10), but with dataset caching enabled. The slow dataloader simulation (slow: true) is intentionally kept active: after the first epoch, samples are served from cache and the slow __getitem__ is bypassed entirely, demonstrating that caching eliminates dataloader bottlenecks."
+
+mode:
+  run_train: true
+  run_test_interactive: false
+  run_test_auto: true
+  dump_model: false
+  run_inference: false
+  print_model_summary: false
+  resume_chpt_path: null
+    
+data:
+  OXPET:
+    args:
+      slow: true
+    caching:
+      enabled: true
+      cache_dir: /scratch/fdq_cache/
+      shuffle_train: true
+      shuffle_val: false
+      shuffle_test: false
+      pin_memory: true
+      num_workers: 4
+      compress_cache: false

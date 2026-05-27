@@ -36,7 +36,7 @@ def fdq_test(experiment):
         targets = targets.to(experiment.device)
 
         pbar.update(nb_tbatch)
-        output = experiment.models["ccUNET"](inputs)
+        output = experiment.models["myUNET"](inputs)
         current_loss = float(experiment.losses["cross_ent"](output, targets))
         current_dice = multiclass_dice_score(output, targets).item()
         losses.append(current_loss)

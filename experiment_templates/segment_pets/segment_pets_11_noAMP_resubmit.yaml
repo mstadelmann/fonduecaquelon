@@ -1,0 +1,26 @@
+defaults:
+  - segment_pets_10
+  - _self_
+
+globals:
+  project: Segment OXPET
+  author: Marc
+  comment: "Same experiment as parent, but without AMP (automatic mixed precision). Additionally, we run more epochs to test automatic job resubmission when running on a Slurm cluster."
+
+mode:
+  run_train: true
+  run_test_interactive: false
+  run_test_auto: true
+  dump_model: false
+  run_inference: false
+  print_model_summary: false
+  resume_chpt_path: null
+
+train:
+  args:
+    use_AMP: false
+    epochs: 30
+
+slurm_cluster:
+  auto_resubmit: true # if true, fdq will automatically resubmit your job and continue training from the last checkpoint.
+

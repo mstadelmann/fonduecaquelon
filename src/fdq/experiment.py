@@ -244,12 +244,15 @@ class fdqExperiment:
 
     def is_distributed(self) -> bool:
         """Check if the current setup is distributed."""
-        return self.world_size > 1
+        return getattr(self, "world_size", 1) > 1
 
     def dist_barrier(self) -> None:
         """Barrier for distributed training."""
         if self.is_distributed():
-            torch.distributed.barrier()
+            if torch.cuda.is_available():
+                torch.distributed.barrier(device_ids=[self.rank])
+            else:
+                torch.distributed.barrier()
 
     def init_distributed_mode(self):
         # if "SLURM_PROCID" not in os.environ or os.environ["SLURM_JOB_NAME"] == "bash":
@@ -275,7 +278,7 @@ class fdqExperiment:
             world_size=self.world_size,
             rank=self.rank,
             # timeout=timedelta(minutes=15),
-            # device_id=torch.device("cuda", self.rank),
+            device_id=torch.device("cuda", self.rank),
         )
 
         print(f"Distributed mode initialized on rank {self.rank}.")
@@ -407,6 +410,7 @@ class fdqExperiment:
                     self.models[model_name] = DDP(
                         self.models[model_name].cuda(self.rank),
                         device_ids=[self.rank],
+                        gradient_as_bucket_view=True,
                         # find_unused_parameters=True,
                     )
                     iprint(
@@ -453,6 +457,28 @@ class fdqExperiment:
         self.init_models(instantiate=False)
         [self.models[model_name].eval() for model_name, _ in self.cfg.models.items()]
 
+    def _prepare_ddp_data_args(self, data_name: str, data_source: Any) -> None:
+        if not self.is_distributed() or data_source.get("args") is None:
+            return
+
+        args = data_source.args
+        if args.get("num_workers") is None:
+            return
+
+        ddp_num_workers = args.get("ddp_num_workers")
+        if ddp_num_workers is not None:
+            if args.num_workers != ddp_num_workers:
+                wprint(f"DDP dataset {data_name}: setting num_workers={ddp_num_workers} from ddp_num_workers.")
+                args.num_workers = ddp_num_workers
+            return
+
+        if args.num_workers != 0:
+            # Multiprocess DataLoader workers can leave one DDP rank blocked in
+            # data fetching while another rank enters backward, which surfaces
+            # later as an NCCL all-reduce timeout rather than a Python error.
+            wprint(f"DDP dataset {data_name}: forcing num_workers=0 to avoid worker/rank stalls.")
+            args.num_workers = 0
+
     def setupData(self) -> None:
         if self.cfg.data is None:
             wprint(
@@ -466,6 +492,7 @@ class fdqExperiment:
         self.copy_data_to_scratch()
 
         for data_name, data_source in self.cfg.data.items():
+            self._prepare_ddp_data_args(data_name, data_source)
             processor = self.import_class(file_path=data_source.processor)
 
             if data_source.get("caching") is None:
@@ -533,6 +560,130 @@ class fdqExperiment:
                 "memory_usage_GB": f"{nbp * 4 / 1e9:.3f} GB",
             }
 
+    def _estimate_activation_bytes(self) -> int | None:
+        """Measure input-batch + forward-activation memory via a dummy forward pass.
+
+        Gradients are enabled (but backward is not called) so PyTorch retains all
+        intermediate tensors exactly as it would during a real training forward pass.
+        The model is switched to eval mode to avoid mutating BatchNorm running stats.
+        All state is restored and GPU scratch memory is freed before returning.
+        """
+        if not self.is_cuda or not self.data:
+            return None
+
+        try:
+            first_data_name = next(iter(self.data))
+            loader = self.data[first_data_name].train_data_loader
+            batch = next(iter(loader))
+
+            if isinstance(batch, (list, tuple)):
+                x = batch[0]
+            elif isinstance(batch, dict):
+                x = next(iter(batch.values()))
+            else:
+                x = batch
+            x = x.to(self.device).float()
+
+            model = self.models_no_ddp[next(iter(self.models_no_ddp))]
+
+            # eval() prevents BatchNorm from updating running_mean/running_var;
+            # gradient tracking is still active so the autograd graph is built,
+            # matching the memory footprint of a real training forward pass.
+            was_training = model.training
+            model.eval()
+
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats(self.device)
+            baseline = torch.cuda.memory_allocated(self.device)
+
+            out = model(x)
+            activation_bytes = torch.cuda.max_memory_allocated(self.device) - baseline
+
+        except Exception as e:
+            wprint(f"Could not estimate activation memory via dummy forward pass: {e}")
+            return None
+        finally:
+            # Always restore model state and free scratch memory, even on error.
+            model.train(was_training)
+            model.zero_grad(set_to_none=True)
+            try:
+                del out
+            except NameError:
+                pass
+            del x
+            torch.cuda.empty_cache()
+
+        return max(int(activation_bytes), 0)
+
+    def estimate_total_vram(self) -> None:
+        """Estimate total VRAM requirements: parameters, gradients, optimizer state, and activations."""
+        if not self.is_main_process():
+            return
+        if self.is_distributed():
+            iprint("Skipping VRAM estimation in DDP mode (dummy forward pass on rank 0 only can desync NCCL state).")
+            return
+
+        iprint("-----------------------------------------------------------")
+        iprint("VRAM Estimation (model + gradients + optimizer state + activations)")
+        iprint("-----------------------------------------------------------")
+
+        total_bytes = 0
+
+        for model_name, model in self.models_no_ddp.items():
+            model_def = self.cfg.models[model_name]
+            frozen = bool(model_def.get("freeze", False))
+            nbp = sum(p.numel() for p in model.parameters())
+
+            # Parameters: fp32 master copy (4 bytes each)
+            param_bytes = nbp * 4
+
+            # AMP: a fp16 working copy is kept alongside the fp32 master
+            amp_bytes = nbp * 2 if self.useAMP else 0
+
+            # Gradients are the same dtype as params (fp32)
+            grad_bytes = nbp * 4 if not frozen else 0
+
+            # Optimizer state
+            optim_bytes = 0
+            optim_label = "none"
+            optimizer = self.optimizers.get(model_name)
+            if optimizer is not None and not frozen:
+                optim_label = type(optimizer).__name__
+                optim_class = optim_label.lower()
+                if "adam" in optim_class:
+                    # Adam / AdamW: two fp32 moment vectors
+                    optim_bytes = nbp * 8
+                elif "sgd" in optim_class:
+                    has_momentum = any(g.get("momentum", 0) != 0 for g in optimizer.param_groups)
+                    optim_bytes = nbp * 4 if has_momentum else 0
+                else:
+                    # Conservative fallback: one state tensor
+                    optim_bytes = nbp * 4
+
+            model_total = param_bytes + amp_bytes + grad_bytes + optim_bytes
+            total_bytes += model_total
+
+            iprint(
+                f"  [{model_name}]  {nbp / 1e6:.2f}M params  |  optimizer: {optim_label}{'  |  FROZEN' if frozen else ''}"
+            )
+            iprint(f"    Parameters:      {param_bytes / 1e9:.3f} GB")
+            if self.useAMP:
+                iprint(f"    AMP fp16 copy:   {amp_bytes / 1e9:.3f} GB")
+            if not frozen:
+                iprint(f"    Gradients:       {grad_bytes / 1e9:.3f} GB")
+                iprint(f"    Optimizer state: {optim_bytes / 1e9:.3f} GB")
+            iprint(f"    Subtotal:        {model_total / 1e9:.3f} GB")
+
+        # Activations + data batch: measured via dummy forward pass
+        activation_bytes = self._estimate_activation_bytes()
+        if activation_bytes is not None:
+            iprint(f"  Data + activations:  {activation_bytes / 1e9:.3f} GB  (dummy forward pass, grad-enabled)")
+            total_bytes += activation_bytes
+
+        iprint(f"  => Estimated total VRAM: {total_bytes / 1e9:.3f} GB")
+        iprint("-----------------------------------------------------------")
+        self.processing_log_dict["vram_estimate_GB"] = f"{total_bytes / 1e9:.3f}"
+
     def prepareTraining(self) -> None:
         self.mode.train()
         self.setupData()
@@ -543,6 +694,7 @@ class fdqExperiment:
             self.print_nb_weights()
             self.createOptimizer()
             self.set_lr_schedule()
+            self.estimate_total_vram()
         else:
             wprint(
                 "Warning: No models defined in experiment file -> Model has to be manually defined in the training/testing loop."
@@ -757,8 +909,8 @@ class fdqExperiment:
         if self.is_distributed():
             torch.distributed.destroy_process_group()
 
-    def check_early_stop(self) -> bool:
-        """Check if training should be stopped.
+    def _check_early_stop_local(self) -> bool:
+        """Check if training should be stopped on this rank.
 
         1) Stop training if the validation los over last last N epochs did not further decrease.
         We want at least N epochs in each training start, also if its a resume from checkpoint training.
@@ -811,6 +963,26 @@ class fdqExperiment:
 
         return False
 
+    def check_early_stop(self) -> bool:
+        """Check if training should stop and synchronize the decision across ranks."""
+        local_stop = self._check_early_stop_local()
+
+        if not self.is_distributed():
+            return local_stop
+
+        # DDP ranks must either all stop or all continue. A MAX all-reduce
+        # acts like a distributed OR, so one rank's early-stop decision is
+        # propagated before any peer can enter the next backward/all-reduce.
+        stop_tensor = torch.tensor([int(local_stop)], device=self.device)
+        torch.distributed.all_reduce(stop_tensor, op=torch.distributed.ReduceOp.MAX)
+        should_stop = bool(stop_tensor.item())
+
+        if should_stop and not local_stop:
+            self.early_stop_detected = True
+            self.early_stop_reason = "DDP_peer_early_stop"
+
+        return should_stop
+
     def update_gradients(self, b_idx: int, loader_name: str, model_name: str) -> None:
         length_loader = self.data[loader_name].n_train_batches
 
@@ -846,6 +1018,8 @@ class fdqExperiment:
                     if self.data[data_name].val_sampler is not None:
                         self.data[data_name].val_sampler.set_epoch(epoch)
 
+            self.dist_barrier()
+
     def on_epoch_end(
         self,
         log_scalars: dict[str, float] | None = None,
@@ -863,43 +1037,44 @@ class fdqExperiment:
                 if current_LR != new_LR:
                     iprint(f"Updating LR of {model_name} from {current_LR} to {new_LR}")
 
-        if not self.is_main_process():
-            return
-
-        show_train_progress(self)
-        save_tensorboard(
-            experiment=self,
-            images=log_images_tensorboard,
-            scalars=log_scalars,
-            text=log_text_tensorboard,
-        )
-        save_wandb(
-            experiment=self,
-            images=log_images_wandb,
-            scalars=log_scalars,
-        )
-
         try:
-            current_ep_time = datetime.now() - self.current_ep_start_time
-            self.total_run_time = datetime.now() - self.creation_time
+            if self.is_main_process():
+                show_train_progress(self)
+                save_tensorboard(
+                    experiment=self,
+                    images=log_images_tensorboard,
+                    scalars=log_scalars,
+                    text=log_text_tensorboard,
+                )
+                save_wandb(
+                    experiment=self,
+                    images=log_images_wandb,
+                    scalars=log_scalars,
+                )
 
-            iprint(
-                f"Total run time: {self.total_run_time.days} days, "
-                f"{self.total_run_time.seconds // 3600} hours, "
-                f"{self.total_run_time.seconds % 3600 / 60.0:.0f} minutes | "
-                f"current epoch: {int(current_ep_time.total_seconds() // 60)} minutes {int(current_ep_time.total_seconds() % 60)} seconds"
-            )
-        except (AttributeError, ValueError, TypeError):
-            iprint("Error calculating epoch time - skipping.")
+                try:
+                    current_ep_time = datetime.now() - self.current_ep_start_time
+                    self.total_run_time = datetime.now() - self.creation_time
 
-        store_processing_infos(self)
+                    iprint(
+                        f"Total run time: {self.total_run_time.days} days, "
+                        f"{self.total_run_time.seconds // 3600} hours, "
+                        f"{self.total_run_time.seconds % 3600 / 60.0:.0f} minutes | "
+                        f"current epoch: {int(current_ep_time.total_seconds() // 60)} minutes {int(current_ep_time.total_seconds() % 60)} seconds"
+                    )
+                except (AttributeError, ValueError, TypeError):
+                    iprint("Error calculating epoch time - skipping.")
 
-        if self.current_epoch == self.nb_epochs - 1:
-            self.finish_time = datetime.now()
+                store_processing_infos(self)
 
-        save_train_history(self)
-        self.save_checkpoint()
-        self.save_current_model()
+                if self.current_epoch == self.nb_epochs - 1:
+                    self.finish_time = datetime.now()
+
+                save_train_history(self)
+                self.save_checkpoint()
+                self.save_current_model()
+        finally:
+            self.dist_barrier()
 
     def cp_to_res_dir(self, file_path: str) -> None:
         if not self.is_main_process():

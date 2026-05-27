@@ -5,7 +5,7 @@ defaults:
 globals:
   project: Segment OXPET
   author: Marc
-  comment: "Base experiment for segmenting the Oxford Pets dataset using a simple UNET architecture. The model is oversized so better showcase the potential gains in distributed training. This experiment is used as a base for other experiments, which inherit from it and overwrite specific parts (e.g. the transforms, or the model architecture)."
+  comment: "Base experiment for segmenting the Oxford Pets dataset using the chuchichaestli UNET architecture. This experiment is used as a base for other experiments, which inherit from it and overwrite specific parts (e.g. the transforms, or the model architecture)."
 
 mode:
   run_train: true
@@ -28,17 +28,25 @@ transforms:
 
 models:
   myUNET:
-    path: "~/dev/fonduecaquelon/src/networks/simpleUNET.py"
-    class_name: simpleUNET
+    class_name: chuchichaestli.models.unet.unet.UNet
     args:
+      dimensions: 2
       in_channels: 3
       out_channels: 3
-      encoder_channels: [512,1024,2048]
-      input_shape: [256,256]
+      down_block_types:
+        - DownBlock
+        - DownBlock
+      up_block_types:
+        - UpBlock
+        - UpBlock
+      block_out_channel_mults:
+        - 1
+        - 2
+      time_embedding: false
     optimizer:
       class_name: torch.optim.Adam
       args:
-        lr: 0.0001
+        lr: 0.001
     lr_scheduler:
       class_name: torch.optim.lr_scheduler.StepLR
       args:
@@ -55,7 +63,7 @@ data:
       subset_test: 1.0
       pin_memory: true
       num_workers: 4
-      prefetch_factor: 2
+      prefetch_factor: null
       train_batch_size: 16
       val_batch_size: 16
       test_batch_size: 1
@@ -100,23 +108,25 @@ test:
       nb_test_samples: "10"
 
 slurm_cluster:
-  fdq_test_repo: false # Pull FDQ from https://test.pypi.org instead of the official PyPI - for debugging purposes only
+  fdq_test_repo: false
   fdq_version: 0.1.12
   python_env_module: python/3.12.4
   uv_env_module: uv/0.6.12
   cuda_env_module: cuda/12.8.0
-  scratch_results_path: /scratch/fdq_results/ # path where fdq stores temporary results.
-  scratch_data_path: /scratch/fdq_data/ # if defined, fdq will first copy your data to this path and load it from there. Most beneficial when data is read multiple times (e.g. many epochs).
+  scratch_results_path: /scratch/fdq_results/
+  scratch_data_path: null
   log_path: ~/dev/fonduecaquelon/slurm_log
-  job_time: 30
-  stop_grace_time: 3 # time in minutes to wait after sending the stop signal before forcefully killing the job. This gives the job time to do some last cleanup operations (e.g. uploading results to wandb, or copying files from scratch back to home)
+  job_time: 8
+  stop_grace_time: 3
   cpus_per_task: 8
   cpus_per_task_test: 8
   gres: gpu:a100sxm:1
   gres_test: gpu:1
   mem: 120G
   mem_test: 120G
-  partition: admin
-  account: admin
+  partition: gpu
+  account: cai_ivs
   auto_resubmit: false
   world_size: 1
+  additional_pip_packages:
+    - chuchichaestli==0.2.17

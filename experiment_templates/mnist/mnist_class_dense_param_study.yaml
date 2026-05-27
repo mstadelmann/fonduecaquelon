@@ -6,12 +6,14 @@ globals:
   project: "MNIST classifier"
   author: "Marc"
 
+# Fields marked with @p define parameter study axes. Each combination of @p values
+# produces a separate training run. Values are listed as ':'-separated entries inside [].
 models:
   simpleNet:
     optimizer:
-      class_name@p: ["torch.optim.Adam":"torch.optim.SGD"]
+      class_name@p: ["torch.optim.Adam":"torch.optim.SGD"] # sweep over optimizers
       args:
-        lr@p: [0.001:0.003:2]
+        lr@p: [0.001:0.003:2] # sweep over learning rates
 
 mode:
   run_train: true

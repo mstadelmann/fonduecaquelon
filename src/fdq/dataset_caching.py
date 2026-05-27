@@ -345,22 +345,33 @@ def cache_datasets(experiment, processor, data_name, data_source):
         # - no need to PIN memory as data is in RAM
         # - shuffling is managed by sampler
 
+        cached_num_workers = data_source.caching.get("num_workers", 0)
+        if experiment.is_distributed() and cached_num_workers != 0:
+            ddp_num_workers = data_source.caching.get("ddp_num_workers")
+            if ddp_num_workers is not None:
+                if cached_num_workers != ddp_num_workers:
+                    wprint(f"DDP cached dataset: setting num_workers={ddp_num_workers} from ddp_num_workers.")
+                    cached_num_workers = ddp_num_workers
+            else:
+                wprint("DDP cached datasets are already in RAM; forcing num_workers=0 to avoid worker/rank hangs.")
+                cached_num_workers = 0
+
         cached_loader = DataLoader(
             dataset=cached_dataset,
             batch_size=orig_dataloader.batch_size,
             shuffle=False,
             # batch_sampler=orig_dataloader.batch_sampler,
             sampler=orig_dataloader.sampler,
-            num_workers=data_source.caching.get("num_workers", 0),
+            num_workers=cached_num_workers,
             collate_fn=orig_dataloader.collate_fn,
             pin_memory=data_source.caching.get("pin_memory", False),
             drop_last=orig_dataloader.drop_last,
             timeout=orig_dataloader.timeout,
-            worker_init_fn=orig_dataloader.worker_init_fn,
-            multiprocessing_context=orig_dataloader.multiprocessing_context,
+            worker_init_fn=orig_dataloader.worker_init_fn if cached_num_workers > 0 else None,
+            multiprocessing_context=orig_dataloader.multiprocessing_context if cached_num_workers > 0 else None,
             generator=orig_dataloader.generator,
-            prefetch_factor=data_source.caching.get("prefetch_factor", None),
-            persistent_workers=orig_dataloader.persistent_workers,
+            prefetch_factor=data_source.caching.get("prefetch_factor", None) if cached_num_workers > 0 else None,
+            persistent_workers=orig_dataloader.persistent_workers if cached_num_workers > 0 else False,
         )
 
         cached_loaders[split_name] = cached_loader

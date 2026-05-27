@@ -26,6 +26,7 @@ class OxfordPetDataset(torch.utils.data.Dataset):
         transform_image=None,
         transform_mask=None,
         binary=False,
+        slow=False,
     ):
         """Initialize the OxfordPetDataset.
 
@@ -35,6 +36,8 @@ class OxfordPetDataset(torch.utils.data.Dataset):
             transform_image (callable, optional): Transformation to apply to images.
             transform_mask (callable, optional): Transformation to apply to masks.
             binary (bool, optional): If True, convert masks to binary format.
+            slow (bool, optional): If True, perform a dummy ~10ms CPU computation per
+                batch item to simulate a slow dataloader.
         """
         assert mode in {"train", "valid", "test"}
 
@@ -44,6 +47,7 @@ class OxfordPetDataset(torch.utils.data.Dataset):
         self.to_tensor = v2.Compose([v2.ToImage(), v2.ToDtype(torch.float32, scale=True)])
         self.transform_img = transform_image
         self.transform_mask = transform_mask
+        self.slow = slow
 
         self.images_directory = os.path.join(self.root, "images")
         self.masks_directory = os.path.join(self.root, "annotations", "trimaps")
@@ -76,6 +80,10 @@ class OxfordPetDataset(torch.utils.data.Dataset):
             image = self.transform_img(image)
         if self.transform_mask is not None:
             mask = self.transform_mask(mask)
+
+        if self.slow:
+            # Dummy ~10ms CPU operation to simulate a slow dataloader
+            _ = torch.linalg.inv(torch.rand(512, 512))
 
         return {"image": image, "mask": mask}
 
@@ -126,23 +134,28 @@ def create_datasets(experiment, args=None) -> dict:
     transform_img = experiment.transformers["resize_and_pad_bilinear"]
     transform_mask = experiment.transformers["resize_and_pad_nearest"]
 
+    slow = args.get("slow", False)
+
     train_set = OxfordPetDataset(
         args.base_path,
         "train",
         transform_image=transform_img,
         transform_mask=transform_mask,
+        slow=slow,
     )
     val_set = OxfordPetDataset(
         args.base_path,
         "valid",
         transform_image=transform_img,
         transform_mask=transform_mask,
+        slow=slow,
     )
     test_set = OxfordPetDataset(
         args.base_path,
         "test",
         transform_image=transform_img,
         transform_mask=transform_mask,
+        slow=slow,
     )
 
     # subsets

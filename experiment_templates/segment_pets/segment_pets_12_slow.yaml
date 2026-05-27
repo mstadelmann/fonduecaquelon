@@ -1,0 +1,22 @@
+defaults:
+  - segment_pets_10
+  - _self_
+
+globals:
+  project: Segment OXPET
+  author: Marc
+  comment: "Same experiment as parent (segment_pets_10), but with the slow dataloader simulation enabled (slow: true). Each sample retrieval is artificially delayed by ~10ms (random 512x512 matrix inversion on CPU) to simulate a dataloader bottleneck. Use this as a baseline to benchmark the benefit of dataset caching (compare with segment_pets_13_cached)."
+
+mode:
+  run_train: true
+  run_test_interactive: false
+  run_test_auto: true
+  dump_model: false
+  run_inference: false
+  print_model_summary: false
+  resume_chpt_path: null
+    
+data:
+  OXPET:
+    args:
+      slow: true
