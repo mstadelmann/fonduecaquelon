@@ -19,7 +19,7 @@ mode:
 train:
   args:
     use_AMP: false
-    epochs: 20
+    epochs: 30
 
 slurm_cluster:
   auto_resubmit: true # if true, fdq will automatically resubmit your job and continue training from the last checkpoint.

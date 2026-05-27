@@ -23,6 +23,8 @@ transforms:
     
 data:
   OXPET:
+    args:
+      slow: true
     caching:
       nondeterministic_transforms:
         processor: ~/dev/fonduecaquelon/experiment_templates/segment_pets/oxpets_augmentation.py

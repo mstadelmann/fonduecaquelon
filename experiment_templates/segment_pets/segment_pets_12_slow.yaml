@@ -18,12 +18,5 @@ mode:
     
 data:
   OXPET:
-    caching:
-      enabled: true
-      cache_dir: /scratch/fdq_cache/
-      shuffle_train: true
-      shuffle_val: false
-      shuffle_test: false
-      pin_memory: true
-      num_workers: 4
-      compress_cache: false
+    args:
+      slow: true

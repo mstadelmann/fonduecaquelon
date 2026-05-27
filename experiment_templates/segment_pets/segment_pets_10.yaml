@@ -116,7 +116,7 @@ slurm_cluster:
   scratch_results_path: /scratch/fdq_results/
   scratch_data_path: null
   log_path: ~/dev/fonduecaquelon/slurm_log
-  job_time: 30
+  job_time: 8
   stop_grace_time: 3
   cpus_per_task: 8
   cpus_per_task_test: 8
