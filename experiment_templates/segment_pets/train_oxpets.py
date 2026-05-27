@@ -66,7 +66,7 @@ def fdq_train(experiment: fdqExperiment) -> None:
     iprint("Default training")
 
     data = experiment.data["OXPET"]
-    model = experiment.models["ccUNET"]
+    model = experiment.models["myUNET"]
 
     for epoch in range(experiment.start_epoch, experiment.nb_epochs):
         experiment.on_epoch_start(epoch=epoch)
@@ -94,7 +94,7 @@ def fdq_train(experiment: fdqExperiment) -> None:
                 else:
                     train_loss_tensor.backward()
 
-            experiment.update_gradients(b_idx=nb_tbatch, loader_name="OXPET", model_name="ccUNET")
+            experiment.update_gradients(b_idx=nb_tbatch, loader_name="OXPET", model_name="myUNET")
 
             batch_size = inputs.shape[0]
             train_dice_sum += multiclass_dice_score(output.detach(), targets).item() * batch_size

@@ -14,15 +14,21 @@ submit_job() {
         PYTHONPATH="$root_path/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m fdq.submit "$root_path/$1"
     fi
 }
-
+# Train an MNIST classifier using a simple dense architecture, and do a small param study on the learning rate and batch size.
 submit_job experiment_templates/mnist/mnist_class_dense.yaml
 submit_job experiment_templates/mnist/mnist_class_dense_param_study.yaml
 
+
+# Train OXFORD Pets segmentation using a simple (oversized) UNET architecture.
+# Show benefit of DDP using 2 and 4 GPUs.
 submit_job experiment_templates/segment_pets/segment_pets_01.yaml
-submit_job experiment_templates/segment_pets/segment_pets_02_noAMP_resubmit.yaml
-submit_job experiment_templates/segment_pets/segment_pets_03_no_scratch.yaml
-submit_job experiment_templates/segment_pets/segment_pets_04_distributed_w2.yaml
-submit_job experiment_templates/segment_pets/segment_pets_05_distributed_w4.yaml
-submit_job experiment_templates/segment_pets/segment_pets_06_cached.yaml
-submit_job experiment_templates/segment_pets/segment_pets_07_cached_augmentations.yaml
-submit_job experiment_templates/segment_pets/segment_pets_08_distributed_cached.yaml
+submit_job experiment_templates/segment_pets/segment_pets_02_dist2.yaml
+submit_job experiment_templates/segment_pets/segment_pets_02_dist4.yaml
+
+
+# Train OXFORD Pets segmentation using the Chuchichaestli UNET architecture.
+# Show automatic job resubmission and dataset caching.
+submit_job experiment_templates/segment_pets/segment_pets_10.yaml
+submit_job experiment_templates/segment_pets/segment_pets_11_noAMP_resubmit.yaml
+submit_job experiment_templates/segment_pets/segment_pets_12_cached.yaml
+submit_job experiment_templates/segment_pets/segment_pets_13_cached_augmentations.yaml

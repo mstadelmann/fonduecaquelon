@@ -1,0 +1,23 @@
+defaults:
+  - segment_pets_02_dist2
+  - _self_
+
+globals:
+  project: Segment OXPET
+  author: Marc
+  comment: "Same experiment as parent, but distributed over 2 GPUS (Torch DDP). This is only faster if the model is large enough to benefit from parallelism"
+
+mode:
+  run_train: true
+  run_test_interactive: false
+  run_test_auto: false
+  dump_model: false
+  run_inference: false
+  print_model_summary: false
+  resume_chpt_path: null
+
+slurm_cluster:
+  cpus_per_task: 24
+  gres: gpu:a100sxm:4
+  mem: 120G
+  world_size: 4
