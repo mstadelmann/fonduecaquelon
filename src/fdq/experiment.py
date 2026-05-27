@@ -560,13 +560,68 @@ class fdqExperiment:
                 "memory_usage_GB": f"{nbp * 4 / 1e9:.3f} GB",
             }
 
+    def _estimate_activation_bytes(self) -> int | None:
+        """Measure input-batch + forward-activation memory via a dummy forward pass.
+
+        Gradients are enabled (but backward is not called) so PyTorch retains all
+        intermediate tensors exactly as it would during a real training forward pass.
+        The model is switched to eval mode to avoid mutating BatchNorm running stats.
+        All state is restored and GPU scratch memory is freed before returning.
+        """
+        if not self.is_cuda or not self.data:
+            return None
+
+        try:
+            first_data_name = next(iter(self.data))
+            loader = self.data[first_data_name].train_data_loader
+            batch = next(iter(loader))
+
+            if isinstance(batch, (list, tuple)):
+                x = batch[0]
+            elif isinstance(batch, dict):
+                x = next(iter(batch.values()))
+            else:
+                x = batch
+            x = x.to(self.device).float()
+
+            model = self.models_no_ddp[next(iter(self.models_no_ddp))]
+
+            # eval() prevents BatchNorm from updating running_mean/running_var;
+            # gradient tracking is still active so the autograd graph is built,
+            # matching the memory footprint of a real training forward pass.
+            was_training = model.training
+            model.eval()
+
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats(self.device)
+            baseline = torch.cuda.memory_allocated(self.device)
+
+            out = model(x)
+            activation_bytes = torch.cuda.max_memory_allocated(self.device) - baseline
+
+        except Exception as e:
+            wprint(f"Could not estimate activation memory via dummy forward pass: {e}")
+            return None
+        finally:
+            # Always restore model state and free scratch memory, even on error.
+            model.train(was_training)
+            model.zero_grad(set_to_none=True)
+            try:
+                del out
+            except NameError:
+                pass
+            del x
+            torch.cuda.empty_cache()
+
+        return max(int(activation_bytes), 0)
+
     def estimate_total_vram(self) -> None:
-        """Estimate total VRAM requirements: parameters, gradients, and optimizer state."""
+        """Estimate total VRAM requirements: parameters, gradients, optimizer state, and activations."""
         if not self.is_main_process():
             return
 
         iprint("-----------------------------------------------------------")
-        iprint("VRAM Estimation (model + gradients + optimizer state)")
+        iprint("VRAM Estimation (model + gradients + optimizer state + activations)")
         iprint("-----------------------------------------------------------")
 
         total_bytes = 0
@@ -616,8 +671,13 @@ class fdqExperiment:
                 iprint(f"    Optimizer state: {optim_bytes / 1e9:.3f} GB")
             iprint(f"    Subtotal:        {model_total / 1e9:.3f} GB")
 
+        # Activations + data batch: measured via dummy forward pass
+        activation_bytes = self._estimate_activation_bytes()
+        if activation_bytes is not None:
+            iprint(f"  Data + activations:  {activation_bytes / 1e9:.3f} GB  (dummy forward pass, grad-enabled)")
+            total_bytes += activation_bytes
+
         iprint(f"  => Estimated total VRAM: {total_bytes / 1e9:.3f} GB")
-        iprint("  (activations and data batches are not included)")
         iprint("-----------------------------------------------------------")
         self.processing_log_dict["vram_estimate_GB"] = f"{total_bytes / 1e9:.3f}"
 
