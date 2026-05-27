@@ -560,6 +560,65 @@ class fdqExperiment:
                 "memory_usage_GB": f"{nbp * 4 / 1e9:.3f} GB",
             }
 
+    def estimate_total_vram(self) -> None:
+        """Estimate total VRAM requirements: parameters, gradients, and optimizer state."""
+        if not self.is_main_process():
+            return
+
+        iprint("-----------------------------------------------------------")
+        iprint("VRAM Estimation (model + gradients + optimizer state)")
+        iprint("-----------------------------------------------------------")
+
+        total_bytes = 0
+
+        for model_name, model in self.models_no_ddp.items():
+            model_def = self.cfg.models[model_name]
+            frozen = bool(model_def.get("freeze", False))
+            nbp = sum(p.numel() for p in model.parameters())
+
+            # Parameters: fp32 master copy (4 bytes each)
+            param_bytes = nbp * 4
+
+            # AMP: a fp16 working copy is kept alongside the fp32 master
+            amp_bytes = nbp * 2 if self.useAMP else 0
+
+            # Gradients are the same dtype as params (fp32)
+            grad_bytes = nbp * 4 if not frozen else 0
+
+            # Optimizer state
+            optim_bytes = 0
+            optim_label = "none"
+            optimizer = self.optimizers.get(model_name)
+            if optimizer is not None and not frozen:
+                optim_label = type(optimizer).__name__
+                optim_class = optim_label.lower()
+                if "adam" in optim_class:
+                    # Adam / AdamW: two fp32 moment vectors
+                    optim_bytes = nbp * 8
+                elif "sgd" in optim_class:
+                    has_momentum = any(g.get("momentum", 0) != 0 for g in optimizer.param_groups)
+                    optim_bytes = nbp * 4 if has_momentum else 0
+                else:
+                    # Conservative fallback: one state tensor
+                    optim_bytes = nbp * 4
+
+            model_total = param_bytes + amp_bytes + grad_bytes + optim_bytes
+            total_bytes += model_total
+
+            iprint(f"  [{model_name}]  {nbp / 1e6:.2f}M params  |  optimizer: {optim_label}{'  |  FROZEN' if frozen else ''}")
+            iprint(f"    Parameters:      {param_bytes / 1e9:.3f} GB")
+            if self.useAMP:
+                iprint(f"    AMP fp16 copy:   {amp_bytes / 1e9:.3f} GB")
+            if not frozen:
+                iprint(f"    Gradients:       {grad_bytes / 1e9:.3f} GB")
+                iprint(f"    Optimizer state: {optim_bytes / 1e9:.3f} GB")
+            iprint(f"    Subtotal:        {model_total / 1e9:.3f} GB")
+
+        iprint(f"  => Estimated total VRAM: {total_bytes / 1e9:.3f} GB")
+        iprint("  (activations and data batches are not included)")
+        iprint("-----------------------------------------------------------")
+        self.processing_log_dict["vram_estimate_GB"] = f"{total_bytes / 1e9:.3f}"
+
     def prepareTraining(self) -> None:
         self.mode.train()
         self.setupData()
@@ -570,6 +629,7 @@ class fdqExperiment:
             self.print_nb_weights()
             self.createOptimizer()
             self.set_lr_schedule()
+            self.estimate_total_vram()
         else:
             wprint(
                 "Warning: No models defined in experiment file -> Model has to be manually defined in the training/testing loop."
