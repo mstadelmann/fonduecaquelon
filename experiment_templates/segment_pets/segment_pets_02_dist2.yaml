@@ -1,5 +1,5 @@
 defaults:
-  -  segment_pets_01
+  - segment_pets_01
   - _self_
 
 globals:

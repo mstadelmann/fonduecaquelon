@@ -106,7 +106,7 @@ slurm_cluster:
   uv_env_module: uv/0.6.12
   cuda_env_module: cuda/12.8.0
   scratch_results_path: /scratch/fdq_results/ # path where fdq stores temporary results.
-  scratch_data_path: /scratch/fdq_data/ # if devined, fdq will first copy your data to this path, and load if from there. Most beneficial data is read multiple times.
+  scratch_data_path: /scratch/fdq_data/ # if defined, fdq will first copy your data to this path and load it from there. Most beneficial when data is read multiple times (e.g. many epochs).
   log_path: ~/dev/fonduecaquelon/slurm_log
   job_time: 30
   stop_grace_time: 3 # time in minutes to wait after sending the stop signal before forcefully killing the job. This gives the job time to do some last cleanup operations (e.g. uploading results to wandb, or copying files from scratch back to home)

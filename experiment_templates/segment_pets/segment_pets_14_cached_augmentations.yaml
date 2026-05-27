@@ -5,7 +5,7 @@ defaults:
 globals:
   project: Segment OXPET
   author: Marc
-  comment: "Same experiment as segment_pets_05_cached.yaml, but with additional non-deterministic transformations (augmentations). This lets you split transforms into deterministic (cached) and random (on-the-fly)."
+  comment: "Same experiment as segment_pets_13_cached, but with additional non-deterministic augmentations applied on-the-fly after cache retrieval. This lets you cache the expensive deterministic transforms while still benefiting from random augmentations each epoch."
 
 mode:
   run_train: true
@@ -17,7 +17,7 @@ mode:
   resume_chpt_path: null
     
 transforms:
-  random_vertical_flip_sync: # random_vertical_flip_sync is used in the oxpets_augmentation.py processor
+  random_vertical_flip_sync: # key referenced by name in oxpets_augmentation.py; applies a random vertical flip to image and mask in sync (same flip decision for both)
     - SynchronizedRandomVerticalFlip:
         p: 0.5
     

@@ -5,7 +5,7 @@ defaults:
 globals:
   project: Segment OXPET
   author: Marc
-  comment: "Same experiment as parent, but with a cached dataset. This brings only advantages if you use heavy deterministic transforms (which are cached once), as these are only computed once."
+  comment: "Same experiment as parent (segment_pets_10), but with the slow dataloader simulation enabled (slow: true). Each sample retrieval is artificially delayed by ~10ms (random 512x512 matrix inversion on CPU) to simulate a dataloader bottleneck. Use this as a baseline to benchmark the benefit of dataset caching (compare with segment_pets_13_cached)."
 
 mode:
   run_train: true

@@ -5,7 +5,7 @@ defaults:
 globals:
   project: Segment OXPET
   author: Marc
-  comment: "Same experiment as parent, but distributed over 2 GPUS (Torch DDP). This is only faster if the model is large enough to benefit from parallelism"
+  comment: "Same experiment as segment_pets_02_dist2, but scaled up to 4 GPUs (Torch DDP). Inherits the 2-GPU config and overrides world_size, gres, and CPU/memory resources accordingly."
 
 mode:
   run_train: true

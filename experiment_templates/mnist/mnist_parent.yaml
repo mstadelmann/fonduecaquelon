@@ -4,7 +4,7 @@ globals:
 
 models:
   simpleNet:
-    comment: "You can either selected an installed module or define a custom path and class name."
+    comment: "You can either select an installed module or define a custom path and class name."
     path: "~/dev/fonduecaquelon/src/networks/simpleNet.py"
     class_name: "simpleNet"
     args:
@@ -43,7 +43,7 @@ train:
 
 losses:
   cp_dummy:
-    comment: "You can either selected an installed module or define a custom path and class name."
+    comment: "You can either select an installed module or define a custom path and class name."
     path: "~/dev/fonduecaquelon/experiment_templates/mnist/dummy_crossentropy_loss.py"
     class_name: "DummyCrossEntropyLoss"
     args:

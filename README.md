@@ -80,22 +80,22 @@ Minimal example (YAML):
 
 ```yaml
 slurm_cluster:
-  fdq_test_repo: true
-  fdq_version: 0.1.11.dev5
+  fdq_test_repo: true         # if true, installs fdq from test.pypi.org instead of PyPI (for pre-release versions)
+  fdq_version: 0.1.11.dev5   # exact fdq version to install in the SLURM job environment
   python_env_module: "python/3.12.4"
   uv_env_module: "uv/0.6.12"
   cuda_env_module: "cuda/12.8.0"
-  scratch_results_path: "/scratch/fdq_results/"
-  scratch_data_path: "/scratch/fdq_data/"
+  scratch_results_path: "/scratch/fdq_results/"  # temporary output dir on fast scratch disk; results are copied back on completion
+  scratch_data_path: "/scratch/fdq_data/"         # if set, input data is copied here before training for faster I/O; omit or set null to skip
   log_path: "~/dev/fonduecaquelon/slurm_log"
-  job_time: 15
-  stop_grace_time: 5
+  job_time: 15                # maximum job runtime in minutes
+  stop_grace_time: 5          # minutes between SIGTERM and SIGKILL; allows final checkpoint save and wandb upload on timeout
   cpus_per_task: 8
   gres: "gpu:1"
   mem: "20G"
   partition: gpu
   account: "cai_ivs"
-  auto_resubmit: true
+  auto_resubmit: true         # if true, automatically resubmit and resume training when the job hits the time limit
 ```
 
 When submitting jobs to a Slurm cluster, the only supported modes are:
@@ -346,7 +346,7 @@ See [oxpets\_test.py](experiment_templates/segment_pets/oxpets_test.py) for refe
 
 ## 💾 Dataset Caching
 
-FDQ includes a dataset caching system to speed up training by caching preprocessed data to disk and loading it into RAM. See [segment_pets_06_cached.yaml](experiment_templates/segment_pets/segment_pets_06_cached.yaml) for an example.
+FDQ includes a dataset caching system to speed up training by caching preprocessed data to disk and loading it into RAM. See [segment_pets_13_cached.yaml](experiment_templates/segment_pets/segment_pets_13_cached.yaml) for an example.
 
 ### How It Works
 
@@ -367,10 +367,14 @@ data:
       val_batch_size: 8
       test_batch_size: 1
     caching:
+      enabled: true           # set to false to disable caching without removing the config block
       cache_dir: /path/to/cache
-      compress_cache: true
-      num_workers: 0
-      pin_memory: false
+      compress_cache: false   # compress HDF5 files on disk; saves space at the cost of slower reads
+      num_workers: 4
+      pin_memory: true
+      shuffle_train: true     # shuffle the cached training split each epoch
+      shuffle_val: false
+      shuffle_test: false
 ```
 
 ### Custom Augmentations
@@ -397,7 +401,20 @@ data:
         processor: /path/to/oxpets_augmentation.py
 ```
 
-See [segment_pets_07_cached_augmentations.yaml](experiment_templates/segment_pets/segment_pets_07_cached_augmentations.yaml) for the full pattern.
+See [segment_pets_14_cached_augmentations.yaml](experiment_templates/segment_pets/segment_pets_14_cached_augmentations.yaml) for the full pattern.
+
+### Benchmarking Dataloader Performance
+
+To measure the actual benefit of caching, the dataset preparator supports a `slow` option that adds an artificial ~10 ms delay per sample (a CPU matrix inversion), mimicking a slow or I/O-bound `__getitem__`. Once samples are served from cache, this overhead is bypassed entirely.
+
+```yaml
+data:
+  OXPET:
+    args:
+      slow: true  # add ~10ms artificial delay per sample to simulate a slow dataloader
+```
+
+Compare [segment_pets_12_slow.yaml](experiment_templates/segment_pets/segment_pets_12_slow.yaml) (slow, no cache) with [segment_pets_13_cached.yaml](experiment_templates/segment_pets/segment_pets_13_cached.yaml) (slow + cache) to quantify the improvement.
 
 ## 🧮 Mixed precision
 
@@ -408,7 +425,7 @@ Observed speedup on H200sxm GPUs:
 | Experiment                                                                                        | Time per epoch \[s] |
 | ------------------------------------------------------------------------------------------------- | ------------------- |
 | [segment pets with AMP](experiment_templates/segment_pets/segment_pets_01.yaml)                   | 100                 |
-| [segment pets without AMP](experiment_templates/segment_pets/segment_pets_02_noAMP_resubmit.yaml) | 170                 |
+| [segment pets without AMP](experiment_templates/segment_pets/segment_pets_11_noAMP_resubmit.yaml) | 170                 |
 
 ## 🖧 Distributed Training
 
@@ -421,17 +438,26 @@ slurm_cluster:
   gres: gpu:h200sxm:2
 ```
 
-See [segment_pets_04_distributed_w2.yaml](experiment_templates/segment_pets/segment_pets_04_distributed_w2.yaml).
+See [segment_pets_02_dist2.yaml](experiment_templates/segment_pets/segment_pets_02_dist2.yaml).
 
-Use the same number of GPUs as your world size. DDP requires more CPU cores and memory, since multiple data loaders run in parallel. It’s most beneficial for large models, as overhead is significant.
+Use the same number of GPUs as your world size. DDP requires more CPU cores and memory, since multiple data loaders run in parallel. It's most beneficial for large models, as overhead is significant.
+
+By default, FDQ sets `num_workers=0` for DDP data loaders to prevent multiprocessing conflicts. Override this per dataset with `ddp_num_workers`:
+
+```yaml
+data:
+  OXPET:
+    args:
+      ddp_num_workers: 4  # DDP-specific num_workers override (default: 0 under DDP)
+```
 
 Observed speedup on H200sxm GPUs:
 
 | Experiment                                                                               | Time per ep. w/o AMP \[s] | with AMP \[s] |
 | ---------------------------------------------------------------------------------------- | ------------------------- | ------------- |
 | [segment pets default](experiment_templates/segment_pets/segment_pets_01.yaml)           | 170                       | 100           |
-| [DDP with 2 GPUs](experiment_templates/segment_pets/segment_pets_04_distributed_w2.yaml) | 100                       | 65            |
-| [DDP with 4 GPUs](experiment_templates/segment_pets/segment_pets_05_distributed_w4.yaml) | 60                        | 45            |
+| [DDP with 2 GPUs](experiment_templates/segment_pets/segment_pets_02_dist2.yaml)          | 100                       | 65            |
+| [DDP with 4 GPUs](experiment_templates/segment_pets/segment_pets_03_dist4.yaml)          | 60                        | 45            |
 
 By toggling mixed precision, you can directly observe how more intensive workloads see greater speedups when using DDP.
 
@@ -501,6 +527,7 @@ ruff check .
 * **Multiple Models/Losses:** Add multiple models and losses to config dictionaries as needed.
 * **Cluster Submission:** `submit.py` handles SLURM job script generation, submission, environment setup, and result copying.
 * **Model Export:** Set `mode.run_train=false mode.dump_model=true` for interactive model export and optimization.
+* **VRAM Estimation:** At training startup FDQ automatically prints an estimated VRAM breakdown (parameters, gradients, optimizer state, and activations measured via a dummy forward pass) to help right-size your GPU request before submitting to the cluster.
 
 ## 📚 Resources
 
