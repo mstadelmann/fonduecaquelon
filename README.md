@@ -80,8 +80,8 @@ Minimal example (YAML):
 
 ```yaml
 slurm_cluster:
-  fdq_test_repo: false
-  fdq_version: 0.1.11
+  fdq_test_repo: true
+  fdq_version: 0.1.11.dev5
   python_env_module: "python/3.12.4"
   uv_env_module: "uv/0.6.12"
   cuda_env_module: "cuda/12.8.0"
@@ -258,11 +258,11 @@ Models are defined as dictionaries. You can use pre-installed ones (e.g. [Chuchi
 
 ```yaml
 models:
-  ccUNET:
+  myUNET:
     class_name: chuchichaestli.models.unet.unet.UNet
 ```
 
-Access models in training via `experiment.models["ccUNET"]`. The same structure applies to losses and data loaders.
+Access models in training via `experiment.models["myUNET"]`. The same structure applies to losses and data loaders.
 
 ### Data Loaders
 
@@ -297,7 +297,7 @@ Within it, you can access components:
 ```python
 nb_epochs = experiment.cfg.train.args.epochs
 data_loader = experiment.data["OXPET"].train_data_loader
-model = experiment.models["ccUNET"]
+model = experiment.models["myUNET"]
 ```
 
 See [train\_oxpets.py](experiment_templates/segment_pets/train_oxpets.py) for an example.
@@ -443,7 +443,7 @@ Example (YAML):
 
 ```yaml
 slurm_cluster:
-  fdq_version: 0.1.11
+  fdq_version: 0.1.11.dev5
   # ... other settings ...
   additional_pip_packages:
     - monai==1.4.0

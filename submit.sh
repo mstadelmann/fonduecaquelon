@@ -23,12 +23,13 @@ submit_job experiment_templates/mnist/mnist_class_dense_param_study.yaml
 # Show benefit of DDP using 2 and 4 GPUs.
 submit_job experiment_templates/segment_pets/segment_pets_01.yaml
 submit_job experiment_templates/segment_pets/segment_pets_02_dist2.yaml
-submit_job experiment_templates/segment_pets/segment_pets_02_dist4.yaml
+submit_job experiment_templates/segment_pets/segment_pets_03_dist4.yaml
 
 
 # Train OXFORD Pets segmentation using the Chuchichaestli UNET architecture.
 # Show automatic job resubmission and dataset caching.
 submit_job experiment_templates/segment_pets/segment_pets_10.yaml
 submit_job experiment_templates/segment_pets/segment_pets_11_noAMP_resubmit.yaml
-submit_job experiment_templates/segment_pets/segment_pets_12_cached.yaml
-submit_job experiment_templates/segment_pets/segment_pets_13_cached_augmentations.yaml
+submit_job experiment_templates/segment_pets/segment_pets_12_slow.yaml
+submit_job experiment_templates/segment_pets/segment_pets_13_cached.yaml
+submit_job experiment_templates/segment_pets/segment_pets_14_cached_augmentations.yaml
