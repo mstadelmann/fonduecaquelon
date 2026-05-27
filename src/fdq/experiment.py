@@ -605,7 +605,9 @@ class fdqExperiment:
             model_total = param_bytes + amp_bytes + grad_bytes + optim_bytes
             total_bytes += model_total
 
-            iprint(f"  [{model_name}]  {nbp / 1e6:.2f}M params  |  optimizer: {optim_label}{'  |  FROZEN' if frozen else ''}")
+            iprint(
+                f"  [{model_name}]  {nbp / 1e6:.2f}M params  |  optimizer: {optim_label}{'  |  FROZEN' if frozen else ''}"
+            )
             iprint(f"    Parameters:      {param_bytes / 1e9:.3f} GB")
             if self.useAMP:
                 iprint(f"    AMP fp16 copy:   {amp_bytes / 1e9:.3f} GB")

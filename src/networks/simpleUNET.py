@@ -34,8 +34,10 @@ class simpleUNET(nn.Module):
         # Encoder: one conv block per stage, followed by max-pooling in forward()
         enc_in_ch = [in_channels] + encoder_channels[:-1]
         self.enc_blocks: nn.ModuleList = nn.ModuleList(
-            [nn.Conv2d(enc_in_ch[i], encoder_channels[i], kernel_size=kernel_size, padding=pad)
-             for i in range(len(encoder_channels))]
+            [
+                nn.Conv2d(enc_in_ch[i], encoder_channels[i], kernel_size=kernel_size, padding=pad)
+                for i in range(len(encoder_channels))
+            ]
         )
         self.pool: nn.MaxPool2d = nn.MaxPool2d(kernel_size=2, stride=2)
 
@@ -45,15 +47,13 @@ class simpleUNET(nn.Module):
         )
 
         # Decoder: upsample then concat skip connection, then conv block
-        dec_ch = list(reversed(encoder_channels))          # [256, 128, 64]
+        dec_ch = list(reversed(encoder_channels))  # [256, 128, 64]
         dec_up_in = [encoder_channels[-1] * 2] + dec_ch[:-1]  # [512, 256, 128]
         self.dec_up: nn.ModuleList = nn.ModuleList(
-            [nn.ConvTranspose2d(dec_up_in[i], dec_ch[i], kernel_size=2, stride=2)
-             for i in range(len(dec_ch))]
+            [nn.ConvTranspose2d(dec_up_in[i], dec_ch[i], kernel_size=2, stride=2) for i in range(len(dec_ch))]
         )
         self.dec_blocks: nn.ModuleList = nn.ModuleList(
-            [nn.Conv2d(dec_ch[i] * 2, dec_ch[i], kernel_size=kernel_size, padding=pad)
-             for i in range(len(dec_ch))]
+            [nn.Conv2d(dec_ch[i] * 2, dec_ch[i], kernel_size=kernel_size, padding=pad) for i in range(len(dec_ch))]
         )
 
         # Final 1x1 projection to output channels
