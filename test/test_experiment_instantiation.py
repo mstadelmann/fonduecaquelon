@@ -172,5 +172,106 @@ class TestFdqExperimentInstantiation(unittest.TestCase):
         self.assertEqual(experiment.early_stop_reason, "TrainLoss_stagnated")
 
 
-if __name__ == "__main__":
+class TestPrepareDdpDataArgs(unittest.TestCase):
+    """Tests for _prepare_ddp_data_args DDP DataLoader argument handling."""
+
+    def _make_experiment(self, world_size=2):
+        """Create a minimal fdqExperiment stub with DDP enabled."""
+        exp = fdqExperiment.__new__(fdqExperiment)
+        exp.world_size = world_size
+        return exp
+
+    def _make_data_source(self, num_workers=4, prefetch_factor=2, ddp_num_workers=None):
+        """Return an OmegaConf data-source stub."""
+        from omegaconf import OmegaConf
+
+        d = {"args": {"num_workers": num_workers, "prefetch_factor": prefetch_factor}}
+        if ddp_num_workers is not None:
+            d["args"]["ddp_num_workers"] = ddp_num_workers
+        return OmegaConf.create(d)
+
+    # ------------------------------------------------------------------
+    # Non-distributed: no modifications expected
+    # ------------------------------------------------------------------
+
+    def test_no_op_when_not_distributed(self):
+        """Non-distributed experiments leave args unchanged."""
+        exp = self._make_experiment(world_size=1)
+        ds = self._make_data_source(num_workers=4, prefetch_factor=2)
+        exp._prepare_ddp_data_args("ds", ds)
+        self.assertEqual(ds.args.num_workers, 4)
+        self.assertEqual(ds.args.prefetch_factor, 2)
+
+    # ------------------------------------------------------------------
+    # DDP, no ddp_num_workers override → num_workers forced to 0
+    # ------------------------------------------------------------------
+
+    def test_forces_num_workers_to_zero_in_ddp(self):
+        """DDP without ddp_num_workers forces num_workers to 0."""
+        exp = self._make_experiment()
+        ds = self._make_data_source(num_workers=4, prefetch_factor=2)
+        exp._prepare_ddp_data_args("ds", ds)
+        self.assertEqual(ds.args.num_workers, 0)
+
+    def test_resets_prefetch_factor_when_num_workers_forced_to_zero(self):
+        """prefetch_factor is reset to None when num_workers is forced to 0.
+
+        DataLoader raises ValueError if prefetch_factor is set but num_workers=0,
+        so _prepare_ddp_data_args must clear it together with num_workers.
+        """
+        exp = self._make_experiment()
+        ds = self._make_data_source(num_workers=4, prefetch_factor=2)
+        exp._prepare_ddp_data_args("ds", ds)
+        self.assertIsNone(ds.args.prefetch_factor)
+
+    def test_no_prefetch_factor_key_is_safe(self):
+        """Absence of prefetch_factor in args does not cause an error."""
+        from omegaconf import OmegaConf
+
+        exp = self._make_experiment()
+        ds = OmegaConf.create({"args": {"num_workers": 4}})
+        # Should not raise
+        exp._prepare_ddp_data_args("ds", ds)
+        self.assertEqual(ds.args.num_workers, 0)
+
+    def test_num_workers_already_zero_is_unchanged(self):
+        """If num_workers is already 0, no warning is issued and args unchanged."""
+        exp = self._make_experiment()
+        ds = self._make_data_source(num_workers=0, prefetch_factor=2)
+        exp._prepare_ddp_data_args("ds", ds)
+        # num_workers stays 0; prefetch_factor is NOT touched (it stays at 2 from
+        # config but caller must pass None to DataLoader when workers=0).
+        self.assertEqual(ds.args.num_workers, 0)
+
+    # ------------------------------------------------------------------
+    # DDP with ddp_num_workers override → workers kept, prefetch untouched
+    # ------------------------------------------------------------------
+
+    def test_ddp_num_workers_overrides_num_workers(self):
+        """ddp_num_workers replaces num_workers when values differ."""
+        exp = self._make_experiment()
+        ds = self._make_data_source(num_workers=4, prefetch_factor=2, ddp_num_workers=2)
+        exp._prepare_ddp_data_args("ds", ds)
+        self.assertEqual(ds.args.num_workers, 2)
+
+    def test_ddp_num_workers_keeps_prefetch_factor(self):
+        """prefetch_factor is NOT reset when ddp_num_workers keeps workers alive."""
+        exp = self._make_experiment()
+        ds = self._make_data_source(num_workers=4, prefetch_factor=2, ddp_num_workers=4)
+        exp._prepare_ddp_data_args("ds", ds)
+        # num_workers already equals ddp_num_workers: no change
+        self.assertEqual(ds.args.num_workers, 4)
+        self.assertEqual(ds.args.prefetch_factor, 2)
+
+    def test_ddp_num_workers_same_value_no_change(self):
+        """ddp_num_workers equal to num_workers leaves both args untouched."""
+        exp = self._make_experiment()
+        ds = self._make_data_source(num_workers=4, prefetch_factor=2, ddp_num_workers=4)
+        exp._prepare_ddp_data_args("ds", ds)
+        self.assertEqual(ds.args.num_workers, 4)
+        self.assertEqual(ds.args.prefetch_factor, 2)
+
+
+
+if __name__ == '__main__':
     unittest.main()

@@ -122,6 +122,10 @@ def create_datasets(experiment, args=None) -> dict:
     """Creates and returns data loaders and dataset statistics for the Oxford Pet dataset based on the experiment configuration."""
     pin_mem = True if experiment.is_cuda else args.get("pin_memory", False)
     drop_last = args.get("drop_last", True)
+    num_workers = args.num_workers
+    # Keep workers alive between epochs to avoid the spawn/kill overhead that
+    # can delay one DDP rank and trigger an NCCL all-reduce timeout.
+    persistent_workers = num_workers > 0
 
     if not os.path.exists(args.base_path):
         os.makedirs(args.base_path)
@@ -186,33 +190,36 @@ def create_datasets(experiment, args=None) -> dict:
         train_set,
         batch_size=args.train_batch_size,
         shuffle=train_loader_shuffle,
-        num_workers=args.num_workers,
+        num_workers=num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,
         sampler=train_sampler,
-        prefetch_factor=args.prefetch_factor,
+        prefetch_factor=args.prefetch_factor if num_workers > 0 else None,
+        persistent_workers=persistent_workers,
     )
 
     test_loader = DataLoader(
         test_set,
         batch_size=args.test_batch_size,
         shuffle=test_loader_shuffle,
-        num_workers=args.num_workers,
+        num_workers=num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,
         sampler=test_sampler,
-        prefetch_factor=args.prefetch_factor,
+        prefetch_factor=args.prefetch_factor if num_workers > 0 else None,
+        persistent_workers=persistent_workers,
     )
 
     val_loader = DataLoader(
         val_set,
         batch_size=args.val_batch_size,
         shuffle=val_loader_shuffle,
-        num_workers=args.num_workers,
+        num_workers=num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,
         sampler=val_sampler,
-        prefetch_factor=args.prefetch_factor,
+        prefetch_factor=args.prefetch_factor if num_workers > 0 else None,
+        persistent_workers=persistent_workers,
     )
 
     # No mandatory structure here, instead all values

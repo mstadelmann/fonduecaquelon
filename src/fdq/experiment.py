@@ -478,6 +478,10 @@ class fdqExperiment:
             # later as an NCCL all-reduce timeout rather than a Python error.
             wprint(f"DDP dataset {data_name}: forcing num_workers=0 to avoid worker/rank stalls.")
             args.num_workers = 0
+            # prefetch_factor is only valid when num_workers > 0; reset it to
+            # avoid a ValueError when the DataLoader is created with workers=0.
+            if args.get("prefetch_factor") is not None:
+                args.prefetch_factor = None
 
     def setupData(self) -> None:
         if self.cfg.data is None:
