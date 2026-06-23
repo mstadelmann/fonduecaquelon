@@ -272,6 +272,5 @@ class TestPrepareDdpDataArgs(unittest.TestCase):
         self.assertEqual(ds.args.prefetch_factor, 2)
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
