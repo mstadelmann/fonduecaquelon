@@ -580,7 +580,7 @@ class fdqExperiment:
             loader = self.data[first_data_name].train_data_loader
             batch = next(iter(loader))
 
-            if isinstance(batch, (list, tuple)):
+            if isinstance(batch, list | tuple):
                 x = batch[0]
             elif isinstance(batch, dict):
                 x = next(iter(batch.values()))
