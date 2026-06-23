@@ -344,8 +344,8 @@ def cache_datasets(experiment, processor, data_name, data_source):
         # - Set num_workers=0 since data is already in RAM, avoiding multiprocessing
         #   overhead and duplicate per-worker cache copies.
         # - shuffling is managed by sampler
-        
-        # --> MULTIPROCESSING CACHING FOR NOW DISABLED DUE TO ISSUES WITH DDP AND WORKER HANGS! 
+
+        # --> MULTIPROCESSING CACHING FOR NOW DISABLED DUE TO ISSUES WITH DDP AND WORKER HANGS!
 
         # cached_num_workers = data_source.caching.get("num_workers", 0)
         # if experiment.is_distributed() and cached_num_workers != 0:
