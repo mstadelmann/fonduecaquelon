@@ -11,6 +11,7 @@ from PIL import Image
 from tqdm import tqdm
 
 from fdq.misc import get_subset
+from fdq.ui_functions import wprint
 
 
 # based on https://github.com/qubvel-org/segmentation_models.pytorch
@@ -123,9 +124,16 @@ def create_datasets(experiment, args=None) -> dict:
     pin_mem = True if experiment.is_cuda else args.get("pin_memory", False)
     drop_last = args.get("drop_last", True)
     num_workers = args.num_workers
-    # Keep workers alive between epochs to avoid the spawn/kill overhead that
-    # can delay one DDP rank and trigger an NCCL all-reduce timeout.
-    persistent_workers = num_workers > 0
+    prefetch_factor = args.get("prefetch_factor", None)
+    persistent_workers = args.get("persistent_workers")
+    if num_workers > 0 and persistent_workers is None:
+        persistent_workers = True
+        wprint(
+            f"DataLoader num_workers={num_workers}: setting persistent_workers=True. "
+            "Set persistent_workers: false in the data args to disable this."
+        )
+    elif num_workers == 0:
+        persistent_workers = False
 
     if not os.path.exists(args.base_path):
         os.makedirs(args.base_path)
@@ -194,7 +202,7 @@ def create_datasets(experiment, args=None) -> dict:
         pin_memory=pin_mem,
         drop_last=drop_last,
         sampler=train_sampler,
-        prefetch_factor=args.prefetch_factor if num_workers > 0 else None,
+        prefetch_factor=prefetch_factor if num_workers > 0 else None,
         persistent_workers=persistent_workers,
     )
 
@@ -206,7 +214,7 @@ def create_datasets(experiment, args=None) -> dict:
         pin_memory=pin_mem,
         drop_last=drop_last,
         sampler=test_sampler,
-        prefetch_factor=args.prefetch_factor if num_workers > 0 else None,
+        prefetch_factor=prefetch_factor if num_workers > 0 else None,
         persistent_workers=persistent_workers,
     )
 
@@ -218,7 +226,7 @@ def create_datasets(experiment, args=None) -> dict:
         pin_memory=pin_mem,
         drop_last=drop_last,
         sampler=val_sampler,
-        prefetch_factor=args.prefetch_factor if num_workers > 0 else None,
+        prefetch_factor=prefetch_factor if num_workers > 0 else None,
         persistent_workers=persistent_workers,
     )
 

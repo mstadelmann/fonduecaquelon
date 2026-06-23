@@ -462,26 +462,14 @@ class fdqExperiment:
             return
 
         args = data_source.args
-        if args.get("num_workers") is None:
+        num_workers = args.get("num_workers")
+        if num_workers is None or num_workers == 0:
             return
 
-        ddp_num_workers = args.get("ddp_num_workers")
-        if ddp_num_workers is not None:
-            if args.num_workers != ddp_num_workers:
-                wprint(f"DDP dataset {data_name}: setting num_workers={ddp_num_workers} from ddp_num_workers.")
-                args.num_workers = ddp_num_workers
-            return
-
-        if args.num_workers != 0:
-            # Multiprocess DataLoader workers can leave one DDP rank blocked in
-            # data fetching while another rank enters backward, which surfaces
-            # later as an NCCL all-reduce timeout rather than a Python error.
-            wprint(f"DDP dataset {data_name}: forcing num_workers=0 to avoid worker/rank stalls.")
-            args.num_workers = 0
-            # prefetch_factor is only valid when num_workers > 0; reset it to
-            # avoid a ValueError when the DataLoader is created with workers=0.
-            if args.get("prefetch_factor") is not None:
-                args.prefetch_factor = None
+        wprint(
+            f"DDP dataset {data_name}: num_workers={num_workers} may cause DataLoader worker stalls. "
+            "If you encounter DDP hangs or NCCL timeouts, try setting num_workers=0."
+        )
 
     def setupData(self) -> None:
         if self.cfg.data is None:
