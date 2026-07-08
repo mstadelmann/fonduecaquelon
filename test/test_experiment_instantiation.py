@@ -213,7 +213,7 @@ class TestPrepareDdpDataArgs(unittest.TestCase):
 
     @patch("fdq.experiment.wprint")
     def test_num_workers_positive_in_ddp_warns_without_mutating_args(self, mock_wprint):
-        """DDP with workers keeps user config but warns about possible stalls."""
+        """DDP with workers keeps user config but warns about safe worker context."""
         exp = self._make_experiment()
         ds = self._make_data_source(num_workers=4, prefetch_factor=2)
 
@@ -224,7 +224,7 @@ class TestPrepareDdpDataArgs(unittest.TestCase):
         mock_wprint.assert_called_once()
         warning = mock_wprint.call_args.args[0]
         self.assertIn("num_workers=4", warning)
-        self.assertIn("try setting num_workers=0", warning)
+        self.assertIn("spawn/forkserver DataLoader multiprocessing context", warning)
 
     @patch("fdq.experiment.wprint")
     def test_missing_args_is_safe(self, mock_wprint):
