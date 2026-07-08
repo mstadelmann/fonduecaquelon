@@ -267,7 +267,9 @@ class fdqExperiment:
 
         dist_backend = "nccl"
         # dist_url = "env://"
-        rdvz_location = f"file://{self.ddp_rdvz_path}ddp_rendezvous_{self.experimentName}"
+        ddp_run_id = os.getenv("SLURM_JOB_ID") or os.getenv("FDQ_DDP_RUN_ID") or self.experimentName
+        rdvz_name = f"ddp_rendezvous_{self.experimentName}_{ddp_run_id}"
+        rdvz_location = f"file://{os.path.join(self.ddp_rdvz_path, rdvz_name)}"
 
         iprint("Initializing distributed mode.")
         iprint(f"world size {self.world_size}, rank: {self.rank}")
@@ -468,7 +470,8 @@ class fdqExperiment:
 
         wprint(
             f"DDP dataset {data_name}: num_workers={num_workers} may cause DataLoader worker stalls. "
-            "If you encounter DDP hangs or NCCL timeouts, try setting num_workers=0."
+            "Use a spawn/forkserver DataLoader multiprocessing context after DDP initialization; "
+            "FDQ templates do this automatically."
         )
 
     def setupData(self) -> None:
