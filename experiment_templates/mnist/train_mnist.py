@@ -24,10 +24,10 @@ def fdq_train(experiment: fdqExperiment) -> None:
         train_loss_sum = 0.0
         val_loss_sum = 0.0
         model.train()
-        pbar = startProgBar(data.n_train_samples, "training...")
+        pbar = startProgBar(data.n_train_batches, "training...")
 
         for nb_batch, batch in enumerate(data.train_data_loader):
-            pbar.update(nb_batch * experiment.cfg.data.MNIST.args.train_batch_size)
+            pbar.update(nb_batch + 1)
 
             inputs, targets = batch
             inputs = inputs.to(experiment.device).type(torch.float32)
@@ -49,12 +49,12 @@ def fdq_train(experiment: fdqExperiment) -> None:
         pbar.finish()
 
         model.eval()
-        pbar = startProgBar(data.n_val_samples, "validation...")
+        pbar = startProgBar(data.n_val_batches, "validation...")
         val_correct = 0
         val_total = 0
 
         for nb_batch, batch in enumerate(data.val_data_loader):
-            pbar.update(nb_batch * experiment.cfg.data.MNIST.args.val_batch_size)
+            pbar.update(nb_batch + 1)
 
             inputs, targets = batch
 

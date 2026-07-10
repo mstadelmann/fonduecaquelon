@@ -25,6 +25,7 @@ def create_datasets(experiment, args) -> dict:
     num_workers = args.num_workers
     prefetch_factor = args.get("prefetch_factor", None)
     persistent_workers = args.get("persistent_workers")
+    multiprocessing_context = "spawn" if experiment.is_distributed() and num_workers > 0 else None
     if num_workers > 0 and persistent_workers is None:
         persistent_workers = True
         wprint(
@@ -79,6 +80,7 @@ def create_datasets(experiment, args) -> dict:
         drop_last=drop_last,
         prefetch_factor=prefetch_factor if num_workers > 0 else None,
         persistent_workers=persistent_workers,
+        multiprocessing_context=multiprocessing_context,
     )
 
     test_loader = DataLoader(
@@ -90,6 +92,7 @@ def create_datasets(experiment, args) -> dict:
         drop_last=drop_last,
         prefetch_factor=prefetch_factor if num_workers > 0 else None,
         persistent_workers=persistent_workers,
+        multiprocessing_context=multiprocessing_context,
     )
 
     if n_val_samples > 0:
@@ -102,6 +105,7 @@ def create_datasets(experiment, args) -> dict:
             drop_last=drop_last,
             prefetch_factor=prefetch_factor if num_workers > 0 else None,
             persistent_workers=persistent_workers,
+            multiprocessing_context=multiprocessing_context,
         )
     else:
         val_loader = None
