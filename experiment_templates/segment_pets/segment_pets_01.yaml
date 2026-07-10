@@ -101,7 +101,7 @@ test:
 
 slurm_cluster:
   fdq_test_repo: false # Pull FDQ from https://test.pypi.org instead of the official PyPI - for debugging purposes only
-  fdq_version: 0.1.12
+  fdq_version: 0.1.13
   python_env_module: python/3.12.4
   uv_env_module: uv/0.6.12
   cuda_env_module: cuda/12.8.0
@@ -112,11 +112,11 @@ slurm_cluster:
   stop_grace_time: 3 # time in minutes to wait after sending the stop signal before forcefully killing the job. This gives the job time to do some last cleanup operations (e.g. uploading results to wandb, or copying files from scratch back to home)
   cpus_per_task: 8
   cpus_per_task_test: 8
-  gres: gpu:v100sxm:1
-  gres_test: gpu:1
+  gres: gpu:a100sxm:1
+  gres_test: gpu:a100sxm:1
   mem: 120G
   mem_test: 120G
-  partition: admin
-  account: admin
+  partition: gpu
+  account: cai_ivs
   auto_resubmit: false
   world_size: 1

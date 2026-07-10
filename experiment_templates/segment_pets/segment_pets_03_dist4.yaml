@@ -18,6 +18,6 @@ mode:
 
 slurm_cluster:
   cpus_per_task: 24
-  gres: gpu:v100sxm:4
+  gres: gpu:a100sxm:4
   mem: 120G
   world_size: 4
