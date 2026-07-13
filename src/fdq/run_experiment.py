@@ -215,6 +215,7 @@ def main(cfg: DictConfig) -> None:
         # No need for multiprocessing
         start(0, cfg=cfg)
     else:
+        os.environ.setdefault("FDQ_DDP_RUN_ID", f"{os.getpid()}_{random.randint(0, 2**31 - 1)}")
         # convert hydra cfg to a picklable container before spawning.
         cfg_container = OmegaConf.to_container(cfg, resolve=True)
         mp.spawn(

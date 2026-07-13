@@ -267,7 +267,9 @@ class fdqExperiment:
 
         dist_backend = "nccl"
         # dist_url = "env://"
-        rdvz_location = f"file://{self.ddp_rdvz_path}ddp_rendezvous_{self.experimentName}"
+        ddp_run_id = os.getenv("SLURM_JOB_ID") or os.getenv("FDQ_DDP_RUN_ID") or self.experimentName
+        rdvz_name = f"ddp_rendezvous_{self.experimentName}_{ddp_run_id}"
+        rdvz_location = f"file://{os.path.join(self.ddp_rdvz_path, rdvz_name)}"
 
         iprint("Initializing distributed mode.")
         iprint(f"world size {self.world_size}, rank: {self.rank}")
@@ -462,22 +464,15 @@ class fdqExperiment:
             return
 
         args = data_source.args
-        if args.get("num_workers") is None:
+        num_workers = args.get("num_workers")
+        if num_workers is None or num_workers == 0:
             return
 
-        ddp_num_workers = args.get("ddp_num_workers")
-        if ddp_num_workers is not None:
-            if args.num_workers != ddp_num_workers:
-                wprint(f"DDP dataset {data_name}: setting num_workers={ddp_num_workers} from ddp_num_workers.")
-                args.num_workers = ddp_num_workers
-            return
-
-        if args.num_workers != 0:
-            # Multiprocess DataLoader workers can leave one DDP rank blocked in
-            # data fetching while another rank enters backward, which surfaces
-            # later as an NCCL all-reduce timeout rather than a Python error.
-            wprint(f"DDP dataset {data_name}: forcing num_workers=0 to avoid worker/rank stalls.")
-            args.num_workers = 0
+        wprint(
+            f"DDP dataset {data_name}: num_workers={num_workers} may cause DataLoader worker stalls. "
+            "Use a spawn/forkserver DataLoader multiprocessing context after DDP initialization; "
+            "FDQ templates do this automatically."
+        )
 
     def setupData(self) -> None:
         if self.cfg.data is None:
@@ -576,7 +571,7 @@ class fdqExperiment:
             loader = self.data[first_data_name].train_data_loader
             batch = next(iter(loader))
 
-            if isinstance(batch, (list, tuple)):
+            if isinstance(batch, list | tuple):
                 x = batch[0]
             elif isinstance(batch, dict):
                 x = next(iter(batch.values()))

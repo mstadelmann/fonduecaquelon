@@ -4,6 +4,8 @@ import os
 from torch.utils.data import DataLoader, random_split
 from torchvision import datasets
 
+from fdq.ui_functions import wprint
+
 
 def create_datasets(experiment, args) -> dict:
     """Creates MNIST  DataLoaders.
@@ -20,6 +22,18 @@ def create_datasets(experiment, args) -> dict:
     """
     pin_mem = False if not experiment.is_cuda else args.get("pin_memory", False)
     drop_last = args.get("drop_last", True)
+    num_workers = args.num_workers
+    prefetch_factor = args.get("prefetch_factor", None)
+    persistent_workers = args.get("persistent_workers")
+    multiprocessing_context = "spawn" if experiment.is_distributed() and num_workers > 0 else None
+    if num_workers > 0 and persistent_workers is None:
+        persistent_workers = True
+        wprint(
+            f"DataLoader num_workers={num_workers}: setting persistent_workers=True. "
+            "Set persistent_workers: false in the data args to disable this."
+        )
+    elif num_workers == 0:
+        persistent_workers = False
 
     if not os.path.exists(args.base_path):
         os.makedirs(args.base_path)
@@ -61,18 +75,24 @@ def create_datasets(experiment, args) -> dict:
         train_set,
         batch_size=args.train_batch_size,
         shuffle=args.shuffle_train,
-        num_workers=args.num_workers,
+        num_workers=num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,
+        prefetch_factor=prefetch_factor if num_workers > 0 else None,
+        persistent_workers=persistent_workers,
+        multiprocessing_context=multiprocessing_context,
     )
 
     test_loader = DataLoader(
         test_set,
         batch_size=args.test_batch_size,
         shuffle=args.shuffle_test,
-        num_workers=args.num_workers,
+        num_workers=num_workers,
         pin_memory=pin_mem,
         drop_last=drop_last,
+        prefetch_factor=prefetch_factor if num_workers > 0 else None,
+        persistent_workers=persistent_workers,
+        multiprocessing_context=multiprocessing_context,
     )
 
     if n_val_samples > 0:
@@ -80,9 +100,12 @@ def create_datasets(experiment, args) -> dict:
             val_set,
             batch_size=args.val_batch_size,
             shuffle=args.shuffle_val,
-            num_workers=args.num_workers,
+            num_workers=num_workers,
             pin_memory=pin_mem,
             drop_last=drop_last,
+            prefetch_factor=prefetch_factor if num_workers > 0 else None,
+            persistent_workers=persistent_workers,
+            multiprocessing_context=multiprocessing_context,
         )
     else:
         val_loader = None

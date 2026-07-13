@@ -172,5 +172,84 @@ class TestFdqExperimentInstantiation(unittest.TestCase):
         self.assertEqual(experiment.early_stop_reason, "TrainLoss_stagnated")
 
 
+class TestPrepareDdpDataArgs(unittest.TestCase):
+    """Tests for _prepare_ddp_data_args DDP DataLoader warning behavior."""
+
+    def _make_experiment(self, world_size=2):
+        """Create a minimal fdqExperiment stub."""
+        exp = fdqExperiment.__new__(fdqExperiment)
+        exp.world_size = world_size
+        return exp
+
+    def _make_data_source(self, num_workers=4, prefetch_factor=2):
+        """Return an OmegaConf data-source stub."""
+        from omegaconf import OmegaConf
+
+        return OmegaConf.create({"args": {"num_workers": num_workers, "prefetch_factor": prefetch_factor}})
+
+    @patch("fdq.experiment.wprint")
+    def test_no_op_when_not_distributed(self, mock_wprint):
+        """Non-distributed experiments leave args unchanged and emit no warning."""
+        exp = self._make_experiment(world_size=1)
+        ds = self._make_data_source(num_workers=4, prefetch_factor=2)
+
+        exp._prepare_ddp_data_args("ds", ds)
+
+        self.assertEqual(ds.args.num_workers, 4)
+        self.assertEqual(ds.args.prefetch_factor, 2)
+        mock_wprint.assert_not_called()
+
+    @patch("fdq.experiment.wprint")
+    def test_num_workers_zero_in_ddp_is_unchanged_without_warning(self, mock_wprint):
+        """DDP with num_workers=0 leaves args unchanged and emits no warning."""
+        exp = self._make_experiment()
+        ds = self._make_data_source(num_workers=0, prefetch_factor=2)
+
+        exp._prepare_ddp_data_args("ds", ds)
+
+        self.assertEqual(ds.args.num_workers, 0)
+        self.assertEqual(ds.args.prefetch_factor, 2)
+        mock_wprint.assert_not_called()
+
+    @patch("fdq.experiment.wprint")
+    def test_num_workers_positive_in_ddp_warns_without_mutating_args(self, mock_wprint):
+        """DDP with workers keeps user config but warns about safe worker context."""
+        exp = self._make_experiment()
+        ds = self._make_data_source(num_workers=4, prefetch_factor=2)
+
+        exp._prepare_ddp_data_args("ds", ds)
+
+        self.assertEqual(ds.args.num_workers, 4)
+        self.assertEqual(ds.args.prefetch_factor, 2)
+        mock_wprint.assert_called_once()
+        warning = mock_wprint.call_args.args[0]
+        self.assertIn("num_workers=4", warning)
+        self.assertIn("spawn/forkserver DataLoader multiprocessing context", warning)
+
+    @patch("fdq.experiment.wprint")
+    def test_missing_args_is_safe(self, mock_wprint):
+        """Data sources without args are ignored."""
+        from omegaconf import OmegaConf
+
+        exp = self._make_experiment()
+        ds = OmegaConf.create({})
+
+        exp._prepare_ddp_data_args("ds", ds)
+
+        mock_wprint.assert_not_called()
+
+    @patch("fdq.experiment.wprint")
+    def test_missing_num_workers_is_safe(self, mock_wprint):
+        """Data sources without num_workers are ignored."""
+        from omegaconf import OmegaConf
+
+        exp = self._make_experiment()
+        ds = OmegaConf.create({"args": {"prefetch_factor": 2}})
+
+        exp._prepare_ddp_data_args("ds", ds)
+
+        mock_wprint.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

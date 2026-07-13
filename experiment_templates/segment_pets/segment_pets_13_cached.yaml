@@ -27,5 +27,4 @@ data:
       shuffle_val: false
       shuffle_test: false
       pin_memory: true
-      num_workers: 4
       compress_cache: false

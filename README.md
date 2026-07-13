@@ -81,7 +81,7 @@ Minimal example (YAML):
 ```yaml
 slurm_cluster:
   fdq_test_repo: false         # if true, installs fdq from test.pypi.org instead of PyPI (for pre-release versions)
-  fdq_version: 0.1.12          # exact fdq version to install in the SLURM job environment
+  fdq_version: 0.1.13          # exact fdq version to install in the SLURM job environment
   python_env_module: "python/3.12.4"
   uv_env_module: "uv/0.6.12"
   cuda_env_module: "cuda/12.8.0"
@@ -284,6 +284,23 @@ return {
 
 These values are available as `experiment.data["<name>"].<key>`.
 
+#### DataLoader worker options
+
+The example data preparators use the standard `num_workers` value from `data.<name>.args` for regular and DDP runs. In DDP, FDQ no longer rewrites this value; if `num_workers > 0`, FDQ prints a warning because multiprocessing DataLoader workers can occasionally contribute to DDP stalls or NCCL timeouts. If that happens, set `num_workers: 0` in the dataset args.
+
+`prefetch_factor` is optional and is only passed to PyTorch when `num_workers > 0`; when `num_workers == 0`, the preparators pass `prefetch_factor=None` because PyTorch requires that combination.
+
+When `num_workers > 0`, the example preparators default `persistent_workers` to `true` and print a warning so worker processes are reused across epochs. Override it explicitly when needed:
+
+```yaml
+data:
+  OXPET:
+    args:
+      num_workers: 4
+      prefetch_factor: 2       # optional; only used when num_workers > 0
+      persistent_workers: false # optional override; default is true when num_workers > 0
+```
+
 ### Training Loop
 
 Define a function in your training script:
@@ -370,12 +387,15 @@ data:
       enabled: true           # set to false to disable caching without removing the config block
       cache_dir: /path/to/cache
       compress_cache: false   # compress HDF5 files on disk; saves space at the cost of slower reads
-      num_workers: 4
       pin_memory: true
       shuffle_train: true     # shuffle the cached training split each epoch
       shuffle_val: false
       shuffle_test: false
 ```
+
+Cache files are written to `cache_dir` as HDF5 files. After a cache file is created or found, the cached split is loaded fully into RAM by `CachedDataset`. The RAM-backed cached DataLoaders always use `num_workers=0` and `persistent_workers=false`; there is no separate caching worker option.
+
+The first-time cache generation step still iterates the original dataset through a temporary DataLoader. It keeps the original DataLoader's `num_workers`, but reconfigures iteration to `batch_size=1`, `shuffle=false`, `drop_last=false`, `pin_memory=false`, and `prefetch_factor=None` so every sample is cached in a deterministic order.
 
 ### Custom Augmentations
 
@@ -442,14 +462,7 @@ See [segment_pets_02_dist2.yaml](experiment_templates/segment_pets/segment_pets_
 
 Use the same number of GPUs as your world size. DDP requires more CPU cores and memory, since multiple data loaders run in parallel. It's most beneficial for large models, as overhead is significant.
 
-By default, FDQ sets `num_workers=0` for DDP data loaders to prevent multiprocessing conflicts. Override this per dataset with `ddp_num_workers`:
-
-```yaml
-data:
-  OXPET:
-    args:
-      ddp_num_workers: 4  # DDP-specific num_workers override (default: 0 under DDP)
-```
+FDQ uses the same `data.<name>.args.num_workers` value for regular and DDP runs. In DDP, `num_workers > 0` can be useful for slow input pipelines, but it creates workers per rank and can make hangs harder to diagnose. FDQ therefore leaves your value unchanged and prints a warning when DDP starts with `num_workers > 0`; set `num_workers: 0` if you encounter DDP hangs or NCCL timeouts.
 
 Observed speedup on H200sxm GPUs:
 
@@ -469,7 +482,7 @@ Example (YAML):
 
 ```yaml
 slurm_cluster:
-  fdq_version: 0.1.12
+  fdq_version: 0.1.13
   # ... other settings ...
   additional_pip_packages:
     - monai==1.4.0
@@ -546,7 +559,8 @@ Contributions are welcome! Please open issues or pull requests on [GitHub](https
 
 ## 🧾 Changelog
 
-- **0.1.11:** DDP reliability improvements: `ddp_num_workers` config key to control dataloader workers in distributed runs; VRAM estimation is now skipped in DDP mode to avoid rank desync from an asymmetric dummy forward pass on rank 0 only.
+- **0.1.13:** Simplify DataLoader worker handling: remove `ddp_num_workers`, warn when DDP runs with `num_workers > 0`, keep cached RAM-backed loaders single-process, support optional `prefetch_factor`, and default `persistent_workers=true` when `num_workers > 0` unless explicitly disabled.
+- **0.1.11:** DDP reliability improvements: VRAM estimation is now skipped in DDP mode to avoid rank desync from an asymmetric dummy forward pass on rank 0 only.
 - **0.1.10:** Allow specifying `trained_model_path` in a model's config block to load a checkpoint from a fixed path during test mode, without interactive prompting.
 - **0.1.9:** Fix crash when a model config block has no `optimizer` key (attribute access replaced with `.get()`).
 - **0.1.8:** Package `fdq_submit` as an installed console command, add lightweight `fdq[submit]` installation for Slurm login nodes, move the full ML runtime dependencies to `fdq[full]`, and update CI/development installs to use the full extra for tests.

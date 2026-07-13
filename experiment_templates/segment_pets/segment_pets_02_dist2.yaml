@@ -26,9 +26,7 @@ slurm_cluster:
   cpus_per_task: 16
   cpus_per_task_test: 8
   gres: gpu:a100sxm:2
-  gres_test: gpu:1
+  gres_test: gpu:a100sxm:1
   mem: 80G
   mem_test: 60G
   world_size: 2
-
-

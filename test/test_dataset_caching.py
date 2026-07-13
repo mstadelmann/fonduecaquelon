@@ -462,7 +462,6 @@ class TestDatasetCachingIntegration(unittest.TestCase):
                     "shuffle_train": True,
                     "shuffle_val": False,
                     "shuffle_test": False,
-                    "num_workers": 0,
                     "pin_memory": False,
                     "compress_cache": False,
                     "nondeterministic_transforms": {"processor": None},
@@ -481,6 +480,8 @@ class TestDatasetCachingIntegration(unittest.TestCase):
         self.assertGreater(len(cache_files), 0)
 
         train_loader = result.train_data_loader
+        self.assertEqual(train_loader.num_workers, 0)
+        self.assertFalse(train_loader.persistent_workers)
         batch = next(iter(train_loader))
         self.assertIsNotNone(batch)
 

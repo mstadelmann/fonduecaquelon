@@ -78,10 +78,10 @@ def fdq_train(experiment: fdqExperiment) -> None:
         val_dice_sum = 0.0
         val_dice_samples = 0
         model.train()
-        pbar = startProgBar(data.n_train_samples, "training...")
+        pbar = startProgBar(data.n_train_batches, "training...")
 
         for nb_tbatch, batch in enumerate(data.train_data_loader):
-            pbar.update(nb_tbatch * len(batch["image"]))
+            pbar.update(nb_tbatch + 1)
 
             inputs = batch["image"].to(experiment.device).type(torch.float32)
             targets = batch["mask"].to(experiment.device).type(torch.float32)
@@ -107,11 +107,11 @@ def fdq_train(experiment: fdqExperiment) -> None:
 
         model.eval()
 
-        pbar = startProgBar(data.n_val_samples, "validation...")
+        pbar = startProgBar(data.n_val_batches, "validation...")
 
         with torch.no_grad():
             for nb_vbatch, batch in enumerate(data.val_data_loader):
-                pbar.update(nb_vbatch * len(batch["image"]))
+                pbar.update(nb_vbatch + 1)
 
                 inputs = batch["image"].to(experiment.device).type(torch.float32)
                 targets = batch["mask"].to(experiment.device).type(torch.float32)
