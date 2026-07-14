@@ -19,7 +19,7 @@ mode:
 data:
   OXPET:
     args:
-      ddp_num_workers: 4 # num_workers in DDP is set to 0, as depending on the dataloader, it might be problematic. Use ddp_num_workers to overwrite this.
+      ddp_num_workers: 0 # num_workers in DDP is set to 0, as depending on the dataloader, it might be problematic. Use ddp_num_workers to overwrite this.
 
 slurm_cluster:
   comment: "Assign the same number of GPUs to your job as your world size. Also, this will require more CPU cores and more memory, as multiple dataloaders will be launched."
