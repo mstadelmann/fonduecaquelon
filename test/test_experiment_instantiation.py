@@ -181,11 +181,14 @@ class TestPrepareDdpDataArgs(unittest.TestCase):
         exp.world_size = world_size
         return exp
 
-    def _make_data_source(self, num_workers=4, prefetch_factor=2):
+    def _make_data_source(self, num_workers=4, prefetch_factor=2, ddp_num_workers=None):
         """Return an OmegaConf data-source stub."""
         from omegaconf import OmegaConf
 
-        return OmegaConf.create({"args": {"num_workers": num_workers, "prefetch_factor": prefetch_factor}})
+        args = {"num_workers": num_workers, "prefetch_factor": prefetch_factor}
+        if ddp_num_workers is not None:
+            args["ddp_num_workers"] = ddp_num_workers
+        return OmegaConf.create({"args": args})
 
     @patch("fdq.experiment.wprint")
     def test_no_op_when_not_distributed(self, mock_wprint):
@@ -212,19 +215,44 @@ class TestPrepareDdpDataArgs(unittest.TestCase):
         mock_wprint.assert_not_called()
 
     @patch("fdq.experiment.wprint")
-    def test_num_workers_positive_in_ddp_warns_without_mutating_args(self, mock_wprint):
-        """DDP with workers keeps user config but warns about safe worker context."""
+    def test_num_workers_positive_in_ddp_is_forced_to_zero(self, mock_wprint):
+        """DDP with workers and no override is forced to num_workers=0 to avoid worker/rank stalls."""
         exp = self._make_experiment()
         ds = self._make_data_source(num_workers=4, prefetch_factor=2)
 
         exp._prepare_ddp_data_args("ds", ds)
 
-        self.assertEqual(ds.args.num_workers, 4)
+        self.assertEqual(ds.args.num_workers, 0)
         self.assertEqual(ds.args.prefetch_factor, 2)
         mock_wprint.assert_called_once()
         warning = mock_wprint.call_args.args[0]
-        self.assertIn("num_workers=4", warning)
-        self.assertIn("spawn/forkserver DataLoader multiprocessing context", warning)
+        self.assertIn("forcing num_workers=0", warning)
+        self.assertIn("ddp_num_workers", warning)
+
+    @patch("fdq.experiment.wprint")
+    def test_ddp_num_workers_overrides_num_workers(self, mock_wprint):
+        """Setting ddp_num_workers opts back into a positive num_workers under DDP."""
+        exp = self._make_experiment()
+        ds = self._make_data_source(num_workers=4, prefetch_factor=2, ddp_num_workers=2)
+
+        exp._prepare_ddp_data_args("ds", ds)
+
+        self.assertEqual(ds.args.num_workers, 2)
+        self.assertEqual(ds.args.prefetch_factor, 2)
+        mock_wprint.assert_called_once()
+        warning = mock_wprint.call_args.args[0]
+        self.assertIn("setting num_workers=2 from ddp_num_workers", warning)
+
+    @patch("fdq.experiment.wprint")
+    def test_ddp_num_workers_matching_num_workers_is_silent(self, mock_wprint):
+        """No warning when ddp_num_workers already matches num_workers."""
+        exp = self._make_experiment()
+        ds = self._make_data_source(num_workers=4, prefetch_factor=2, ddp_num_workers=4)
+
+        exp._prepare_ddp_data_args("ds", ds)
+
+        self.assertEqual(ds.args.num_workers, 4)
+        mock_wprint.assert_not_called()
 
     @patch("fdq.experiment.wprint")
     def test_missing_args_is_safe(self, mock_wprint):
