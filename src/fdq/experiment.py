@@ -265,9 +265,18 @@ class fdqExperiment:
         # os.environ["MASTER_PORT"] = str(self.master_port)
         torch.cuda.set_device(self.rank)
 
+        # All DDP ranks share a single SLURM task's --cpus-per-task allocation. Without
+        # this, every rank's intra-op thread pool defaults to the full cpus-per-task
+        # count, so N ranks oversubscribe the allocation by a factor of N, causing one
+        # rank's compute to intermittently lag the other's and risking an NCCL collective
+        # timeout that looks like a hang rather than a CPU-contention problem.
+        cpus_per_task = self.cfg.get("slurm_cluster", {}).get("cpus_per_task")
+        if cpus_per_task:
+            torch.set_num_threads(max(1, int(cpus_per_task) // self.world_size))
+
         dist_backend = "nccl"
         # dist_url = "env://"
-        ddp_run_id = os.getenv("SLURM_JOB_ID") or os.getenv("FDQ_DDP_RUN_ID") or self.experimentName
+        ddp_run_id = os.getenv("SLURM_JOB_ID") or self.experimentName
         rdvz_name = f"ddp_rendezvous_{self.experimentName}_{ddp_run_id}"
         rdvz_location = f"file://{os.path.join(self.ddp_rdvz_path, rdvz_name)}"
 
