@@ -50,7 +50,7 @@ slurm_cluster:
   fdq_version: 0.1.13
   python_env_module: "python/3.12.4"
   uv_env_module: "uv/0.6.12"
-  cuda_env_module: "cuda/12.8.0"
+  cuda_env_module: "cuda/13.0.2"
   scratch_results_path: "/scratch/fdq_results/"
   scratch_data_path: null
   log_path: "~/dev/fonduecaquelon/slurm_log"
