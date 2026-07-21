@@ -104,7 +104,7 @@ slurm_cluster:
   fdq_version: 0.1.13
   python_env_module: python/3.12.4
   uv_env_module: uv/0.6.12
-  cuda_env_module: cuda/12.8.0
+  cuda_env_module: cuda/13.0.2
   scratch_results_path: /scratch/fdq_results/ # path where fdq stores temporary results.
   scratch_data_path: /scratch/fdq_data/ # if defined, fdq will first copy your data to this path and load it from there. Most beneficial when data is read multiple times (e.g. many epochs).
   log_path: ~/dev/fonduecaquelon/slurm_log
