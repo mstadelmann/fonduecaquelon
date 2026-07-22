@@ -116,7 +116,7 @@ slurm_cluster:
   gres_test: gpu:a100sxm:1
   mem: 120G
   mem_test: 120G
-  partition: gpu
+  partition: gpu_top
   account: cai_ivs
   auto_resubmit: false
   world_size: 1
