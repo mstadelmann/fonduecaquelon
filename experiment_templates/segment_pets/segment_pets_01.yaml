@@ -10,7 +10,7 @@ globals:
 mode:
   run_train: true
   run_test_interactive: false
-  run_test_auto: false
+  run_test_auto: true
   dump_model: false
   run_inference: false
   print_model_summary: false
@@ -100,7 +100,7 @@ test:
       nb_test_samples: "10"
 
 slurm_cluster:
-  fdq_test_repo: true # Pull FDQ from https://test.pypi.org instead of the official PyPI - for debugging purposes only
+  fdq_test_repo: false # Pull FDQ from https://test.pypi.org instead of the official PyPI - for debugging purposes only
   fdq_version: 0.1.14
   python_env_module: python/3.12.4
   uv_env_module: uv/0.6.12
