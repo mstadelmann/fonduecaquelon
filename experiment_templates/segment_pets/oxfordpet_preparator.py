@@ -126,7 +126,16 @@ def create_datasets(experiment, args=None) -> dict:
     num_workers = args.num_workers
     prefetch_factor = args.get("prefetch_factor", None)
     persistent_workers = args.get("persistent_workers")
-    multiprocessing_context = "spawn" if experiment.is_distributed() and num_workers > 0 else None
+    multiprocessing_context = args.get("multiprocessing_context", None)
+    
+    if multiprocessing_context not in {None, "fork", "spawn", "forkserver"}:
+        raise ValueError(
+            f"Invalid multiprocessing_context: {multiprocessing_context}. "
+            "Must be one of None, 'fork', 'spawn', or 'forkserver'."
+        )
+    if multiprocessing_context is None and experiment.is_distributed() and num_workers > 0:
+        multiprocessing_context = "forkserver"
+        
     if num_workers > 0 and persistent_workers is None:
         persistent_workers = True
         wprint(

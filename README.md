@@ -81,7 +81,7 @@ Minimal example (YAML):
 ```yaml
 slurm_cluster:
   fdq_test_repo: false         # if true, installs fdq from test.pypi.org instead of PyPI (for pre-release versions)
-  fdq_version: 0.1.13          # exact fdq version to install in the SLURM job environment
+  fdq_version: 0.1.14          # exact fdq version to install in the SLURM job environment
   python_env_module: "python/3.12.4"
   uv_env_module: "uv/0.6.12"
   cuda_env_module: "cuda/12.8.0"
@@ -482,7 +482,7 @@ Example (YAML):
 
 ```yaml
 slurm_cluster:
-  fdq_version: 0.1.13
+  fdq_version: 0.1.14
   # ... other settings ...
   additional_pip_packages:
     - monai==1.4.0
