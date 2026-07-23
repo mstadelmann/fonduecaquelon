@@ -90,7 +90,7 @@ def get_template() -> str:
 #SBATCH --mail-user=#user#@zhaw.ch
 #SBATCH --output=#log_path#/%j_%N__#job_name##job_tag#.out
 #SBATCH --error=#log_path#/%j_%N__#job_name##job_tag#.err
-#SBATCH --signal=B:SIGUSR1@#stop_grace_time#
+#SBATCH --signal=B:SIGUSR1@#stop_grace_time_sec#
 
 script_start=$(date +%s.%N)
 
@@ -871,6 +871,12 @@ def create_submit_file(job_config: dict[str, Any], slurm_conf: Any, submit_path:
         job_config.setdefault("test_results_dir", "")
         job_config.setdefault("job_name", job_config.get("config_name", ""))
         job_config.setdefault("experiment_name", job_config.get("job_name", job_config.get("config_name", "")))
+
+        # stop_grace_time is documented/configured in minutes (see README), but SLURM's
+        # --signal=[B:]sig_num@sig_time takes sig_time in seconds. Convert here so the
+        # generated submit script actually gets the intended number of minutes of
+        # advance warning before the job's time limit hits, instead of being 60x too short.
+        job_config["stop_grace_time_sec"] = int(float(job_config["stop_grace_time"])) * 60
 
         # Ensure log directory exists
         log_dir = job_config["log_path"]

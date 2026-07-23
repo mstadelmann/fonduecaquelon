@@ -215,7 +215,19 @@ def main(cfg: DictConfig) -> None:
         # No need for multiprocessing
         start(0, cfg=cfg)
     else:
-        os.environ.setdefault("FDQ_DDP_RUN_ID", f"{os.getpid()}_{random.randint(0, 2**31 - 1)}")
+        # NCCL collective timeouts (e.g. ProcessGroupNCCL Watchdog "ran for ... before
+        # timing out") otherwise give almost no clue which rank/op got stuck. These two
+        # env vars must be set before the ranks are spawned so every child process
+        # inherits them:
+        #  - NCCL_DEBUG=INFO: NCCL prints its own connection/topology/error logging.
+        #  - TORCH_NCCL_TRACE_BUFFER_SIZE: enables the Flight Recorder, which dumps a
+        #    trace of recent collectives (op type, shapes, stack) per rank on timeout,
+        #    instead of the bare "Stack trace of the failed collective not found" you
+        #    get with it disabled. Look for "flight recorder" / "nccl_trace_rank" dump
+        #    output in the failing job's .err log after a timeout.
+        # setdefault() so a user/job that already exports these keeps their own values.
+        os.environ.setdefault("NCCL_DEBUG", "INFO")
+        os.environ.setdefault("TORCH_NCCL_TRACE_BUFFER_SIZE", "2000")
         # convert hydra cfg to a picklable container before spawning.
         cfg_container = OmegaConf.to_container(cfg, resolve=True)
         mp.spawn(

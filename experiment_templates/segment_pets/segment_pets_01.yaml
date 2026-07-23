@@ -101,7 +101,7 @@ test:
 
 slurm_cluster:
   fdq_test_repo: false # Pull FDQ from https://test.pypi.org instead of the official PyPI - for debugging purposes only
-  fdq_version: 0.1.13
+  fdq_version: 0.1.14
   python_env_module: python/3.12.4
   uv_env_module: uv/0.6.12
   cuda_env_module: cuda/12.8.0
@@ -116,7 +116,7 @@ slurm_cluster:
   gres_test: gpu:a100sxm:1
   mem: 120G
   mem_test: 120G
-  partition: gpu
+  partition: gpu_top
   account: cai_ivs
   auto_resubmit: false
   world_size: 1

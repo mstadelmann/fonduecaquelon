@@ -87,6 +87,53 @@ class TestFdqSubmit(unittest.TestCase):
             self.assertNotIn("#experiment_name#", content)
             self.assertNotIn("#job_name#", content)
 
+    def test_create_submit_file_converts_stop_grace_time_to_seconds(self):
+        """stop_grace_time is documented in minutes; SLURM's --signal@sig_time wants seconds."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            submit_path = os.path.join(temp_dir, "job.submit")
+            job_config = {
+                "user": "tester",
+                "job_time": 1,
+                "ntasks": 1,
+                "cpus_per_task": 1,
+                "cpus_per_task_test": 1,
+                "nodes": 1,
+                "nodelist": "None",
+                "gres": "gpu:1",
+                "gres_test": "gpu:1",
+                "mem": "1G",
+                "mem_test": "1G",
+                "partition": "gpu",
+                "account": "account",
+                "run_train": True,
+                "run_test": False,
+                "is_test": False,
+                "job_tag": "_train",
+                "auto_resubmit": False,
+                "resume_chpt_path": "None",
+                "log_path": temp_dir,
+                "stop_grace_time": 5,
+                "python_env_module": "python/3.12",
+                "uv_env_module": "uv/0.6",
+                "cuda_env_module": "None",
+                "fdq_version": "0.0.77",
+                "fdq_test_repo": True,
+                "config_path": temp_dir,
+                "config_name": "experiment",
+                "scratch_results_path": "/scratch/fdq_results/",
+                "scratch_data_path": "/scratch/fdq_data/",
+                "results_path": temp_dir,
+                "submit_file_path": submit_path,
+            }
+
+            create_submit_file(job_config, {"additional_pip_packages": None}, submit_path)
+
+            with open(submit_path, encoding="utf8") as submit_file:
+                content = submit_file.read()
+
+            self.assertIn("#SBATCH --signal=B:SIGUSR1@300", content)
+            self.assertNotIn("#SBATCH --signal=B:SIGUSR1@5\n", content)
+
     def test_create_submit_file_includes_parameter_overrides(self):
         """Generated submit scripts pass concrete parameter-study overrides to fdq."""
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -210,7 +257,7 @@ class TestFdqSubmit(unittest.TestCase):
                     "  account: account\n"
                     "  python_env_module: python/3.12\n"
                     "  uv_env_module: uv/0.6\n"
-                    "  fdq_version: 0.1.13\n"
+                    "  fdq_version: 0.1.14\n"
                     "  job_time: 1\n"
                     "mode:\n"
                     "  run_train: true\n"

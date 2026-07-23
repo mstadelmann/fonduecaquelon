@@ -265,9 +265,18 @@ class fdqExperiment:
         # os.environ["MASTER_PORT"] = str(self.master_port)
         torch.cuda.set_device(self.rank)
 
+        # All DDP ranks share a single SLURM task's --cpus-per-task allocation. Without
+        # this, every rank's intra-op thread pool defaults to the full cpus-per-task
+        # count, so N ranks oversubscribe the allocation by a factor of N, causing one
+        # rank's compute to intermittently lag the other's and risking an NCCL collective
+        # timeout that looks like a hang rather than a CPU-contention problem.
+        cpus_per_task = self.cfg.get("slurm_cluster", {}).get("cpus_per_task")
+        if cpus_per_task:
+            torch.set_num_threads(max(1, int(cpus_per_task) // self.world_size))
+
         dist_backend = "nccl"
         # dist_url = "env://"
-        ddp_run_id = os.getenv("SLURM_JOB_ID") or os.getenv("FDQ_DDP_RUN_ID") or self.experimentName
+        ddp_run_id = os.getenv("SLURM_JOB_ID") or self.experimentName
         rdvz_name = f"ddp_rendezvous_{self.experimentName}_{ddp_run_id}"
         rdvz_location = f"file://{os.path.join(self.ddp_rdvz_path, rdvz_name)}"
 
@@ -465,14 +474,25 @@ class fdqExperiment:
 
         args = data_source.args
         num_workers = args.get("num_workers")
-        if num_workers is None or num_workers == 0:
+        if num_workers is None:
             return
 
-        wprint(
-            f"DDP dataset {data_name}: num_workers={num_workers} may cause DataLoader worker stalls. "
-            "Use a spawn/forkserver DataLoader multiprocessing context after DDP initialization; "
-            "FDQ templates do this automatically."
-        )
+        ddp_num_workers = args.get("ddp_num_workers")
+        if ddp_num_workers is not None:
+            if num_workers != ddp_num_workers:
+                wprint(f"DDP dataset {data_name}: setting num_workers={ddp_num_workers} from ddp_num_workers.")
+                args.num_workers = ddp_num_workers
+            return
+
+        if num_workers != 0:
+            # Multiprocess DataLoader workers can leave one DDP rank blocked in
+            # data fetching while another rank enters backward, which surfaces
+            # later as an NCCL all-reduce timeout rather than a Python error.
+            wprint(
+                f"DDP dataset {data_name}: forcing num_workers=0 to avoid worker/rank stalls. "
+                "Set ddp_num_workers in the data args to override this."
+            )
+            args.num_workers = 0
 
     def setupData(self) -> None:
         if self.cfg.data is None:
