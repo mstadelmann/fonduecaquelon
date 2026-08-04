@@ -911,10 +911,7 @@ class fdqExperiment:
         iprint("-----------------------------------------------------------")
         iprint("Training done!\nCleaning up..")
         if self.early_stop_reason == "DDP_peer_early_stop":
-            iprint(
-                f"Note: training was stopped by another worker (reason: "
-                f"{self.early_stop_peer_reason})."
-            )
+            iprint(f"Note: training was stopped by another worker (reason: {self.early_stop_peer_reason}).")
         iprint("-----------------------------------------------------------")
         if self.is_main_process():
             if self.useTensorboard:
