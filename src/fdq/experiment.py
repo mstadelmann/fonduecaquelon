@@ -98,6 +98,7 @@ class fdqExperiment:
         self.new_best_val_loss_ep_id: int | None = None
         self.early_stop_detected: bool = False
         self.early_stop_reason: str = ""
+        self.early_stop_peer_reason: str = ""
         self.processing_log_dict: dict[str, Any] = {}
         self.useTensorboard: bool = cfg.store.get("use_tensorboard", False)
         self.tb_writer: Any | None = None
@@ -909,6 +910,11 @@ class fdqExperiment:
     def clean_up_train(self) -> None:
         iprint("-----------------------------------------------------------")
         iprint("Training done!\nCleaning up..")
+        if self.early_stop_reason == "DDP_peer_early_stop":
+            iprint(
+                f"Note: training was stopped by another worker (reason: "
+                f"{self.early_stop_peer_reason})."
+            )
         iprint("-----------------------------------------------------------")
         if self.is_main_process():
             if self.useTensorboard:
@@ -978,6 +984,16 @@ class fdqExperiment:
 
         return False
 
+    # Reason codes travel alongside the stop/continue flag in the all-reduce
+    # below, so a rank that only stops because its peer told it to can still
+    # report *why* the peer stopped.
+    _EARLY_STOP_REASON_CODES = {
+        "NaN_train_Loss": 1,
+        "ValLoss_stagnated": 2,
+        "TrainLoss_stagnated": 3,
+    }
+    _EARLY_STOP_REASON_NAMES = {v: k for k, v in _EARLY_STOP_REASON_CODES.items()}
+
     def check_early_stop(self) -> bool:
         """Check if training should stop and synchronize the decision across ranks."""
         local_stop = self._check_early_stop_local()
@@ -988,13 +1004,15 @@ class fdqExperiment:
         # DDP ranks must either all stop or all continue. A MAX all-reduce
         # acts like a distributed OR, so one rank's early-stop decision is
         # propagated before any peer can enter the next backward/all-reduce.
-        stop_tensor = torch.tensor([int(local_stop)], device=self.device)
+        reason_code = self._EARLY_STOP_REASON_CODES.get(self.early_stop_reason, 0) if local_stop else 0
+        stop_tensor = torch.tensor([int(local_stop), reason_code], device=self.device)
         torch.distributed.all_reduce(stop_tensor, op=torch.distributed.ReduceOp.MAX)
-        should_stop = bool(stop_tensor.item())
+        should_stop = bool(stop_tensor[0].item())
 
         if should_stop and not local_stop:
             self.early_stop_detected = True
             self.early_stop_reason = "DDP_peer_early_stop"
+            self.early_stop_peer_reason = self._EARLY_STOP_REASON_NAMES.get(stop_tensor[1].item(), "unknown")
 
         return should_stop
 
