@@ -159,6 +159,24 @@ Notes:
 - SLURM logs are written to `slurm_log/`.
 - Results are organized under the configured `store.results_path` (when using `submit.py` on Slurm cluster, to `scratch_results_path`, which are then automatically copied back to `store.results_path` at job termination).
 
+#### Manually Stopping a Job
+
+The generated SLURM submit script installs two signal handlers:
+- `SIGUSR1` is sent automatically by SLURM `stop_grace_time` minutes before the job's time limit (`job_time`) is reached. It copies results back and, if `auto_resubmit: true`, resubmits the job to resume from the latest checkpoint.
+- `SIGUSR2` is for manual, on-demand stopping: it copies results back to `store.results_path` and exits, without resubmitting.
+
+To manually stop a running job while saving its results, send `SIGUSR2` to the job's batch shell:
+
+```bash
+scancel --batch --signal=USR2 <job_id>
+```
+
+The `--batch`/`-b` flag is required so the signal reaches only the batch script (where the trap is set), not the job steps it spawns. Find `<job_id>` from the `fdq_submit`/`submit.py` output, or with:
+
+```bash
+squeue -u $USER --name=fdq-<job_name>
+```
+
 ### Model Export and Optimization
 
 After training, export and optimize models for deployment:
