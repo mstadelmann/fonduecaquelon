@@ -98,6 +98,17 @@ slurm_cluster:
   auto_resubmit: true          # if true, automatically resubmit and resume training when the job hits the time limit
 ```
 
+Each submitted job creates a fresh `uv` virtual environment on the node's local scratch disk and reinstalls `fdq` into it, so packages are normally re-downloaded from PyPI/TestPyPI on every submission. To reuse downloaded packages across job submissions, set an optional `uv_cache_dir` in the `globals` section to a persistent, shared path (e.g. your home directory):
+
+```yaml
+globals:
+  project: "MNIST classifier"
+  author: "Marc"
+  uv_cache_dir: "/cluster/home/stmd/UV_CACHE"
+```
+
+If `uv_cache_dir` is omitted, caching is skipped and packages are always downloaded from source. If set, the job creates the directory when missing; if it cannot be created or is not readable/writable, the job prints a warning and falls back to downloading from source instead of failing.
+
 When submitting jobs to a Slurm cluster, the only supported modes are:
 ```yaml
 mode:

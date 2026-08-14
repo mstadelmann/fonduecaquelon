@@ -112,6 +112,7 @@ SUBMIT_FILE_PATH=#submit_file_path#
 PY_MODULE=#python_env_module#
 UV_MODULE=#uv_env_module#
 CUDA_MODULE=#cuda_env_module#
+UV_CACHE_DIR_CONFIG=#uv_cache_dir# # optional persistent uv cache dir; "None" disables it
 FDQ_VERSION=#fdq_version#
 FDQ_TEST_REPO=#fdq_test_repo# # if True, install fdq from https://test.pypi.org
 PARAMETER_OVERRIDES="#parameter_overrides#"
@@ -160,6 +161,7 @@ echo "RESULTS_PATH: $RESULTS_PATH"
 echo "PYTHON MODULE: $PY_MODULE"
 echo "UV MODULE: $UV_MODULE"
 echo "CUDA MODULE: $CUDA_MODULE"
+echo "UV CACHE DIR: $UV_CACHE_DIR_CONFIG"
 echo "FDQ VERSION: $FDQ_VERSION"
 echo "PARAMETER OVERRIDES: $PARAMETER_OVERRIDES"
 echo "PARAMETER RUN TAG: $FDQ_PARAMETER_RUN_TAG"
@@ -189,6 +191,24 @@ if [ -n "$CUDA_MODULE" ] && [ "$CUDA_MODULE" != "None" ]; then
     if ! VENV="fdqenv" module load "$CUDA_MODULE"; then
         echo "ERROR: Failed to load CUDA module $CUDA_MODULE"
         exit 1
+    fi
+fi
+
+# Optional persistent UV package cache (overrides the module's default scratch cache,
+# which does not survive between jobs). If unset, packages are always downloaded from source.
+if [ "$UV_CACHE_DIR_CONFIG" == "None" ]; then
+    echo "No persistent UV cache directory configured; packages will be downloaded from source."
+else
+    echo "Configuring persistent UV cache directory: $UV_CACHE_DIR_CONFIG"
+    if [ ! -d "$UV_CACHE_DIR_CONFIG" ]; then
+        echo "UV cache directory does not exist, creating it..."
+        mkdir -p "$UV_CACHE_DIR_CONFIG"
+    fi
+    if [ -d "$UV_CACHE_DIR_CONFIG" ] && [ -r "$UV_CACHE_DIR_CONFIG" ] && [ -w "$UV_CACHE_DIR_CONFIG" ] && [ -x "$UV_CACHE_DIR_CONFIG" ]; then
+        export UV_CACHE_DIR="$UV_CACHE_DIR_CONFIG"
+        echo "Using persistent UV cache: $UV_CACHE_DIR"
+    else
+        echo "WARNING: UV cache directory $UV_CACHE_DIR_CONFIG could not be created or has incorrect permissions. Packages will be downloaded from source."
     fi
 fi
 
@@ -746,6 +766,7 @@ def get_default_config(slurm_conf: Any, mode_config: Any) -> dict[str, Any]:
         "python_env_module": None,
         "uv_env_module": None,
         "cuda_env_module": None,
+        "uv_cache_dir": None,
         "fdq_version": None,
         "fdq_test_repo": False,
         "config_path": None,
@@ -1093,6 +1114,7 @@ def main() -> None:
             job_config["user"] = getpass.getuser()
             job_config["parameter_overrides"] = parameter_overrides
             job_config["parameter_study_paths"] = " ".join(run_values.keys())
+            job_config["uv_cache_dir"] = run_exp_config.get("globals", {}).get("uv_cache_dir")
 
             parameter_run_tag = ""
             if parameter_ranges:
