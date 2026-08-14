@@ -420,6 +420,25 @@ class TestGet2DFrom3DTransform(unittest.TestCase):
         with self.assertRaises(ValueError):
             transform(input_tensor)
 
+    def test_get_2d_middle_slice_recomputed_for_smaller_tensor(self):
+        """A shared instance must not cache the first call's middle index.
+
+        Transform instances are built once and reused for every tensor passed
+        through them over an experiment's lifetime. If the same instance is later
+        called with a smaller tensor along `axis` (e.g. a downsampled latent after
+        a full-resolution volume), the middle slice must be recomputed rather than
+        reusing the previous call's index.
+        """
+        transform = Get2DFrom3DTransform(axis=0, index=None)
+
+        large_tensor = torch.rand(64, 4, 4)
+        large_result = transform(large_tensor)
+        torch.testing.assert_close(large_result, large_tensor[32, :, :])
+
+        small_tensor = torch.rand(16, 4, 4)
+        small_result = transform(small_tensor)
+        torch.testing.assert_close(small_result, small_tensor[8, :, :])
+
 
 class TestSynchronizedRandomVerticalFlip(unittest.TestCase):
     """Test SynchronizedRandomVerticalFlip class."""

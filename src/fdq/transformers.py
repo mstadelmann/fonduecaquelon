@@ -342,11 +342,15 @@ class Get2DFrom3DTransform:
         self.index = index
 
     def __call__(self, t):
-        if self.index is None:
-            self.index = t.shape[self.axis] // 2  # Default to the middle slice
         if self.axis < 0 or self.axis >= t.dim():
             raise ValueError(f"Axis {self.axis} is out of bounds for the tensor with {t.dim()} dimensions.")
-        return t.select(dim=self.axis, index=self.index)
+        # Recompute per call rather than caching on self.index: this transform instance
+        # is built once and reused for every tensor passed through it, and different
+        # calls can have different sizes along self.axis (e.g. a full-resolution volume
+        # vs. a downsampled latent) - caching the first call's middle index would select
+        # an out-of-range index on any later, smaller tensor.
+        index = self.index if self.index is not None else t.shape[self.axis] // 2
+        return t.select(dim=self.axis, index=index)
 
 
 class SynchronizedRandomVerticalFlip:

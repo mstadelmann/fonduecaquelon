@@ -6,6 +6,7 @@ defaults:
 globals:
   project: "MNIST classifier"
   author: "Marc"
+  uv_cache_dir: "/cluster/home/stmd/UV_CACHE" # optional: persistent uv package cache dir, reused across SLURM job submissions
 
 mode:
   run_train: true

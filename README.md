@@ -98,6 +98,17 @@ slurm_cluster:
   auto_resubmit: true          # if true, automatically resubmit and resume training when the job hits the time limit
 ```
 
+Each submitted job creates a fresh `uv` virtual environment on the node's local scratch disk and reinstalls `fdq` into it, so packages are normally re-downloaded from PyPI/TestPyPI on every submission. To reuse downloaded packages across job submissions, set an optional `uv_cache_dir` in the `globals` section to a persistent, shared path (e.g. your home directory):
+
+```yaml
+globals:
+  project: "MNIST classifier"
+  author: "Marc"
+  uv_cache_dir: "/cluster/home/stmd/UV_CACHE"
+```
+
+If `uv_cache_dir` is omitted, caching is skipped and packages are always downloaded from source. If set, the job creates the directory when missing; if it cannot be created or is not readable/writable, the job prints a warning and falls back to downloading from source instead of failing.
+
 When submitting jobs to a Slurm cluster, the only supported modes are:
 ```yaml
 mode:
@@ -158,6 +169,24 @@ This submits all combinations of `shuffle_train=true|false` and `class_name=torc
 Notes:
 - SLURM logs are written to `slurm_log/`.
 - Results are organized under the configured `store.results_path` (when using `submit.py` on Slurm cluster, to `scratch_results_path`, which are then automatically copied back to `store.results_path` at job termination).
+
+#### Manually Stopping a Job
+
+The generated SLURM submit script installs two signal handlers:
+- `SIGUSR1` is sent automatically by SLURM `stop_grace_time` minutes before the job's time limit (`job_time`) is reached. It copies results back and, if `auto_resubmit: true`, resubmits the job to resume from the latest checkpoint.
+- `SIGUSR2` is for manual, on-demand stopping: it copies results back to `store.results_path` and exits, without resubmitting.
+
+To manually stop a running job while saving its results, send `SIGUSR2` to the job's batch shell:
+
+```bash
+scancel --batch --signal=USR2 <job_id>
+```
+
+The `--batch`/`-b` flag is required so the signal reaches only the batch script (where the trap is set), not the job steps it spawns. Find `<job_id>` from the `fdq_submit`/`submit.py` output, or with:
+
+```bash
+squeue -u $USER --name=fdq-<job_name>
+```
 
 ### Model Export and Optimization
 

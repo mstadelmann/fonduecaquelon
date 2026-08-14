@@ -56,7 +56,7 @@ class fdqExperiment:
         self.project: str = self.cfg.globals.project.replace(" ", "_")
         self.experimentName: str = os.getenv("FDQ_EXPERIMENT_NAME") or cfg.hydra_paths.config_name
         self.funky_name: str | None = None
-        self.checkpoint_frequency: int = cfg.store.checkpoint_frequency
+        self.checkpoint_frequency: int | None = cfg.store.get("checkpoint_frequency")
         self.mode: FDQmode = FDQmode()
         self.creation_time: datetime = datetime.now()
         self.current_ep_start_time: datetime | None = None
@@ -64,8 +64,8 @@ class fdqExperiment:
         self.total_run_time: timedelta | None = None
         self.run_info: dict[str, Any] = {}
         self.gradacc_iter: int = cfg.train.args.get("accumulate_grad_batches", 1)
-        self.useAMP: bool = cfg.train.args.use_AMP
-        self.nb_epochs: int = cfg.train.args.epochs
+        self.useAMP: bool = cfg.train.args.get("use_AMP", False)
+        self.nb_epochs: int = cfg.train.args.get("epochs", 5)
         self.current_epoch: int = 0
         self.start_epoch: int = 0
         self.data: dict[str, Any] = {}
