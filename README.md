@@ -14,6 +14,7 @@ A *fonduecaquelon* is the heavy pot that keeps cheeses (e.g. 50% Gruyère and 50
 * **Extensible:** Easily integrate custom models, data loaders, and training/testing loops.
 * **Automatic Dependency Management:** Install additional pip packages per experiment.
 * **Distributed Training:** Out-of-the-box support for PyTorch DDP.
+* **EMA Weight Averaging:** Opt-in decay-averaged shadow weights for smoother, better-generalizing checkpoints.
 * **Model Export & Optimization:** Export trained models to ONNX with optimization options.
 * **High-Performance Inference:** TensorRT integration for GPU-accelerated inference with up to 10x speedup.
 * **Model Compilation:** JIT tracing/scripting and `torch.compile` support for optimized execution.
@@ -292,6 +293,25 @@ models:
 ```
 
 Access models in training via `experiment.models["myUNET"]`. The same structure applies to losses and data loaders.
+
+### EMA (Exponential Moving Average)
+
+Opt in per model to keep a decay-averaged "shadow" copy of its weights, updated after every optimizer step:
+
+```yaml
+models:
+  myUNET:
+    ema_decay: 0.999   # closer to 1.0 = slower-moving average
+```
+
+Averaging out per-step optimizer noise this way typically generalizes better and is standard practice in diffusion training. When enabled:
+
+* The shadow is updated after every real optimizer step (gradient-accumulation micro-steps don't trigger an update).
+* Checkpoints written by `save_last_model` / `save_best_val_model` / `save_best_train_model` contain the EMA weights, so test/inference pick them up automatically.
+* EMA state round-trips through `resume_chpt_path` checkpoints.
+* Call `experiment.get_eval_model("myUNET")` instead of `experiment.models["myUNET"]` in your training script to validate/sample against the smoothed weights during the same run; otherwise the EMA effect only shows up once the exported model is reloaded later.
+
+`ema_decay` and `freeze` are mutually exclusive on the same model.
 
 ### Data Loaders
 

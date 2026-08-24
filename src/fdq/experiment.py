@@ -444,8 +444,6 @@ class fdqExperiment:
 
                 # opt-in EMA shadow: a decay-averaged copy of the weights, updated
                 # after every optimizer step and used for sampling/eval/export.
-                # Averaging out per-step SGD noise this way is standard practice
-                # in diffusion training and consistently sharpens generated samples.
                 elif model_def.get("ema_decay") is not None:
                     ema_model = copy.deepcopy(self.models_no_ddp[model_name]).to(self.device)
                     ema_model.eval()
@@ -565,10 +563,6 @@ class fdqExperiment:
                 # skip frozen models
                 continue
 
-            # export the EMA shadow weights when enabled - they're what sampling/
-            # test should use, and this keeps every downstream consumer of the
-            # exported .fdqm file (test, inference, trained_model_path) EMA-aware
-            # with no changes needed on their end.
             model = self.ema_models.get(model_name, self.models_no_ddp[model_name])
 
             if self.cfg.store.get("save_last_model", False):
