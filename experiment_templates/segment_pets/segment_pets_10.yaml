@@ -43,6 +43,7 @@ models:
         - 1
         - 2
       time_embedding: false
+    ema_decay: 0.999
     optimizer:
       class_name: torch.optim.Adam
       args:

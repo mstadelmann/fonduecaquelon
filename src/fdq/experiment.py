@@ -1,5 +1,6 @@
 import os
 import sys
+import copy
 import math
 import shutil
 import importlib
@@ -71,6 +72,8 @@ class fdqExperiment:
         self.data: dict[str, Any] = {}
         self.models: dict[str, torch.nn.Module] = {}
         self.models_no_ddp: dict[str, torch.nn.Module] = {}
+        self.ema_models: dict[str, torch.nn.Module] = {}
+        self.ema_decay: dict[str, float] = {}
         self.transformers: dict[str, Any] = {}
         self.scaler: torch.cuda.amp.GradScaler | None = None
         self.trainer: Any | None = None
@@ -439,6 +442,34 @@ class fdqExperiment:
                     for param in self.models[model_name].parameters():
                         param.requires_grad = False
 
+                # opt-in EMA shadow: a decay-averaged copy of the weights, updated
+                # after every optimizer step and used for sampling/eval/export.
+                elif model_def.get("ema_decay") is not None:
+                    ema_model = copy.deepcopy(self.models_no_ddp[model_name]).to(self.device)
+                    ema_model.eval()
+                    for param in ema_model.parameters():
+                        param.requires_grad = False
+                    self.ema_models[model_name] = ema_model
+                    self.ema_decay[model_name] = float(model_def.ema_decay)
+
+    def update_ema(self, model_name: str) -> None:
+        """Update the EMA shadow weights for a model after an optimizer step."""
+        ema_model = self.ema_models.get(model_name)
+        if ema_model is None:
+            return
+
+        decay = self.ema_decay[model_name]
+        model = self.models_no_ddp[model_name]
+        with torch.no_grad():
+            for ema_param, param in zip(ema_model.parameters(), model.parameters(), strict=True):
+                ema_param.mul_(decay).add_(param.detach(), alpha=1 - decay)
+            for ema_buffer, buffer in zip(ema_model.buffers(), model.buffers(), strict=True):
+                ema_buffer.copy_(buffer)
+
+    def get_eval_model(self, model_name: str) -> torch.nn.Module:
+        """Return the EMA shadow model for eval/sampling if one exists, else the live model."""
+        return self.ema_models.get(model_name, self.models_no_ddp[model_name])
+
     def load_trained_models(self) -> None:
         """Load trained models, defined by user path or previous trainings.
 
@@ -532,7 +563,7 @@ class fdqExperiment:
                 # skip frozen models
                 continue
 
-            model = self.models_no_ddp[model_name]
+            model = self.ema_models.get(model_name, self.models_no_ddp[model_name])
 
             if self.cfg.store.get("save_last_model", False):
                 remove_file(self.last_model_path.get(model_name))
@@ -826,6 +857,15 @@ class fdqExperiment:
                 continue
             self.models_no_ddp[model_name].load_state_dict(checkpoint["model_state_dict"][model_name])
 
+            if model_name in self.ema_models:
+                ema_state = checkpoint.get("ema_model_state_dict", {}).get(model_name)
+                if ema_state is not None:
+                    self.ema_models[model_name].load_state_dict(ema_state)
+                else:
+                    # resuming a checkpoint written before EMA was enabled for this
+                    # model: seed the shadow weights from the just-loaded model.
+                    self.ema_models[model_name].load_state_dict(self.models_no_ddp[model_name].state_dict())
+
             if checkpoint["optimizer"] is None:
                 self.optimizers[model_name] = None
             else:
@@ -858,16 +898,20 @@ class fdqExperiment:
                     optimizer_state[optim_name] = optim.state_dict()
 
         model_state = {}
+        ema_model_state = {}
         for model_name, model_def in self.cfg.models.items():
             if model_def.get("freeze"):
                 model_state[model_name] = "FROZEN"
             else:
                 # we save only the non-ddp wrapped model in the rank 0 process
                 model_state[model_name] = self.models_no_ddp[model_name].state_dict()
+                if model_name in self.ema_models:
+                    ema_model_state[model_name] = self.ema_models[model_name].state_dict()
 
         checkpoint = {
             "epoch": self.current_epoch,
             "model_state_dict": model_state,
+            "ema_model_state_dict": ema_model_state,
             "optimizer": optimizer_state,
             "train_loss": self.trainLoss_per_ep[-1],
             "val_loss": self.valLoss_per_ep[-1],
@@ -1026,6 +1070,7 @@ class fdqExperiment:
                 else:
                     optimizer.step()
                 optimizer.zero_grad()
+                self.update_ema(model_name)
 
     def on_epoch_start(self, epoch: int) -> None:
         if epoch is None:
