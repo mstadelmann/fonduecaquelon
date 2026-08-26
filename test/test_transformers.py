@@ -4,6 +4,7 @@ import unittest
 import torch
 import numpy as np
 from unittest.mock import patch
+from omegaconf import OmegaConf
 from fdq.transformers import (
     AddValueTransform,
     MultValueTransform,
@@ -21,6 +22,13 @@ from fdq.transformers import (
     Get2DFrom3DTransform,
     SynchronizedRandomVerticalFlip,
     SynchronizedRandomHorizontalFlip,
+    RandomGaussianNoiseTransform,
+    RandomPoissonNoiseTransform,
+    RandomSaltPepperNoiseTransform,
+    RandomCutoutTransform,
+    RandomBrightnessContrastTransform,
+    RandomGammaTransform,
+    get_transformer,
 )
 
 
@@ -695,6 +703,314 @@ class TestSynchronizedRandomHorizontalFlip(unittest.TestCase):
         result = transform(tensor)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].shape, tensor.shape)
+
+
+class TestRandomGaussianNoiseTransform(unittest.TestCase):
+    """Test RandomGaussianNoiseTransform class."""
+
+    def test_zero_sigma_is_identity(self):
+        """Test that a sigma range of exactly 0 leaves the tensor unchanged."""
+        transform = RandomGaussianNoiseTransform(sigma_min=0.0, sigma_max=0.0, p=1.0)
+        input_tensor = torch.rand(3, 16, 16)
+        result = transform(input_tensor)
+        torch.testing.assert_close(result, input_tensor)
+
+    def test_probability_zero_no_op(self):
+        """Test that p=0.0 never applies the noise."""
+        transform = RandomGaussianNoiseTransform(sigma_min=1.0, sigma_max=2.0, p=0.0)
+        input_tensor = torch.rand(3, 16, 16)
+        result = transform(input_tensor)
+        torch.testing.assert_close(result, input_tensor)
+
+    def test_noise_changes_values_and_preserves_shape(self):
+        """Test that noise is added and the tensor shape/dtype are preserved."""
+        transform = RandomGaussianNoiseTransform(sigma_min=0.5, sigma_max=0.5, p=1.0)
+        input_tensor = torch.zeros(4, 8, 8)
+        result = transform(input_tensor)
+
+        self.assertEqual(result.shape, input_tensor.shape)
+        self.assertEqual(result.dtype, input_tensor.dtype)
+        self.assertFalse(torch.equal(result, input_tensor))
+
+    def test_works_on_3d_volume(self):
+        """Test that the transform works on a (C, D, H, W) shaped volume."""
+        transform = RandomGaussianNoiseTransform(sigma_min=0.2, sigma_max=0.2, p=1.0)
+        input_tensor = torch.zeros(2, 6, 10, 10)
+        result = transform(input_tensor)
+
+        self.assertEqual(result.shape, input_tensor.shape)
+        self.assertFalse(torch.equal(result, input_tensor))
+
+    def test_invalid_sigma_range_raises(self):
+        """Test that an invalid sigma range raises ValueError."""
+        with self.assertRaises(ValueError):
+            RandomGaussianNoiseTransform(sigma_min=0.5, sigma_max=0.1)
+        with self.assertRaises(ValueError):
+            RandomGaussianNoiseTransform(sigma_min=-1.0, sigma_max=0.1)
+
+    def test_generator_deterministic_behavior(self):
+        """Test that a fixed generator seed reproduces the same noise."""
+        input_tensor = torch.zeros(3, 8, 8)
+
+        generator1 = torch.Generator().manual_seed(42)
+        transform1 = RandomGaussianNoiseTransform(sigma_min=0.1, sigma_max=0.5, p=1.0, generator=generator1)
+        result1 = transform1(input_tensor)
+
+        generator2 = torch.Generator().manual_seed(42)
+        transform2 = RandomGaussianNoiseTransform(sigma_min=0.1, sigma_max=0.5, p=1.0, generator=generator2)
+        result2 = transform2(input_tensor)
+
+        torch.testing.assert_close(result1, result2)
+
+
+class TestRandomPoissonNoiseTransform(unittest.TestCase):
+    """Test RandomPoissonNoiseTransform class."""
+
+    def test_probability_zero_no_op(self):
+        """Test that p=0.0 never applies the noise."""
+        transform = RandomPoissonNoiseTransform(p=0.0)
+        input_tensor = torch.rand(3, 16, 16)
+        result = transform(input_tensor)
+        torch.testing.assert_close(result, input_tensor)
+
+    def test_output_shape_dtype_and_nonnegative(self):
+        """Test that shape/dtype are preserved and the noisy output stays non-negative."""
+        transform = RandomPoissonNoiseTransform(scale_min=0.5, scale_max=0.5, p=1.0)
+        input_tensor = torch.rand(3, 16, 16)
+        result = transform(input_tensor)
+
+        self.assertEqual(result.shape, input_tensor.shape)
+        self.assertEqual(result.dtype, input_tensor.dtype)
+        self.assertTrue(torch.all(result >= 0))
+
+    def test_works_on_3d_volume(self):
+        """Test that the transform works on a (C, D, H, W) shaped volume."""
+        transform = RandomPoissonNoiseTransform(scale_min=1.0, scale_max=1.0, p=1.0)
+        input_tensor = torch.rand(2, 6, 10, 10)
+        result = transform(input_tensor)
+        self.assertEqual(result.shape, input_tensor.shape)
+
+    def test_invalid_scale_range_raises(self):
+        """Test that an invalid scale range raises ValueError."""
+        with self.assertRaises(ValueError):
+            RandomPoissonNoiseTransform(scale_min=0.0, scale_max=1.0)
+        with self.assertRaises(ValueError):
+            RandomPoissonNoiseTransform(scale_min=0.9, scale_max=0.1)
+
+
+class TestRandomSaltPepperNoiseTransform(unittest.TestCase):
+    """Test RandomSaltPepperNoiseTransform class."""
+
+    def test_probability_zero_no_op(self):
+        """Test that p=0.0 never applies the noise."""
+        transform = RandomSaltPepperNoiseTransform(amount=0.5, p=0.0)
+        input_tensor = torch.rand(3, 16, 16)
+        result = transform(input_tensor)
+        torch.testing.assert_close(result, input_tensor)
+
+    def test_amount_zero_is_identity(self):
+        """Test that amount=0.0 leaves the tensor unchanged."""
+        transform = RandomSaltPepperNoiseTransform(amount=0.0, p=1.0)
+        input_tensor = torch.rand(3, 16, 16)
+        result = transform(input_tensor)
+        torch.testing.assert_close(result, input_tensor)
+
+    def test_corrupted_fraction_matches_amount_approximately(self):
+        """Test that roughly `amount` of the elements are set to salt/pepper values."""
+        transform = RandomSaltPepperNoiseTransform(
+            amount=0.3, salt_vs_pepper=0.5, salt_value=9.0, pepper_value=-9.0, p=1.0
+        )
+        input_tensor = torch.rand(200, 200)
+        result = transform(input_tensor)
+
+        corrupted_frac = ((result == 9.0) | (result == -9.0)).float().mean().item()
+        self.assertAlmostEqual(corrupted_frac, 0.3, delta=0.02)
+
+    def test_works_on_3d_volume(self):
+        """Test that the transform works on a (C, D, H, W) shaped volume."""
+        transform = RandomSaltPepperNoiseTransform(amount=0.1, p=1.0)
+        input_tensor = torch.rand(2, 6, 10, 10)
+        result = transform(input_tensor)
+        self.assertEqual(result.shape, input_tensor.shape)
+
+    def test_invalid_amount_raises(self):
+        """Test that an out-of-range amount raises ValueError."""
+        with self.assertRaises(ValueError):
+            RandomSaltPepperNoiseTransform(amount=1.5)
+        with self.assertRaises(ValueError):
+            RandomSaltPepperNoiseTransform(salt_vs_pepper=-0.1)
+
+
+class TestRandomCutoutTransform(unittest.TestCase):
+    """Test RandomCutoutTransform class."""
+
+    def test_probability_zero_no_op(self):
+        """Test that p=0.0 never applies the cutout."""
+        transform = RandomCutoutTransform(p=0.0)
+        input_tensor = torch.rand(3, 16, 16)
+        result = transform(input_tensor)
+        torch.testing.assert_close(result, input_tensor)
+
+    def test_cutout_2d_writes_fill_value(self):
+        """Test that a 2D cutout writes the fill value and preserves shape."""
+        transform = RandomCutoutTransform(
+            n_spatial_dims=2, num_patches=1, min_frac=0.5, max_frac=0.5, fill_value=-1.0, p=1.0
+        )
+        input_tensor = torch.rand(3, 20, 20)
+        result = transform(input_tensor)
+
+        self.assertEqual(result.shape, input_tensor.shape)
+        self.assertTrue(torch.any(result == -1.0))
+        # channel dim must not be touched by the spatial cutout
+        self.assertFalse(torch.all(result == -1.0))
+
+    def test_cutout_3d_volume(self):
+        """Test that the cutout works on a (C, D, H, W) shaped volume, masking D/H/W."""
+        transform = RandomCutoutTransform(
+            n_spatial_dims=3, num_patches=1, min_frac=0.5, max_frac=0.5, fill_value=-1.0, p=1.0
+        )
+        input_tensor = torch.rand(2, 10, 10, 10)
+        result = transform(input_tensor)
+
+        self.assertEqual(result.shape, input_tensor.shape)
+        self.assertTrue(torch.any(result == -1.0))
+
+    def test_multiple_patches(self):
+        """Test that requesting multiple patches can cover a larger fraction of the tensor."""
+        transform = RandomCutoutTransform(
+            n_spatial_dims=2, num_patches=5, min_frac=0.1, max_frac=0.2, fill_value=0.0, p=1.0
+        )
+        input_tensor = torch.ones(1, 50, 50)
+        result = transform(input_tensor)
+        self.assertTrue(torch.any(result == 0.0))
+
+    def test_invalid_n_spatial_dims_raises(self):
+        """Test that requesting more spatial dims than the tensor has raises ValueError."""
+        transform = RandomCutoutTransform(n_spatial_dims=3, p=1.0)
+        input_tensor = torch.rand(4, 4)
+        with self.assertRaises(ValueError):
+            transform(input_tensor)
+
+    def test_invalid_frac_range_raises(self):
+        """Test that an invalid fraction range raises ValueError."""
+        with self.assertRaises(ValueError):
+            RandomCutoutTransform(min_frac=0.6, max_frac=0.5)
+        with self.assertRaises(ValueError):
+            RandomCutoutTransform(min_frac=0.0)
+
+
+class TestRandomBrightnessContrastTransform(unittest.TestCase):
+    """Test RandomBrightnessContrastTransform class."""
+
+    def test_probability_zero_no_op(self):
+        """Test that p=0.0 never applies the jitter."""
+        transform = RandomBrightnessContrastTransform(brightness=0.5, contrast=0.5, p=0.0)
+        input_tensor = torch.rand(3, 16, 16)
+        result = transform(input_tensor)
+        torch.testing.assert_close(result, input_tensor)
+
+    def test_zero_jitter_is_identity(self):
+        """Test that brightness=0 and contrast=0 leave the tensor unchanged."""
+        transform = RandomBrightnessContrastTransform(brightness=0.0, contrast=0.0, p=1.0)
+        input_tensor = torch.rand(3, 16, 16)
+        result = transform(input_tensor)
+        torch.testing.assert_close(result, input_tensor)
+
+    def test_jitter_changes_values_and_preserves_shape(self):
+        """Test that jitter changes values while preserving shape."""
+        transform = RandomBrightnessContrastTransform(brightness=0.5, contrast=0.5, p=1.0)
+        input_tensor = torch.rand(3, 16, 16)
+        result = transform(input_tensor)
+
+        self.assertEqual(result.shape, input_tensor.shape)
+        self.assertFalse(torch.equal(result, input_tensor))
+
+    def test_works_on_3d_volume(self):
+        """Test that the transform works on a (C, D, H, W) shaped volume."""
+        transform = RandomBrightnessContrastTransform(brightness=0.3, contrast=0.3, p=1.0)
+        input_tensor = torch.rand(2, 6, 10, 10)
+        result = transform(input_tensor)
+        self.assertEqual(result.shape, input_tensor.shape)
+
+    def test_invalid_params_raise(self):
+        """Test that negative brightness/contrast raise ValueError."""
+        with self.assertRaises(ValueError):
+            RandomBrightnessContrastTransform(brightness=-0.1)
+        with self.assertRaises(ValueError):
+            RandomBrightnessContrastTransform(contrast=-0.1)
+
+
+class TestRandomGammaTransform(unittest.TestCase):
+    """Test RandomGammaTransform class."""
+
+    def test_probability_zero_no_op(self):
+        """Test that p=0.0 never applies the gamma correction."""
+        transform = RandomGammaTransform(gamma_min=2.0, gamma_max=3.0, p=0.0)
+        input_tensor = torch.rand(3, 16, 16)
+        result = transform(input_tensor)
+        torch.testing.assert_close(result, input_tensor)
+
+    def test_gamma_one_is_identity(self):
+        """Test that gamma=1.0 leaves a non-negative tensor unchanged."""
+        transform = RandomGammaTransform(gamma_min=1.0, gamma_max=1.0, p=1.0)
+        input_tensor = torch.rand(3, 16, 16)
+        result = transform(input_tensor)
+        torch.testing.assert_close(result, input_tensor)
+
+    def test_gamma_preserves_sign(self):
+        """Test that gamma correction preserves the sign of each element."""
+        transform = RandomGammaTransform(gamma_min=2.0, gamma_max=2.0, p=1.0)
+        input_tensor = torch.tensor([-2.0, -0.5, 0.0, 0.5, 2.0])
+        result = transform(input_tensor)
+        expected = torch.tensor([-4.0, -0.25, 0.0, 0.25, 4.0])
+        torch.testing.assert_close(result, expected)
+
+    def test_works_on_3d_volume(self):
+        """Test that the transform works on a (C, D, H, W) shaped volume."""
+        transform = RandomGammaTransform(gamma_min=0.8, gamma_max=1.2, p=1.0)
+        input_tensor = torch.rand(2, 6, 10, 10)
+        result = transform(input_tensor)
+        self.assertEqual(result.shape, input_tensor.shape)
+
+    def test_invalid_gamma_range_raises(self):
+        """Test that an invalid gamma range raises ValueError."""
+        with self.assertRaises(ValueError):
+            RandomGammaTransform(gamma_min=0.0, gamma_max=1.0)
+        with self.assertRaises(ValueError):
+            RandomGammaTransform(gamma_min=1.5, gamma_max=1.0)
+
+
+class TestNewAugmentationDispatch(unittest.TestCase):
+    """Test config-based dispatch (get_transformer) for the new augmentation transforms."""
+
+    def test_dispatch_creates_expected_types(self):
+        """Test that each new transformer name resolves to the correct class."""
+        cases = [
+            ("RandomGaussianNoise", {"sigma_min": 0.0, "sigma_max": 0.1}, RandomGaussianNoiseTransform),
+            ("RandomPoissonNoise", {"scale_min": 0.5, "scale_max": 1.0}, RandomPoissonNoiseTransform),
+            ("RandomSaltPepperNoise", {"amount": 0.05}, RandomSaltPepperNoiseTransform),
+            ("RandomCutout", {"n_spatial_dims": 3}, RandomCutoutTransform),
+            ("RandomBrightnessContrast", {"brightness": 0.1}, RandomBrightnessContrastTransform),
+            ("RandomGamma", {"gamma_min": 0.8, "gamma_max": 1.2}, RandomGammaTransform),
+        ]
+        for name, params, expected_cls in cases:
+            cfg = OmegaConf.create({name: params})
+            transformer = get_transformer(cfg)
+            self.assertIsInstance(transformer, expected_cls)
+
+    def test_dispatch_without_parameters_uses_defaults(self):
+        """Test that bare string transform names fall back to default parameters."""
+        transformer = get_transformer("RandomCutout")
+        self.assertIsInstance(transformer, RandomCutoutTransform)
+
+    def test_dispatch_transformer_applies_to_2d_and_3d(self):
+        """Test that a dispatched transformer can be applied to both 2D and 3D tensors."""
+        cfg = OmegaConf.create({"RandomCutout": {"n_spatial_dims": 3, "p": 1.0, "fill_value": -1.0}})
+        transformer = get_transformer(cfg)
+
+        volume = torch.rand(2, 8, 12, 12)
+        result = transformer(volume)
+        self.assertEqual(result.shape, volume.shape)
 
 
 class TestEdgeCases(unittest.TestCase):

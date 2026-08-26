@@ -404,6 +404,245 @@ class SynchronizedRandomHorizontalFlip:
         return tensors
 
 
+class RandomGaussianNoiseTransform:
+    """Add zero-mean Gaussian noise with a randomly sampled standard deviation.
+
+    Useful to synthesize noisy inputs for training/evaluating denoising models. Operates
+    elementwise, so the same transform applies to 2D images (e.g. (C, H, W)) and 3D
+    volumes (e.g. (C, D, H, W)).
+    """
+
+    def __init__(self, sigma_min=0.0, sigma_max=0.1, p=1.0, generator=None):
+        """Initialize the RandomGaussianNoiseTransform.
+
+        Args:
+            sigma_min (float): Minimum standard deviation of the noise to sample from.
+            sigma_max (float): Maximum standard deviation of the noise to sample from.
+            p (float): Probability of applying the transform. Default is 1.0.
+            generator (torch.Generator, optional): Random number generator for deterministic behavior.
+        """
+        if sigma_min < 0 or sigma_max < sigma_min:
+            raise ValueError(f"Invalid sigma range [{sigma_min}, {sigma_max}].")
+        self.sigma_min = sigma_min
+        self.sigma_max = sigma_max
+        self.p = p
+        self.generator = generator
+
+    def __call__(self, t):
+        if torch.rand((), generator=self.generator).item() >= self.p:
+            return t
+
+        sigma = self.sigma_min + (self.sigma_max - self.sigma_min) * torch.rand((), generator=self.generator).item()
+        noise = torch.randn(t.shape, generator=self.generator).to(dtype=t.dtype, device=t.device)
+        return t + noise * sigma
+
+
+class RandomPoissonNoiseTransform:
+    """Add signal-dependent Poisson (shot) noise, as seen in low-dose CT / photon-limited imaging.
+
+    The input is scaled up to a randomly sampled level, Poisson noise is drawn at that
+    scale, and the result is scaled back down. Operates elementwise, so the same
+    transform applies to 2D images and 3D volumes. Assumes non-negative input intensities
+    (negative values are clamped to 0 before noise is drawn).
+    """
+
+    def __init__(self, scale_min=0.5, scale_max=1.0, p=1.0, generator=None):
+        """Initialize the RandomPoissonNoiseTransform.
+
+        Args:
+            scale_min (float): Minimum scale factor applied before drawing Poisson noise.
+                Lower scale means relatively more noise. Must be > 0.
+            scale_max (float): Maximum scale factor applied before drawing Poisson noise.
+            p (float): Probability of applying the transform. Default is 1.0.
+            generator (torch.Generator, optional): Random number generator for deterministic behavior.
+        """
+        if scale_min <= 0 or scale_max < scale_min:
+            raise ValueError(f"Invalid scale range [{scale_min}, {scale_max}].")
+        self.scale_min = scale_min
+        self.scale_max = scale_max
+        self.p = p
+        self.generator = generator
+
+    def __call__(self, t):
+        if torch.rand((), generator=self.generator).item() >= self.p:
+            return t
+
+        scale = self.scale_min + (self.scale_max - self.scale_min) * torch.rand((), generator=self.generator).item()
+        rate = t.clamp(min=0).cpu() * scale
+        noisy = torch.poisson(rate, generator=self.generator) / scale
+        return noisy.to(dtype=t.dtype, device=t.device)
+
+
+class RandomSaltPepperNoiseTransform:
+    """Randomly overwrite a fraction of elements with extreme 'salt' and 'pepper' values.
+
+    Simulates impulse noise / dead-pixel artifacts. Operates elementwise, so the same
+    transform applies to 2D images and 3D volumes.
+    """
+
+    def __init__(self, amount=0.02, salt_vs_pepper=0.5, salt_value=1.0, pepper_value=0.0, p=1.0, generator=None):
+        """Initialize the RandomSaltPepperNoiseTransform.
+
+        Args:
+            amount (float): Fraction of elements to corrupt, in [0, 1].
+            salt_vs_pepper (float): Fraction of corrupted elements set to `salt_value`
+                (the remainder are set to `pepper_value`), in [0, 1].
+            salt_value (float): Value written for 'salt' elements.
+            pepper_value (float): Value written for 'pepper' elements.
+            p (float): Probability of applying the transform. Default is 1.0.
+            generator (torch.Generator, optional): Random number generator for deterministic behavior.
+        """
+        if not 0.0 <= amount <= 1.0:
+            raise ValueError(f"amount must be in [0, 1], got {amount}.")
+        if not 0.0 <= salt_vs_pepper <= 1.0:
+            raise ValueError(f"salt_vs_pepper must be in [0, 1], got {salt_vs_pepper}.")
+        self.amount = amount
+        self.salt_vs_pepper = salt_vs_pepper
+        self.salt_value = salt_value
+        self.pepper_value = pepper_value
+        self.p = p
+        self.generator = generator
+
+    def __call__(self, t):
+        if torch.rand((), generator=self.generator).item() >= self.p:
+            return t
+
+        corrupted = torch.rand(t.shape, generator=self.generator) < self.amount
+        salt = corrupted & (torch.rand(t.shape, generator=self.generator) < self.salt_vs_pepper)
+        pepper = corrupted & ~salt
+
+        out = t.clone()
+        out[salt.to(out.device)] = self.salt_value
+        out[pepper.to(out.device)] = self.pepper_value
+        return out
+
+
+class RandomCutoutTransform:
+    """Overwrite one or more randomly placed, randomly sized hyper-rectangular regions.
+
+    Covers parts of an image (or volume) with a constant fill value, which is useful for
+    forcing a denoising model to reconstruct missing/occluded content. Operates on the
+    trailing `n_spatial_dims` dimensions of the tensor, so the same transform works on 2D
+    images shaped (..., H, W) with `n_spatial_dims=2` and on 3D volumes shaped
+    (..., D, H, W) with `n_spatial_dims=3`.
+    """
+
+    def __init__(
+        self, n_spatial_dims=2, num_patches=1, min_frac=0.1, max_frac=0.5, fill_value=0.0, p=0.5, generator=None
+    ):
+        """Initialize the RandomCutoutTransform.
+
+        Args:
+            n_spatial_dims (int): Number of trailing tensor dimensions considered spatial
+                (2 for images (..., H, W), 3 for volumes (..., D, H, W)).
+            num_patches (int): Number of independent patches to cut out.
+            min_frac (float): Minimum patch size, as a fraction of each spatial dimension.
+            max_frac (float): Maximum patch size, as a fraction of each spatial dimension.
+            fill_value (float): Value written into the cutout region(s).
+            p (float): Probability of applying the transform. Default is 0.5.
+            generator (torch.Generator, optional): Random number generator for deterministic behavior.
+        """
+        if n_spatial_dims < 1:
+            raise ValueError(f"n_spatial_dims must be >= 1, got {n_spatial_dims}.")
+        if not 0.0 < min_frac <= max_frac <= 1.0:
+            raise ValueError(f"Invalid fraction range [{min_frac}, {max_frac}].")
+        self.n_spatial_dims = n_spatial_dims
+        self.num_patches = num_patches
+        self.min_frac = min_frac
+        self.max_frac = max_frac
+        self.fill_value = fill_value
+        self.p = p
+        self.generator = generator
+
+    def __call__(self, t):
+        if t.dim() < self.n_spatial_dims:
+            raise ValueError(f"Tensor with {t.dim()} dims is smaller than n_spatial_dims={self.n_spatial_dims}.")
+        if torch.rand((), generator=self.generator).item() >= self.p:
+            return t
+
+        out = t.clone()
+        spatial_shape = t.shape[-self.n_spatial_dims :]
+        leading_dims = t.dim() - self.n_spatial_dims
+
+        for _ in range(self.num_patches):
+            slices = [slice(None)] * leading_dims
+            for dim_size in spatial_shape:
+                frac = self.min_frac + (self.max_frac - self.min_frac) * torch.rand((), generator=self.generator).item()
+                size = max(1, min(dim_size, int(round(dim_size * frac))))
+                start = torch.randint(0, dim_size - size + 1, (), generator=self.generator).item()
+                slices.append(slice(start, start + size))
+            out[tuple(slices)] = self.fill_value
+
+        return out
+
+
+class RandomBrightnessContrastTransform:
+    """Randomly jitter brightness (additive) and contrast (multiplicative around the mean).
+
+    Standard photometric augmentation. Operates elementwise, so it applies identically to
+    2D images and 3D volumes.
+    """
+
+    def __init__(self, brightness=0.2, contrast=0.2, p=0.5, generator=None):
+        """Initialize the RandomBrightnessContrastTransform.
+
+        Args:
+            brightness (float): Maximum absolute brightness shift, sampled uniformly from
+                [-brightness, brightness].
+            contrast (float): Maximum relative contrast change, sampled uniformly from
+                [1 - contrast, 1 + contrast].
+            p (float): Probability of applying the transform. Default is 0.5.
+            generator (torch.Generator, optional): Random number generator for deterministic behavior.
+        """
+        if brightness < 0 or contrast < 0:
+            raise ValueError("brightness and contrast must be non-negative.")
+        self.brightness = brightness
+        self.contrast = contrast
+        self.p = p
+        self.generator = generator
+
+    def __call__(self, t):
+        if torch.rand((), generator=self.generator).item() >= self.p:
+            return t
+
+        brightness_delta = (torch.rand((), generator=self.generator).item() * 2 - 1) * self.brightness
+        contrast_factor = 1.0 + (torch.rand((), generator=self.generator).item() * 2 - 1) * self.contrast
+
+        mean = t.mean()
+        return (t - mean) * contrast_factor + mean + brightness_delta
+
+
+class RandomGammaTransform:
+    """Apply a randomly sampled gamma correction: sign(t) * |t| ** gamma.
+
+    Simulates non-linear intensity variations (e.g. scanner/detector response). Operates
+    elementwise, so it applies identically to 2D images and 3D volumes.
+    """
+
+    def __init__(self, gamma_min=0.7, gamma_max=1.5, p=0.5, generator=None):
+        """Initialize the RandomGammaTransform.
+
+        Args:
+            gamma_min (float): Minimum gamma value to sample from. Must be > 0.
+            gamma_max (float): Maximum gamma value to sample from. Must be >= gamma_min.
+            p (float): Probability of applying the transform. Default is 0.5.
+            generator (torch.Generator, optional): Random number generator for deterministic behavior.
+        """
+        if gamma_min <= 0 or gamma_max < gamma_min:
+            raise ValueError(f"Invalid gamma range [{gamma_min}, {gamma_max}].")
+        self.gamma_min = gamma_min
+        self.gamma_max = gamma_max
+        self.p = p
+        self.generator = generator
+
+    def __call__(self, t):
+        if torch.rand((), generator=self.generator).item() >= self.p:
+            return t
+
+        gamma = self.gamma_min + (self.gamma_max - self.gamma_min) * torch.rand((), generator=self.generator).item()
+        return t.sign() * t.abs().pow(gamma)
+
+
 def get_transformers(t_defs: Any) -> transforms.Compose:
     """Compose a sequence of transformers specified by their names or configuration dictionaries.
 
@@ -517,6 +756,59 @@ def get_transformer_by_names(transformer_name: str, parameters: dict[str, Any] |
 
     elif transformer_name == "SynchronizedRandomVerticalFlip":
         transformer = SynchronizedRandomVerticalFlip(p=0.5 if parameters is None else parameters.get("p", 0.5))
+
+    elif transformer_name == "RandomGaussianNoise":
+        params = parameters or {}
+        transformer = RandomGaussianNoiseTransform(
+            sigma_min=params.get("sigma_min", 0.0),
+            sigma_max=params.get("sigma_max", 0.1),
+            p=params.get("p", 1.0),
+        )
+
+    elif transformer_name == "RandomPoissonNoise":
+        params = parameters or {}
+        transformer = RandomPoissonNoiseTransform(
+            scale_min=params.get("scale_min", 0.5),
+            scale_max=params.get("scale_max", 1.0),
+            p=params.get("p", 1.0),
+        )
+
+    elif transformer_name == "RandomSaltPepperNoise":
+        params = parameters or {}
+        transformer = RandomSaltPepperNoiseTransform(
+            amount=params.get("amount", 0.02),
+            salt_vs_pepper=params.get("salt_vs_pepper", 0.5),
+            salt_value=params.get("salt_value", 1.0),
+            pepper_value=params.get("pepper_value", 0.0),
+            p=params.get("p", 1.0),
+        )
+
+    elif transformer_name == "RandomCutout":
+        params = parameters or {}
+        transformer = RandomCutoutTransform(
+            n_spatial_dims=params.get("n_spatial_dims", 2),
+            num_patches=params.get("num_patches", 1),
+            min_frac=params.get("min_frac", 0.1),
+            max_frac=params.get("max_frac", 0.5),
+            fill_value=params.get("fill_value", 0.0),
+            p=params.get("p", 0.5),
+        )
+
+    elif transformer_name == "RandomBrightnessContrast":
+        params = parameters or {}
+        transformer = RandomBrightnessContrastTransform(
+            brightness=params.get("brightness", 0.2),
+            contrast=params.get("contrast", 0.2),
+            p=params.get("p", 0.5),
+        )
+
+    elif transformer_name == "RandomGamma":
+        params = parameters or {}
+        transformer = RandomGammaTransform(
+            gamma_min=params.get("gamma_min", 0.7),
+            gamma_max=params.get("gamma_max", 1.5),
+            p=params.get("p", 0.5),
+        )
 
     elif transformer_name == "ToTensor":
         # transformer = transforms.ToTensor() # deprecated
@@ -637,6 +929,56 @@ def get_transformer(t_defs: Any) -> Callable:
 
     RandomVerticalFlip
     Vertically flip the input with probability p (default=0.5).
+
+    RandomGaussianNoise:
+    Adds zero-mean Gaussian noise with a standard deviation sampled uniformly from
+    ['sigma_min', 'sigma_max'], applied with probability 'p'. Works on 2D images and
+    3D volumes alike (elementwise).
+    - sigma_min (float): Default 0.0.
+    - sigma_max (float): Default 0.1.
+    - p (float): Default 1.0.
+
+    RandomPoissonNoise:
+    Adds signal-dependent Poisson (shot) noise, as seen in low-dose CT / photon-limited
+    imaging, applied with probability 'p'. Assumes non-negative input intensities.
+    - scale_min (float): Default 0.5.
+    - scale_max (float): Default 1.0.
+    - p (float): Default 1.0.
+
+    RandomSaltPepperNoise:
+    Randomly overwrites a fraction 'amount' of elements with 'salt_value' or
+    'pepper_value' (impulse noise / dead-pixel artifacts), applied with probability 'p'.
+    - amount (float): Fraction of elements corrupted. Default 0.02.
+    - salt_vs_pepper (float): Fraction of corrupted elements set to 'salt_value'. Default 0.5.
+    - salt_value (float): Default 1.0.
+    - pepper_value (float): Default 0.0.
+    - p (float): Default 1.0.
+
+    RandomCutout:
+    Overwrites one or more randomly placed, randomly sized hyper-rectangular regions
+    with 'fill_value', applied with probability 'p'. Operates on the trailing
+    'n_spatial_dims' dimensions, so the same transform works on 2D images
+    (n_spatial_dims=2) and 3D volumes (n_spatial_dims=3).
+    - n_spatial_dims (int): Default 2.
+    - num_patches (int): Default 1.
+    - min_frac (float): Minimum patch size as a fraction of each spatial dim. Default 0.1.
+    - max_frac (float): Maximum patch size as a fraction of each spatial dim. Default 0.5.
+    - fill_value (float): Default 0.0.
+    - p (float): Default 0.5.
+
+    RandomBrightnessContrast:
+    Randomly jitters brightness (additive) and contrast (multiplicative around the
+    mean), applied with probability 'p'.
+    - brightness (float): Max absolute shift, sampled from [-brightness, brightness]. Default 0.2.
+    - contrast (float): Max relative change, sampled from [1-contrast, 1+contrast]. Default 0.2.
+    - p (float): Default 0.5.
+
+    RandomGamma:
+    Applies a randomly sampled gamma correction sign(t) * |t| ** gamma, applied with
+    probability 'p'.
+    - gamma_min (float): Default 0.7.
+    - gamma_max (float): Default 1.5.
+    - p (float): Default 0.5.
 
     ToTensor::
     https://pytorch.org/vision/main/generated/torchvision.transforms.ToTensor.html
