@@ -576,6 +576,66 @@ class RandomCutoutTransform:
         return out
 
 
+class RandomEdgeMaskTransform:
+    """Overwrite a region anchored to one edge of an image, covering a chosen fraction of that axis.
+
+    Unlike RandomCutoutTransform (which picks an independently sized *and positioned* box,
+    floating anywhere in the image), this always anchors the masked region flush against one
+    edge (the start or the end of the chosen axis) - useful for outpainting tasks where a model
+    must reconstruct a region given only what's visible beyond a clean, edge-to-edge boundary.
+    With frac=0.5 (the default) this masks exactly half of the axis; other fractions give a
+    harder (frac > 0.5) or easier (frac < 0.5) outpainting task. Operates on the last two
+    dimensions of the tensor (..., H, W).
+    """
+
+    def __init__(self, axis="w", side="random", frac=0.5, fill_value=0.0, p=1.0, generator=None):
+        """Initialize the RandomEdgeMaskTransform.
+
+        Args:
+            axis (str): Which spatial axis to mask along. 'w' masks left/right, 'h' masks
+                top/bottom. Default 'w'.
+            side (str): Which edge the masked region is anchored to. 'first' anchors it to
+                the top/left edge, 'second' to the bottom/right edge, 'random' picks one at
+                random on every call. Default 'random'.
+            frac (float): Fraction of the axis to mask, in (0, 1]. Default 0.5 (exactly half).
+            fill_value (float): Value written into the masked region. Default 0.0.
+            p (float): Probability of applying the transform; when skipped the image is
+                returned unchanged (nothing masked). Default 1.0.
+            generator (torch.Generator, optional): Random number generator for deterministic behavior.
+        """
+        if axis not in ("h", "w"):
+            raise ValueError(f"axis must be 'h' or 'w', got {axis!r}.")
+        if side not in ("first", "second", "random"):
+            raise ValueError(f"side must be 'first', 'second' or 'random', got {side!r}.")
+        if not 0.0 < frac <= 1.0:
+            raise ValueError(f"frac must be in (0, 1], got {frac}.")
+        self.axis = axis
+        self.side = side
+        self.frac = frac
+        self.fill_value = fill_value
+        self.p = p
+        self.generator = generator
+
+    def __call__(self, t):
+        if torch.rand((), generator=self.generator).item() >= self.p:
+            return t
+
+        dim = t.dim() - 1 if self.axis == "w" else t.dim() - 2
+        size = t.shape[dim]
+        mask_size = max(1, min(size, int(round(size * self.frac))))
+
+        if self.side == "random":
+            mask_first = torch.rand((), generator=self.generator).item() < 0.5
+        else:
+            mask_first = self.side == "first"
+
+        out = t.clone()
+        idx = [slice(None)] * t.dim()
+        idx[dim] = slice(0, mask_size) if mask_first else slice(size - mask_size, size)
+        out[tuple(idx)] = self.fill_value
+        return out
+
+
 class RandomBrightnessContrastTransform:
     """Randomly jitter brightness (additive) and contrast (multiplicative around the mean).
 
@@ -794,6 +854,16 @@ def get_transformer_by_names(transformer_name: str, parameters: dict[str, Any] |
             p=params.get("p", 0.5),
         )
 
+    elif transformer_name == "RandomEdgeMask":
+        params = parameters or {}
+        transformer = RandomEdgeMaskTransform(
+            axis=params.get("axis", "w"),
+            side=params.get("side", "random"),
+            frac=params.get("frac", 0.5),
+            fill_value=params.get("fill_value", 0.0),
+            p=params.get("p", 1.0),
+        )
+
     elif transformer_name == "RandomBrightnessContrast":
         params = parameters or {}
         transformer = RandomBrightnessContrastTransform(
@@ -965,6 +1035,17 @@ def get_transformer(t_defs: Any) -> Callable:
     - max_frac (float): Maximum patch size as a fraction of each spatial dim. Default 0.5.
     - fill_value (float): Default 0.0.
     - p (float): Default 0.5.
+
+    RandomEdgeMask:
+    Overwrites a region anchored to one edge of the image, covering 'frac' of one spatial
+    axis, with 'fill_value', applied with probability 'p'. Unlike RandomCutout (which floats
+    a box anywhere in the image), the masked region always starts flush against an edge -
+    useful for outpainting tasks. frac=0.5 (the default) masks exactly half the axis.
+    - axis (str): 'w' masks left/right, 'h' masks top/bottom. Default 'w'.
+    - side (str): 'first', 'second', or 'random' (resampled every call). Default 'random'.
+    - frac (float): Fraction of the axis to mask, in (0, 1]. Default 0.5.
+    - fill_value (float): Default 0.0.
+    - p (float): Default 1.0.
 
     RandomBrightnessContrast:
     Randomly jitters brightness (additive) and contrast (multiplicative around the
