@@ -593,7 +593,10 @@ class RandomCutoutTransform:
                 slices.append(slice(start, start + size))
             idx = tuple(slices)
             if self.fill_mode == "noise":
-                out[idx] = torch.randn(out[idx].shape, generator=self.generator).to(dtype=out.dtype, device=out.device) * self.noise_std
+                out[idx] = (
+                    torch.randn(out[idx].shape, generator=self.generator).to(dtype=out.dtype, device=out.device)
+                    * self.noise_std
+                )
             else:
                 out[idx] = self.fill_value
 
@@ -677,7 +680,10 @@ class RandomEdgeMaskTransform:
         idx[dim] = slice(0, mask_size) if mask_first else slice(size - mask_size, size)
         idx = tuple(idx)
         if self.fill_mode == "noise":
-            out[idx] = torch.randn(out[idx].shape, generator=self.generator).to(dtype=out.dtype, device=out.device) * self.noise_std
+            out[idx] = (
+                torch.randn(out[idx].shape, generator=self.generator).to(dtype=out.dtype, device=out.device)
+                * self.noise_std
+            )
         else:
             out[idx] = self.fill_value
         return out
