@@ -520,15 +520,26 @@ class RandomSaltPepperNoiseTransform:
 class RandomCutoutTransform:
     """Overwrite one or more randomly placed, randomly sized hyper-rectangular regions.
 
-    Covers parts of an image (or volume) with a constant fill value, which is useful for
-    forcing a denoising model to reconstruct missing/occluded content. Operates on the
-    trailing `n_spatial_dims` dimensions of the tensor, so the same transform works on 2D
-    images shaped (..., H, W) with `n_spatial_dims=2` and on 3D volumes shaped
-    (..., D, H, W) with `n_spatial_dims=3`.
+    Covers parts of an image (or volume) with a constant fill value or with random noise,
+    which is useful for forcing a denoising model to reconstruct missing/occluded content.
+    A constant fill is trivially detectable (the model can just check "is this patch exactly
+    `fill_value`?" instead of learning to use the surrounding context) - use `fill_mode="noise"`
+    to close that shortcut. Operates on the trailing `n_spatial_dims` dimensions of the
+    tensor, so the same transform works on 2D images shaped (..., H, W) with
+    `n_spatial_dims=2` and on 3D volumes shaped (..., D, H, W) with `n_spatial_dims=3`.
     """
 
     def __init__(
-        self, n_spatial_dims=2, num_patches=1, min_frac=0.1, max_frac=0.5, fill_value=0.0, p=0.5, generator=None
+        self,
+        n_spatial_dims=2,
+        num_patches=1,
+        min_frac=0.1,
+        max_frac=0.5,
+        fill_mode="constant",
+        fill_value=0.0,
+        noise_std=1.0,
+        p=0.5,
+        generator=None,
     ):
         """Initialize the RandomCutoutTransform.
 
@@ -538,7 +549,12 @@ class RandomCutoutTransform:
             num_patches (int): Number of independent patches to cut out.
             min_frac (float): Minimum patch size, as a fraction of each spatial dimension.
             max_frac (float): Maximum patch size, as a fraction of each spatial dimension.
-            fill_value (float): Value written into the cutout region(s).
+            fill_mode (str): 'constant' fills the region with `fill_value`, 'noise' fills it
+                with zero-mean Gaussian noise (std `noise_std`) instead. Default 'constant'.
+            fill_value (float): Value written into the cutout region(s) when
+                fill_mode='constant'. Default 0.0.
+            noise_std (float): Standard deviation of the noise written into the cutout
+                region(s) when fill_mode='noise'. Default 1.0.
             p (float): Probability of applying the transform. Default is 0.5.
             generator (torch.Generator, optional): Random number generator for deterministic behavior.
         """
@@ -546,11 +562,15 @@ class RandomCutoutTransform:
             raise ValueError(f"n_spatial_dims must be >= 1, got {n_spatial_dims}.")
         if not 0.0 < min_frac <= max_frac <= 1.0:
             raise ValueError(f"Invalid fraction range [{min_frac}, {max_frac}].")
+        if fill_mode not in ("constant", "noise"):
+            raise ValueError(f"fill_mode must be 'constant' or 'noise', got {fill_mode!r}.")
         self.n_spatial_dims = n_spatial_dims
         self.num_patches = num_patches
         self.min_frac = min_frac
         self.max_frac = max_frac
+        self.fill_mode = fill_mode
         self.fill_value = fill_value
+        self.noise_std = noise_std
         self.p = p
         self.generator = generator
 
@@ -571,7 +591,14 @@ class RandomCutoutTransform:
                 size = max(1, min(dim_size, int(round(dim_size * frac))))
                 start = torch.randint(0, dim_size - size + 1, (), generator=self.generator).item()
                 slices.append(slice(start, start + size))
-            out[tuple(slices)] = self.fill_value
+            idx = tuple(slices)
+            if self.fill_mode == "noise":
+                out[idx] = (
+                    torch.randn(out[idx].shape, generator=self.generator).to(dtype=out.dtype, device=out.device)
+                    * self.noise_std
+                )
+            else:
+                out[idx] = self.fill_value
 
         return out
 
@@ -588,7 +615,17 @@ class RandomEdgeMaskTransform:
     dimensions of the tensor (..., H, W).
     """
 
-    def __init__(self, axis="w", side="random", frac=0.5, fill_value=0.0, p=1.0, generator=None):
+    def __init__(
+        self,
+        axis="w",
+        side="random",
+        frac=0.5,
+        fill_mode="constant",
+        fill_value=0.0,
+        noise_std=1.0,
+        p=1.0,
+        generator=None,
+    ):
         """Initialize the RandomEdgeMaskTransform.
 
         Args:
@@ -598,7 +635,12 @@ class RandomEdgeMaskTransform:
                 the top/left edge, 'second' to the bottom/right edge, 'random' picks one at
                 random on every call. Default 'random'.
             frac (float): Fraction of the axis to mask, in (0, 1]. Default 0.5 (exactly half).
-            fill_value (float): Value written into the masked region. Default 0.0.
+            fill_mode (str): 'constant' fills the region with `fill_value`, 'noise' fills it
+                with zero-mean Gaussian noise (std `noise_std`) instead. Default 'constant'.
+            fill_value (float): Value written into the masked region when
+                fill_mode='constant'. Default 0.0.
+            noise_std (float): Standard deviation of the noise written into the masked
+                region when fill_mode='noise'. Default 1.0.
             p (float): Probability of applying the transform; when skipped the image is
                 returned unchanged (nothing masked). Default 1.0.
             generator (torch.Generator, optional): Random number generator for deterministic behavior.
@@ -609,10 +651,14 @@ class RandomEdgeMaskTransform:
             raise ValueError(f"side must be 'first', 'second' or 'random', got {side!r}.")
         if not 0.0 < frac <= 1.0:
             raise ValueError(f"frac must be in (0, 1], got {frac}.")
+        if fill_mode not in ("constant", "noise"):
+            raise ValueError(f"fill_mode must be 'constant' or 'noise', got {fill_mode!r}.")
         self.axis = axis
         self.side = side
         self.frac = frac
+        self.fill_mode = fill_mode
         self.fill_value = fill_value
+        self.noise_std = noise_std
         self.p = p
         self.generator = generator
 
@@ -632,7 +678,14 @@ class RandomEdgeMaskTransform:
         out = t.clone()
         idx = [slice(None)] * t.dim()
         idx[dim] = slice(0, mask_size) if mask_first else slice(size - mask_size, size)
-        out[tuple(idx)] = self.fill_value
+        idx = tuple(idx)
+        if self.fill_mode == "noise":
+            out[idx] = (
+                torch.randn(out[idx].shape, generator=self.generator).to(dtype=out.dtype, device=out.device)
+                * self.noise_std
+            )
+        else:
+            out[idx] = self.fill_value
         return out
 
 
@@ -850,7 +903,9 @@ def get_transformer_by_names(transformer_name: str, parameters: dict[str, Any] |
             num_patches=params.get("num_patches", 1),
             min_frac=params.get("min_frac", 0.1),
             max_frac=params.get("max_frac", 0.5),
+            fill_mode=params.get("fill_mode", "constant"),
             fill_value=params.get("fill_value", 0.0),
+            noise_std=params.get("noise_std", 1.0),
             p=params.get("p", 0.5),
         )
 
@@ -860,7 +915,9 @@ def get_transformer_by_names(transformer_name: str, parameters: dict[str, Any] |
             axis=params.get("axis", "w"),
             side=params.get("side", "random"),
             frac=params.get("frac", 0.5),
+            fill_mode=params.get("fill_mode", "constant"),
             fill_value=params.get("fill_value", 0.0),
+            noise_std=params.get("noise_std", 1.0),
             p=params.get("p", 1.0),
         )
 
@@ -1026,25 +1083,32 @@ def get_transformer(t_defs: Any) -> Callable:
 
     RandomCutout:
     Overwrites one or more randomly placed, randomly sized hyper-rectangular regions
-    with 'fill_value', applied with probability 'p'. Operates on the trailing
-    'n_spatial_dims' dimensions, so the same transform works on 2D images
+    with 'fill_value' or with noise, applied with probability 'p'. Operates on the
+    trailing 'n_spatial_dims' dimensions, so the same transform works on 2D images
     (n_spatial_dims=2) and 3D volumes (n_spatial_dims=3).
     - n_spatial_dims (int): Default 2.
     - num_patches (int): Default 1.
     - min_frac (float): Minimum patch size as a fraction of each spatial dim. Default 0.1.
     - max_frac (float): Maximum patch size as a fraction of each spatial dim. Default 0.5.
+    - fill_mode (str): 'constant' (uses 'fill_value') or 'noise' (uses 'noise_std'); noise
+      avoids giving the model a trivially-detectable flat region to key off of. Default 'constant'.
     - fill_value (float): Default 0.0.
+    - noise_std (float): Default 1.0.
     - p (float): Default 0.5.
 
     RandomEdgeMask:
     Overwrites a region anchored to one edge of the image, covering 'frac' of one spatial
-    axis, with 'fill_value', applied with probability 'p'. Unlike RandomCutout (which floats
-    a box anywhere in the image), the masked region always starts flush against an edge -
-    useful for outpainting tasks. frac=0.5 (the default) masks exactly half the axis.
+    axis, with 'fill_value' or with noise, applied with probability 'p'. Unlike RandomCutout
+    (which floats a box anywhere in the image), the masked region always starts flush
+    against an edge - useful for outpainting tasks. frac=0.5 (the default) masks exactly
+    half the axis.
     - axis (str): 'w' masks left/right, 'h' masks top/bottom. Default 'w'.
     - side (str): 'first', 'second', or 'random' (resampled every call). Default 'random'.
     - frac (float): Fraction of the axis to mask, in (0, 1]. Default 0.5.
+    - fill_mode (str): 'constant' (uses 'fill_value') or 'noise' (uses 'noise_std').
+      Default 'constant'.
     - fill_value (float): Default 0.0.
+    - noise_std (float): Default 1.0.
     - p (float): Default 1.0.
 
     RandomBrightnessContrast:
