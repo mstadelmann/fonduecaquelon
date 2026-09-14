@@ -57,14 +57,27 @@ needed for regular training and testing on an AMD GPU. If you have an AMD GPU, i
 extra instead of `gpu`/`full`, using [uv](https://docs.astral.sh/uv/):
 
 ```bash
-uv pip install "fdq[amd]"
+# from within a clone of this repo (dev / editable install):
+uv pip install -e ".[amd]"
+
+# installing the published fdq package instead (no local checkout) — pass the ROCm
+# wheel index explicitly, since it only comes for free inside this repo (see below):
+uv pip install \
+  --index-url https://download.pytorch.org/whl/rocm7.2 \
+  --extra-index-url https://pypi.org/simple \
+  --index-strategy unsafe-best-match \
+  "fdq[amd]"
 ```
 
 This resolves `torch`/`torchvision` from the ROCm wheel index (currently pinned to a tested
 `torch==2.13.0+rocm7.2` / `torchvision==0.28.0+rocm7.2` combination) instead of PyPI's default
-CUDA-bundled wheels — no separate manual install step needed. (Plain `pip` cannot follow the
-custom package index a pyproject.toml `[tool.uv.sources]` entry points to, so the `amd` extra
-requires `uv`.)
+CUDA-bundled wheels. Inside this repo, `pyproject.toml`'s `[tool.uv.sources]` routes the `amd`
+extra's `torch`/`torchvision`/`triton-rocm` to that index automatically — but that routing is a
+uv/pyproject.toml-only mechanism that never travels with the built `fdq` wheel itself, so anyone
+installing the published package (not a repo checkout) needs the explicit `--index-url` flags
+above. (Either way it has to be `uv`, not plain `pip` — pip has no equivalent to `--index-strategy
+unsafe-best-match`/`[tool.uv.sources]` for resolving one dependency from a different index than
+the rest.)
 
 There is no `gpu`-equivalent extra for AMD: `torch_tensorrt`/`pycuda` are NVIDIA-only and have no
 ROCm counterpart in FDQ. As a consequence, the "Torch.compile() model" step under
@@ -72,9 +85,8 @@ ROCm counterpart in FDQ. As a consequence, the "Torch.compile() model" step unde
 running. Everything else — training, DDP, checkpointing, ONNX export, JIT trace/script,
 `torch.compile()` without a TensorRT backend — works the same on both vendors.
 
-SLURM cluster submission (`slurm_cluster` in the config) currently targets NVIDIA nodes only
-(module loading and package installation assume a CUDA environment); AMD SLURM partitions are not
-yet supported.
+SLURM cluster submission also supports AMD nodes — see `gpu_vendor` in the
+[SLURM Cluster Execution](#slurm-cluster-execution) section below.
 
 
 ## 📖 Usage
@@ -136,6 +148,20 @@ globals:
 ```
 
 If `uv_cache_dir` is omitted, caching is skipped and packages are always downloaded from source. If set, the job creates the directory when missing; if it cannot be created or is not readable/writable, the job prints a warning and falls back to downloading from source instead of failing.
+
+#### Submitting to an AMD partition
+
+Set `gpu_vendor: amd` (default is `nvidia`):
+
+```yaml
+slurm_cluster:
+  gpu_vendor: amd
+  gres: "gpu:mi300:1"   # gres is a free-form string; use whatever your cluster calls its AMD GPUs
+```
+
+With `gpu_vendor: amd`, the generated job installs the `amd` extra (with the ROCm wheel index passed explicitly on the install command, the same way [the AMD / ROCm GPU Support section above](#amd--rocm-gpu-support) does for a manual `uv` install) instead of `fdq[gpu]`. Everything else (`gres`, `partition`, `account`, `cpus_per_task`, ...) works exactly as for NVIDIA. Leaving `gpu_vendor` unset keeps the exact NVIDIA behavior FDQ has always had.
+
+`cuda_env_module` exists because CUDA toolkits are typically version-selected via an environment module on a cluster. ROCm is often installed system-wide on AMD nodes instead (baked into the node image rather than offered as a module) — on at least one cluster we tested against, `module av` lists no `rocm/*` (or even `cuda/*`) module at all, and ROCm is simply present at `/opt/rocm`. For that reason there's an optional `rocm_env_module` field (parallel to `cuda_env_module`, loaded independently), but leave it unset unless your cluster actually offers a versioned ROCm module — check with `module av` on the target partition first.
 
 When submitting jobs to a Slurm cluster, the only supported modes are:
 ```yaml

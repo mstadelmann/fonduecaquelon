@@ -29,6 +29,13 @@ class FDQSubmitError(Exception):
     pass
 
 
+# Must match the ROCm wheel index pinned for the "amd" extra in pyproject.toml
+# ([[tool.uv.index]] / [tool.uv.sources]), since that pyproject.toml config only
+# applies to local/editable installs run from within this repo - a job installing
+# the published wheel into a bare scratch venv needs the same index passed
+# explicitly on the install command line.
+ROCM_INDEX_URL = "https://download.pytorch.org/whl/rocm7.2"
+
 PARAMETER_RANGE_RE = re.compile(
     r"^\s*"
     r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)"
@@ -112,6 +119,7 @@ SUBMIT_FILE_PATH=#submit_file_path#
 PY_MODULE=#python_env_module#
 UV_MODULE=#uv_env_module#
 CUDA_MODULE=#cuda_env_module#
+ROCM_MODULE=#rocm_env_module#
 UV_CACHE_DIR_CONFIG=#uv_cache_dir# # optional persistent uv cache dir; "None" disables it
 FDQ_VERSION=#fdq_version#
 FDQ_TEST_REPO=#fdq_test_repo# # if True, install fdq from https://test.pypi.org
@@ -161,6 +169,7 @@ echo "RESULTS_PATH: $RESULTS_PATH"
 echo "PYTHON MODULE: $PY_MODULE"
 echo "UV MODULE: $UV_MODULE"
 echo "CUDA MODULE: $CUDA_MODULE"
+echo "ROCM MODULE: $ROCM_MODULE"
 echo "UV CACHE DIR: $UV_CACHE_DIR_CONFIG"
 echo "FDQ VERSION: $FDQ_VERSION"
 echo "PARAMETER OVERRIDES: $PARAMETER_OVERRIDES"
@@ -190,6 +199,14 @@ if [ -n "$CUDA_MODULE" ] && [ "$CUDA_MODULE" != "None" ]; then
     echo "Loading CUDA module: $CUDA_MODULE"
     if ! VENV="fdqenv" module load "$CUDA_MODULE"; then
         echo "ERROR: Failed to load CUDA module $CUDA_MODULE"
+        exit 1
+    fi
+fi
+
+if [ -n "$ROCM_MODULE" ] && [ "$ROCM_MODULE" != "None" ]; then
+    echo "Loading ROCm module: $ROCM_MODULE"
+    if ! VENV="fdqenv" module load "$ROCM_MODULE"; then
+        echo "ERROR: Failed to load ROCm module $ROCM_MODULE"
         exit 1
     fi
 fi
@@ -228,14 +245,12 @@ fi
 echo "Installing FDQ version $FDQ_VERSION..."
 if [ "$FDQ_TEST_REPO" == True ]; then
     echo "Installing from TestPyPI with PyPI fallback..."
-    if ! uv pip install --index-url https://test.pypi.org/simple/ \
-        --extra-index-url https://pypi.org/simple \
-        --index-strategy unsafe-best-match "fdq[gpu]==$FDQ_VERSION"; then
+    if ! uv pip install #fdq_install_testrepo#; then
         echo "ERROR: Failed to install fdq (test + fallback)"
         exit 1
     fi
 else
-    if ! uv pip install "fdq[gpu]==$FDQ_VERSION"; then
+    if ! uv pip install #fdq_install_normal#; then
         echo "ERROR: Failed to install FDQ"
         exit 1
     fi
@@ -766,6 +781,8 @@ def get_default_config(slurm_conf: Any, mode_config: Any) -> dict[str, Any]:
         "python_env_module": None,
         "uv_env_module": None,
         "cuda_env_module": None,
+        "gpu_vendor": "nvidia",
+        "rocm_env_module": None,
         "uv_cache_dir": None,
         "fdq_version": None,
         "fdq_test_repo": False,
@@ -842,6 +859,11 @@ def check_config(job_config: dict[str, Any]) -> dict[str, Any]:
             f"Missing mandatory configuration fields: {', '.join(missing_fields)}. Please update your config file!"
         )
 
+    gpu_vendor = str(job_config.get("gpu_vendor") or "nvidia").strip().lower()
+    if gpu_vendor not in {"nvidia", "amd"}:
+        raise FDQSubmitError(f"slurm_cluster.gpu_vendor must be 'nvidia' or 'amd', got: {job_config['gpu_vendor']!r}")
+    job_config["gpu_vendor"] = gpu_vendor
+
     # Validate and normalize values
     for key, value in job_config.items():
         if value is None and key not in mandatory_fields:
@@ -874,6 +896,37 @@ def check_config(job_config: dict[str, Any]) -> dict[str, Any]:
     return job_config
 
 
+def _fdq_install_args(gpu_vendor: str) -> tuple[str, str]:
+    """Build the `uv pip install` arguments for the normal and TestPyPI install branches.
+
+    For NVIDIA (the default), this is byte-identical to the fixed `fdq[gpu]==$FDQ_VERSION`
+    command used before AMD support existed. For AMD, torch/torchvision/triton-rocm have no
+    ROCm build on plain PyPI, so the ROCm wheel index is added explicitly on the command
+    line (the `[tool.uv.sources]` routing in this repo's own pyproject.toml only applies to
+    local/editable installs, not to a job installing the published wheel from scratch).
+    """
+    extra = "amd" if gpu_vendor == "amd" else "gpu"
+    package_spec = f'"fdq[{extra}]==$FDQ_VERSION"'
+
+    if gpu_vendor == "amd":
+        normal = f"--index-url {ROCM_INDEX_URL} --index-strategy unsafe-best-match {package_spec}"
+        testrepo = (
+            "--index-url https://test.pypi.org/simple/ "
+            f"--extra-index-url {ROCM_INDEX_URL} "
+            "--extra-index-url https://pypi.org/simple "
+            f"--index-strategy unsafe-best-match {package_spec}"
+        )
+    else:
+        normal = package_spec
+        testrepo = (
+            "--index-url https://test.pypi.org/simple/ "
+            "--extra-index-url https://pypi.org/simple "
+            f"--index-strategy unsafe-best-match {package_spec}"
+        )
+
+    return normal, testrepo
+
+
 def create_submit_file(job_config: dict[str, Any], slurm_conf: Any, submit_path: str) -> None:
     """Create a SLURM submit file from the job configuration.
 
@@ -892,6 +945,11 @@ def create_submit_file(job_config: dict[str, Any], slurm_conf: Any, submit_path:
         job_config.setdefault("test_results_dir", "")
         job_config.setdefault("job_name", job_config.get("config_name", ""))
         job_config.setdefault("experiment_name", job_config.get("job_name", job_config.get("config_name", "")))
+        job_config.setdefault("gpu_vendor", "nvidia")
+        job_config.setdefault("rocm_env_module", "None")
+        job_config["fdq_install_normal"], job_config["fdq_install_testrepo"] = _fdq_install_args(
+            str(job_config["gpu_vendor"]).strip().lower()
+        )
 
         # stop_grace_time is documented/configured in minutes (see README), but SLURM's
         # --signal=[B:]sig_num@sig_time takes sig_time in seconds. Convert here so the
