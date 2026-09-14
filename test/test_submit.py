@@ -637,7 +637,7 @@ class TestGpuVendorSubmit(unittest.TestCase):
 
             self.assertIn(
                 f"if ! uv pip install --index-url {ROCM_INDEX_URL} "
-                '--extra-index-url https://pypi.org/simple '
+                "--extra-index-url https://pypi.org/simple "
                 '--index-strategy unsafe-best-match "fdq[amd]==$FDQ_VERSION"; then',
                 content,
             )
@@ -661,7 +661,7 @@ class TestGpuVendorSubmit(unittest.TestCase):
                 content = submit_file.read()
 
             self.assertIn(
-                f'if ! uv pip install --index-url {ROCM_INDEX_URL} --extra-index-url https://pypi.org/simple',
+                f"if ! uv pip install --index-url {ROCM_INDEX_URL} --extra-index-url https://pypi.org/simple",
                 content,
             )
 
