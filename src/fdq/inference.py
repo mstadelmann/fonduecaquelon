@@ -4,7 +4,7 @@ import onnxruntime as ort
 import numpy as np
 from fdq.ui_functions import getIntInput, save_images
 from typing import Any
-from fdq.misc import iprint
+from fdq.misc import iprint, eprint, is_rocm_build
 from fdq.testing import find_model_path
 from fdq.dump import get_example_tensor
 
@@ -173,6 +173,11 @@ def inference_model(experiment: Any) -> None:
 
     if experiment.is_distributed():
         raise ValueError("ERROR: Cannot run inference with world size > 1; please run in single process mode!")
+    if is_rocm_build():
+        eprint(
+            "ERROR: run_inference uses NVIDIA TensorRT/pycuda, which are not available on AMD/ROCm."
+        )
+        return
     experiment.setupData()
 
     onnx_path = find_onnx_models(experiment)

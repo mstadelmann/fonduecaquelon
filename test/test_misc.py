@@ -10,7 +10,19 @@ from unittest.mock import MagicMock, patch, call
 import torch
 from omegaconf import OmegaConf
 
-from fdq.misc import FDQmode, _log_wandb_images, init_wandb
+from fdq.misc import FDQmode, _log_wandb_images, init_wandb, is_rocm_build
+
+
+class TestIsRocmBuild(unittest.TestCase):
+    """Tests for the ROCm/CUDA build detection helper."""
+
+    def test_true_when_hip_version_present(self):
+        with patch.object(torch.version, "hip", "6.4.43483", create=True):
+            self.assertTrue(is_rocm_build())
+
+    def test_false_when_hip_version_absent(self):
+        with patch.object(torch.version, "hip", None, create=True):
+            self.assertFalse(is_rocm_build())
 
 
 class TestFDQmode(unittest.TestCase):

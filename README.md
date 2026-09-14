@@ -49,6 +49,33 @@ cd fonduecaquelon
 pip install -e ".[dev,gpu]"
 ```
 
+### AMD / ROCm GPU Support
+
+FDQ's core training, DDP, and checkpointing code uses PyTorch's `torch.cuda` API, which PyTorch's
+ROCm builds transparently map onto AMD GPUs (HIP/RCCL under the hood) — no FDQ code changes are
+needed for regular training and testing on an AMD GPU. If you have an AMD GPU, install the `amd`
+extra instead of `gpu`/`full`, using [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv pip install "fdq[amd]"
+```
+
+This resolves `torch`/`torchvision` from the ROCm wheel index (currently pinned to a tested
+`torch==2.13.0+rocm7.2` / `torchvision==0.28.0+rocm7.2` combination) instead of PyPI's default
+CUDA-bundled wheels — no separate manual install step needed. (Plain `pip` cannot follow the
+custom package index a pyproject.toml `[tool.uv.sources]` entry points to, so the `amd` extra
+requires `uv`.)
+
+There is no `gpu`-equivalent extra for AMD: `torch_tensorrt`/`pycuda` are NVIDIA-only and have no
+ROCm counterpart in FDQ. As a consequence, the "Torch.compile() model" step under
+`mode.dump_model` and the `mode.run_inference` mode both print a clear message and skip instead of
+running. Everything else — training, DDP, checkpointing, ONNX export, JIT trace/script,
+`torch.compile()` without a TensorRT backend — works the same on both vendors.
+
+SLURM cluster submission (`slurm_cluster` in the config) currently targets NVIDIA nodes only
+(module loading and package installation assume a CUDA environment); AMD SLURM partitions are not
+yet supported.
+
 
 ## 📖 Usage
 
