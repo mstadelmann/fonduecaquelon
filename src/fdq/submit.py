@@ -909,7 +909,11 @@ def _fdq_install_args(gpu_vendor: str) -> tuple[str, str]:
     package_spec = f'"fdq[{extra}]==$FDQ_VERSION"'
 
     if gpu_vendor == "amd":
-        normal = f"--index-url {ROCM_INDEX_URL} --index-strategy unsafe-best-match {package_spec}"
+        normal = (
+            f"--index-url {ROCM_INDEX_URL} "
+            "--extra-index-url https://pypi.org/simple "
+            f"--index-strategy unsafe-best-match {package_spec}"
+        )
         testrepo = (
             "--index-url https://test.pypi.org/simple/ "
             f"--extra-index-url {ROCM_INDEX_URL} "
@@ -989,7 +993,11 @@ def create_submit_file(job_config: dict[str, Any], slurm_conf: Any, submit_path:
             # AMD, route it through the ROCm index too, or it silently reinstalls a vanilla
             # CUDA torch build over the correct ROCm one installed just above.
             if str(job_config.get("gpu_vendor", "nvidia")).strip().lower() == "amd":
-                index_args = f"--index-url {ROCM_INDEX_URL} --index-strategy unsafe-best-match "
+                index_args = (
+                    f"--index-url {ROCM_INDEX_URL} "
+                    "--extra-index-url https://pypi.org/simple "
+                    "--index-strategy unsafe-best-match "
+                )
             else:
                 index_args = ""
             packages_cmd = "\n".join(f"uv pip install {index_args}'{pkg}'" for pkg in add_packages)

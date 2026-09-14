@@ -637,12 +637,33 @@ class TestGpuVendorSubmit(unittest.TestCase):
 
             self.assertIn(
                 f"if ! uv pip install --index-url {ROCM_INDEX_URL} "
+                '--extra-index-url https://pypi.org/simple '
                 '--index-strategy unsafe-best-match "fdq[amd]==$FDQ_VERSION"; then',
                 content,
             )
             self.assertNotIn('"fdq[gpu]==$FDQ_VERSION"', content)
             self.assertIn("ROCM_MODULE=rocm/7.2.0", content)
             self.assertIn('if [ -n "$ROCM_MODULE" ] && [ "$ROCM_MODULE" != "None" ]; then', content)
+
+    def test_amd_vendor_normal_install_includes_pypi_fallback(self):
+        """Regression test: an amd install without a PyPI fallback breaks every plain dependency.
+
+        --index-url alone restricts uv to the ROCm index for the whole install, so
+        hydra-core/wandb/etc. become unresolvable even though fdq[amd] itself (ROCm-only
+        deps) still installs fine.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_config, submit_path = self._make_job_config(temp_dir, gpu_vendor="amd")
+
+            create_submit_file(job_config, {"additional_pip_packages": None}, submit_path)
+
+            with open(submit_path, encoding="utf8") as submit_file:
+                content = submit_file.read()
+
+            self.assertIn(
+                f'if ! uv pip install --index-url {ROCM_INDEX_URL} --extra-index-url https://pypi.org/simple',
+                content,
+            )
 
     def test_amd_vendor_with_test_repo_uses_all_three_indexes(self):
         """AMD + fdq_test_repo needs TestPyPI (fdq), PyPI (fallback), and the ROCm index (torch)."""
@@ -683,6 +704,7 @@ class TestGpuVendorSubmit(unittest.TestCase):
 
             self.assertIn(
                 f"uv pip install --index-url {ROCM_INDEX_URL} "
+                "--extra-index-url https://pypi.org/simple "
                 "--index-strategy unsafe-best-match 'chuchichaestli==0.2.17'",
                 content,
             )
