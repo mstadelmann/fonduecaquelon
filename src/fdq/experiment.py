@@ -287,20 +287,25 @@ class fdqExperiment:
         iprint("Initializing distributed mode.")
         iprint(f"world size {self.world_size}, rank: {self.rank}")
 
-        torch.distributed.init_process_group(
-            backend=dist_backend,
-            init_method=rdvz_location,
-            world_size=self.world_size,
-            rank=self.rank,
-            # Only rank 0 builds the on-disk dataset cache (see dataset_caching.py);
-            # every other rank waits idle at a collective until it's done. PyTorch's
-            # default NCCL watchdog timeout is 10 minutes, which large volumetric
-            # datasets (e.g. 256px CBCT) can exceed, aborting the whole process group
-            # mid-cache. 60 minutes gives enough headroom for that initial caching
-            # pass; a genuine hang still gets caught, just later.
-            timeout=timedelta(minutes=60),
-            device_id=torch.device("cuda", self.rank),
-        )
+        init_process_group_kwargs = {
+            "backend": dist_backend,
+            "init_method": rdvz_location,
+            "world_size": self.world_size,
+            "rank": self.rank,
+            "device_id": torch.device("cuda", self.rank),
+        }
+        # Only rank 0 builds the on-disk dataset cache (see dataset_caching.py); every
+        # other rank waits idle at a collective until it's done. PyTorch's default NCCL
+        # watchdog timeout is 10 minutes, which large volumetric datasets (e.g. 256px
+        # CBCT) can exceed, aborting the whole process group mid-cache. Left unset by
+        # default so a real hang is still caught quickly; set slurm_cluster.
+        # ddp_init_timeout_min in the experiment config to raise it for datasets whose
+        # caching pass is known to run long.
+        ddp_init_timeout_min = self.cfg.get("slurm_cluster", {}).get("ddp_init_timeout_min")
+        if ddp_init_timeout_min:
+            init_process_group_kwargs["timeout"] = timedelta(minutes=float(ddp_init_timeout_min))
+
+        torch.distributed.init_process_group(**init_process_group_kwargs)
 
         print(f"Distributed mode initialized on rank {self.rank}.")
         self.dist_barrier()
