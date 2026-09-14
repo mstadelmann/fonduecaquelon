@@ -292,7 +292,13 @@ class fdqExperiment:
             init_method=rdvz_location,
             world_size=self.world_size,
             rank=self.rank,
-            # timeout=timedelta(minutes=15),
+            # Only rank 0 builds the on-disk dataset cache (see dataset_caching.py);
+            # every other rank waits idle at a collective until it's done. PyTorch's
+            # default NCCL watchdog timeout is 10 minutes, which large volumetric
+            # datasets (e.g. 256px CBCT) can exceed, aborting the whole process group
+            # mid-cache. 60 minutes gives enough headroom for that initial caching
+            # pass; a genuine hang still gets caught, just later.
+            timeout=timedelta(minutes=60),
             device_id=torch.device("cuda", self.rank),
         )
 
