@@ -2,6 +2,7 @@
 
 import io
 import os
+import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stdout
@@ -9,8 +10,11 @@ from unittest.mock import patch
 
 import fdq.submit as submit
 from fdq.submit import (
+    ROCM_INDEX_URL,
+    FDQSubmitError,
     _write_concrete_parameter_config,
     build_parameter_study_runs,
+    check_config,
     create_submit_file,
     find_parameter_ranges,
     load_conf_file,
@@ -257,7 +261,7 @@ class TestFdqSubmit(unittest.TestCase):
                     "  account: account\n"
                     "  python_env_module: python/3.12\n"
                     "  uv_env_module: uv/0.6\n"
-                    "  fdq_version: 0.1.14\n"
+                    "  fdq_version: 0.1.23\n"
                     "  job_time: 1\n"
                     "mode:\n"
                     "  run_train: true\n"
@@ -559,6 +563,178 @@ class TestFdqSubmit(unittest.TestCase):
             self.assertEqual(cfg["slurm_cluster"]["account"], "child")
             self.assertTrue(cfg["mode"]["run_train"])
             self.assertTrue(cfg["mode"]["run_test_auto"])
+
+
+class TestGpuVendorSubmit(unittest.TestCase):
+    """Tests for the slurm_cluster.gpu_vendor (nvidia/amd) submit-script generation."""
+
+    def _make_job_config(self, temp_dir, **overrides):
+        submit_path = os.path.join(temp_dir, "job.submit")
+        job_config = {
+            "user": "tester",
+            "job_time": 1,
+            "ntasks": 1,
+            "cpus_per_task": 1,
+            "cpus_per_task_test": 1,
+            "nodes": 1,
+            "nodelist": "None",
+            "gres": "gpu:1",
+            "gres_test": "gpu:1",
+            "mem": "1G",
+            "mem_test": "1G",
+            "partition": "gpu",
+            "account": "account",
+            "run_train": True,
+            "run_test": False,
+            "is_test": False,
+            "job_tag": "_train",
+            "auto_resubmit": False,
+            "resume_chpt_path": "None",
+            "log_path": temp_dir,
+            "stop_grace_time": 5,
+            "python_env_module": "python/3.12",
+            "uv_env_module": "uv/0.6",
+            "cuda_env_module": "None",
+            "fdq_version": "0.1.22",
+            "fdq_test_repo": False,
+            "config_path": temp_dir,
+            "config_name": "experiment",
+            "scratch_results_path": "/scratch/fdq_results/",
+            "scratch_data_path": "/scratch/fdq_data/",
+            "results_path": temp_dir,
+            "submit_file_path": submit_path,
+        }
+        job_config.update(overrides)
+        return job_config, submit_path
+
+    def test_default_gpu_vendor_install_command_is_unchanged(self):
+        """No gpu_vendor set (existing configs) must produce the exact pre-AMD install command."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_config, submit_path = self._make_job_config(temp_dir)
+
+            create_submit_file(job_config, {"additional_pip_packages": None}, submit_path)
+
+            with open(submit_path, encoding="utf8") as submit_file:
+                content = submit_file.read()
+
+            self.assertIn('if ! uv pip install "fdq[gpu]==$FDQ_VERSION"; then', content)
+            self.assertIn("ROCM_MODULE=None", content)
+            self.assertNotIn(ROCM_INDEX_URL, content)
+            self.assertNotIn("#gpu_vendor#", content)
+            self.assertNotIn("#rocm_env_module#", content)
+            self.assertNotIn("#fdq_install_normal#", content)
+            self.assertNotIn("#fdq_install_testrepo#", content)
+
+    def test_amd_vendor_routes_install_through_rocm_index(self):
+        """gpu_vendor=amd installs the amd extra from the ROCm wheel index, not fdq[gpu]."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_config, submit_path = self._make_job_config(temp_dir, gpu_vendor="amd", rocm_env_module="rocm/7.2.0")
+
+            create_submit_file(job_config, {"additional_pip_packages": None}, submit_path)
+
+            with open(submit_path, encoding="utf8") as submit_file:
+                content = submit_file.read()
+
+            self.assertIn(
+                f"if ! uv pip install --index-url {ROCM_INDEX_URL} "
+                "--extra-index-url https://pypi.org/simple "
+                '--index-strategy unsafe-best-match "fdq[amd]==$FDQ_VERSION"; then',
+                content,
+            )
+            self.assertNotIn('"fdq[gpu]==$FDQ_VERSION"', content)
+            self.assertIn("ROCM_MODULE=rocm/7.2.0", content)
+            self.assertIn('if [ -n "$ROCM_MODULE" ] && [ "$ROCM_MODULE" != "None" ]; then', content)
+
+    def test_amd_vendor_normal_install_includes_pypi_fallback(self):
+        """Regression test: an amd install without a PyPI fallback breaks every plain dependency.
+
+        --index-url alone restricts uv to the ROCm index for the whole install, so
+        hydra-core/wandb/etc. become unresolvable even though fdq[amd] itself (ROCm-only
+        deps) still installs fine.
+        """
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_config, submit_path = self._make_job_config(temp_dir, gpu_vendor="amd")
+
+            create_submit_file(job_config, {"additional_pip_packages": None}, submit_path)
+
+            with open(submit_path, encoding="utf8") as submit_file:
+                content = submit_file.read()
+
+            self.assertIn(
+                f"if ! uv pip install --index-url {ROCM_INDEX_URL} --extra-index-url https://pypi.org/simple",
+                content,
+            )
+
+    def test_amd_vendor_with_test_repo_uses_all_three_indexes(self):
+        """AMD + fdq_test_repo needs TestPyPI (fdq), PyPI (fallback), and the ROCm index (torch)."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_config, submit_path = self._make_job_config(temp_dir, gpu_vendor="amd", fdq_test_repo=True)
+
+            create_submit_file(job_config, {"additional_pip_packages": None}, submit_path)
+
+            with open(submit_path, encoding="utf8") as submit_file:
+                content = submit_file.read()
+
+            self.assertIn("https://test.pypi.org/simple/", content)
+            self.assertIn("https://pypi.org/simple", content)
+            self.assertIn(ROCM_INDEX_URL, content)
+            self.assertIn('"fdq[amd]==$FDQ_VERSION"', content)
+
+    def test_additional_pip_packages_unrouted_for_nvidia(self):
+        """Default vendor: additional packages install exactly as before (no index flags)."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_config, submit_path = self._make_job_config(temp_dir)
+
+            create_submit_file(job_config, {"additional_pip_packages": ["chuchichaestli==0.2.17"]}, submit_path)
+
+            with open(submit_path, encoding="utf8") as submit_file:
+                content = submit_file.read()
+
+            self.assertIn("uv pip install 'chuchichaestli==0.2.17'", content)
+
+    def test_additional_pip_packages_routed_through_rocm_index_for_amd(self):
+        """A transitive-torch dependency (e.g. a model library) must not reinstall CUDA torch on AMD."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_config, submit_path = self._make_job_config(temp_dir, gpu_vendor="amd")
+
+            create_submit_file(job_config, {"additional_pip_packages": ["chuchichaestli==0.2.17"]}, submit_path)
+
+            with open(submit_path, encoding="utf8") as submit_file:
+                content = submit_file.read()
+
+            self.assertIn(
+                f"uv pip install --index-url {ROCM_INDEX_URL} "
+                "--extra-index-url https://pypi.org/simple "
+                "--index-strategy unsafe-best-match 'chuchichaestli==0.2.17'",
+                content,
+            )
+
+    def test_generated_scripts_are_valid_bash(self):
+        """Both the nvidia and amd generated scripts must be syntactically valid bash."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            for vendor in (None, "amd"):
+                overrides = {} if vendor is None else {"gpu_vendor": vendor, "rocm_env_module": "rocm/7.2.0"}
+                job_config, submit_path = self._make_job_config(temp_dir, **overrides)
+
+                create_submit_file(job_config, {"additional_pip_packages": None}, submit_path)
+
+                result = subprocess.run(["bash", "-n", submit_path], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_check_config_normalizes_gpu_vendor_case(self):
+        """gpu_vendor is accepted case-insensitively and normalized to lowercase."""
+        job_config, _ = self._make_job_config(tempfile.gettempdir(), gpu_vendor="AMD")
+
+        checked = check_config(job_config)
+
+        self.assertEqual(checked["gpu_vendor"], "amd")
+
+    def test_check_config_rejects_unknown_gpu_vendor(self):
+        """An unrecognized gpu_vendor value fails fast with a clear error."""
+        job_config, _ = self._make_job_config(tempfile.gettempdir(), gpu_vendor="intel")
+
+        with self.assertRaises(FDQSubmitError):
+            check_config(job_config)
 
 
 if __name__ == "__main__":

@@ -223,6 +223,11 @@ def get_subset(dataset: Any, subset_ratio: float) -> Any:
     return new_set
 
 
+def is_rocm_build() -> bool:
+    """Return True if the installed PyTorch build targets AMD ROCm/HIP rather than NVIDIA CUDA."""
+    return getattr(torch.version, "hip", None) is not None
+
+
 def remove_file(path: str | None) -> None:
     """Remove the file at the given path if it exists."""
     if path is not None:
@@ -278,6 +283,7 @@ def collect_processing_infos(experiment: Any | None = None) -> dict:
         "Python V.": sys.version,
         "Torch V.": torch.__version__,
         "Cuda V.": torch.version.cuda,
+        "ROCm/HIP V.": torch.version.hip,
         "start_datetime": create_dt_string,
         "end_datetime": stop_dt_string,
         "total_runtime": run_t_string,

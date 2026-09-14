@@ -2,7 +2,7 @@ import os
 import time
 from typing import Any
 import torch
-from fdq.misc import iprint, wprint
+from fdq.misc import iprint, wprint, eprint, is_rocm_build
 from fdq.ui_functions import getIntInput, getYesNoInput
 
 
@@ -210,23 +210,28 @@ def optimize_model(
     iprint("\n-----------------------------------------------------------")
     iprint("Optimize model")
     iprint("-----------------------------------------------------------\n")
-    import torch_tensorrt
-    from torch_tensorrt import Input
 
     try:
         jit_model, config = jit_trace_model(experiment, config, model, model_name, example)
     except (RuntimeError, TypeError, ValueError) as e:
         raise RuntimeError(f"Failed to JIT process model (trace/script): {e}") from e
 
-    inputs = [
-        Input(
-            example.shape,
-            dtype=example.dtype,
-            device={"device_type": "cuda" if experiment.is_cuda else "cpu"},
-        )
-    ]
-
     if getYesNoInput("Torch.compile() model? (y/n)\n"):
+        if is_rocm_build():
+            eprint("Torch-TensorRT requires an NVIDIA GPU (CUDA) and is not available on AMD/ROCm. Skipping this step.")
+            return
+
+        import torch_tensorrt
+        from torch_tensorrt import Input
+
+        inputs = [
+            Input(
+                example.shape,
+                dtype=example.dtype,
+                device={"device_type": "cuda" if experiment.is_cuda else "cpu"},
+            )
+        ]
+
         if config["jit_traced"] or config["jit_scripted"]:
             iprint("Using JIT model for torch.compile()")
             inter_rep = "torchscript"

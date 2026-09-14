@@ -1,0 +1,26 @@
+defaults:
+  - segment_pets_10
+  - _self_
+
+globals:
+  project: Segment OXPET
+  author: Marc
+  comment: "Same experiment as segment_pets_10, but submitted to the cluster's AMD (w7900) node instead of an NVIDIA GPU. Overrides gpu_vendor, fdq_version (needs a release with the 'amd' extra), cuda_env_module (unset - ROCm is installed system-wide on this node, not offered as an environment module), gres/gres_test (w7900 instead of a100sxm), and partition/account (the w7900 node only lives in the 'admin' partition, which requires the 'admin' SLURM account)."
+
+mode:
+  run_train: true
+  run_test_interactive: false
+  run_test_auto: true
+  dump_model: false
+  run_inference: false
+  print_model_summary: false
+  resume_chpt_path: null
+
+slurm_cluster:
+  gpu_vendor: amd
+  cuda_env_module: null
+  rocm_env_module: rocm/7.2.4
+  gres: gpu:w7900:1
+  gres_test: gpu:w7900:1
+  mem: 70G
+  mem_test: 70G
