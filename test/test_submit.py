@@ -628,9 +628,7 @@ class TestGpuVendorSubmit(unittest.TestCase):
     def test_amd_vendor_routes_install_through_rocm_index(self):
         """gpu_vendor=amd installs the amd extra from the ROCm wheel index, not fdq[gpu]."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            job_config, submit_path = self._make_job_config(
-                temp_dir, gpu_vendor="amd", rocm_env_module="rocm/7.2.0"
-            )
+            job_config, submit_path = self._make_job_config(temp_dir, gpu_vendor="amd", rocm_env_module="rocm/7.2.0")
 
             create_submit_file(job_config, {"additional_pip_packages": None}, submit_path)
 
@@ -638,7 +636,7 @@ class TestGpuVendorSubmit(unittest.TestCase):
                 content = submit_file.read()
 
             self.assertIn(
-                f'if ! uv pip install --index-url {ROCM_INDEX_URL} '
+                f"if ! uv pip install --index-url {ROCM_INDEX_URL} "
                 '--index-strategy unsafe-best-match "fdq[amd]==$FDQ_VERSION"; then',
                 content,
             )
@@ -649,9 +647,7 @@ class TestGpuVendorSubmit(unittest.TestCase):
     def test_amd_vendor_with_test_repo_uses_all_three_indexes(self):
         """AMD + fdq_test_repo needs TestPyPI (fdq), PyPI (fallback), and the ROCm index (torch)."""
         with tempfile.TemporaryDirectory() as temp_dir:
-            job_config, submit_path = self._make_job_config(
-                temp_dir, gpu_vendor="amd", fdq_test_repo=True
-            )
+            job_config, submit_path = self._make_job_config(temp_dir, gpu_vendor="amd", fdq_test_repo=True)
 
             create_submit_file(job_config, {"additional_pip_packages": None}, submit_path)
 

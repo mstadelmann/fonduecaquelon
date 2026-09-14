@@ -174,9 +174,7 @@ def inference_model(experiment: Any) -> None:
     if experiment.is_distributed():
         raise ValueError("ERROR: Cannot run inference with world size > 1; please run in single process mode!")
     if is_rocm_build():
-        eprint(
-            "ERROR: run_inference uses NVIDIA TensorRT/pycuda, which are not available on AMD/ROCm."
-        )
+        eprint("ERROR: run_inference uses NVIDIA TensorRT/pycuda, which are not available on AMD/ROCm.")
         return
     experiment.setupData()
 

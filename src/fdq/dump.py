@@ -218,10 +218,7 @@ def optimize_model(
 
     if getYesNoInput("Torch.compile() model? (y/n)\n"):
         if is_rocm_build():
-            eprint(
-                "Torch-TensorRT requires an NVIDIA GPU (CUDA) and is not available on AMD/ROCm. "
-                "Skipping this step."
-            )
+            eprint("Torch-TensorRT requires an NVIDIA GPU (CUDA) and is not available on AMD/ROCm. Skipping this step.")
             return
 
         import torch_tensorrt
