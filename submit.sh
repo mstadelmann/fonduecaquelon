@@ -29,6 +29,7 @@ submit_job experiment_templates/segment_pets/segment_pets_03_dist4.yaml
 # Train OXFORD Pets segmentation using the Chuchichaestli UNET architecture.
 # Show automatic job resubmission and dataset caching.
 submit_job experiment_templates/segment_pets/segment_pets_10.yaml
+submit_job experiment_templates/segment_pets/segment_pets_10_AMD.yaml
 submit_job experiment_templates/segment_pets/segment_pets_11_noAMP_resubmit.yaml
 submit_job experiment_templates/segment_pets/segment_pets_12_slow.yaml
 submit_job experiment_templates/segment_pets/segment_pets_13_cached.yaml

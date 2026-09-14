@@ -659,6 +659,34 @@ class TestGpuVendorSubmit(unittest.TestCase):
             self.assertIn(ROCM_INDEX_URL, content)
             self.assertIn('"fdq[amd]==$FDQ_VERSION"', content)
 
+    def test_additional_pip_packages_unrouted_for_nvidia(self):
+        """Default vendor: additional packages install exactly as before (no index flags)."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_config, submit_path = self._make_job_config(temp_dir)
+
+            create_submit_file(job_config, {"additional_pip_packages": ["chuchichaestli==0.2.17"]}, submit_path)
+
+            with open(submit_path, encoding="utf8") as submit_file:
+                content = submit_file.read()
+
+            self.assertIn("uv pip install 'chuchichaestli==0.2.17'", content)
+
+    def test_additional_pip_packages_routed_through_rocm_index_for_amd(self):
+        """A transitive-torch dependency (e.g. a model library) must not reinstall CUDA torch on AMD."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_config, submit_path = self._make_job_config(temp_dir, gpu_vendor="amd")
+
+            create_submit_file(job_config, {"additional_pip_packages": ["chuchichaestli==0.2.17"]}, submit_path)
+
+            with open(submit_path, encoding="utf8") as submit_file:
+                content = submit_file.read()
+
+            self.assertIn(
+                f"uv pip install --index-url {ROCM_INDEX_URL} "
+                "--index-strategy unsafe-best-match 'chuchichaestli==0.2.17'",
+                content,
+            )
+
     def test_generated_scripts_are_valid_bash(self):
         """Both the nvidia and amd generated scripts must be syntactically valid bash."""
         with tempfile.TemporaryDirectory() as temp_dir:

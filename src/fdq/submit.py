@@ -985,7 +985,14 @@ def create_submit_file(job_config: dict[str, Any], slurm_conf: Any, submit_path:
         if add_packages is None:
             template_content = template_content.replace("#additional_pip_packages#", "")
         elif isinstance(add_packages, list) and len(add_packages) > 0:
-            packages_cmd = "\n".join(f"uv pip install '{pkg}'" for pkg in add_packages)
+            # An additional package (e.g. a model library) may itself depend on torch. On
+            # AMD, route it through the ROCm index too, or it silently reinstalls a vanilla
+            # CUDA torch build over the correct ROCm one installed just above.
+            if str(job_config.get("gpu_vendor", "nvidia")).strip().lower() == "amd":
+                index_args = f"--index-url {ROCM_INDEX_URL} --index-strategy unsafe-best-match "
+            else:
+                index_args = ""
+            packages_cmd = "\n".join(f"uv pip install {index_args}'{pkg}'" for pkg in add_packages)
             log_info(f"Adding {len(add_packages)} additional pip packages")
             template_content = template_content.replace("#additional_pip_packages#", packages_cmd)
 

@@ -1,0 +1,28 @@
+defaults:
+  - segment_pets_10
+  - _self_
+
+globals:
+  project: Segment OXPET
+  author: Marc
+  comment: "Same experiment as segment_pets_10, but submitted to the cluster's AMD (w7900) node instead of an NVIDIA GPU. Overrides gpu_vendor, fdq_version (needs a release with the 'amd' extra), cuda_env_module (unset - ROCm is installed system-wide on this node, not offered as an environment module), gres/gres_test (w7900 instead of a100sxm), and partition/account (the w7900 node only lives in the 'admin' partition, which requires the 'admin' SLURM account)."
+
+mode:
+  run_train: true
+  run_test_interactive: false
+  run_test_auto: true
+  dump_model: false
+  run_inference: false
+  print_model_summary: false
+  resume_chpt_path: null
+
+slurm_cluster:
+  fdq_test_repo: true
+  gpu_vendor: amd # selects the ROCm build of torch (fdq[amd]) instead of fdq[gpu]
+  fdq_version: 0.1.22 # must be a released fdq version that includes the "amd" extra
+  cuda_env_module: null # nvidia-only module, irrelevant on the amd node
+  rocm_env_module: rocm/7.2.4 # now available on irvine (module av); load it explicitly
+  gres: gpu:w7900:1 # the cluster's only AMD node ("irvine") exposes 2x w7900
+  gres_test: gpu:w7900:1
+  partition: admin # the w7900 node is only available in the "admin" partition
+  account: admin # that partition only allows the "admin" account (AllowAccounts=admin)
