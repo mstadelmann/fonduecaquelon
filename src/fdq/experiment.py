@@ -553,7 +553,8 @@ class fdqExperiment:
             self._prepare_ddp_data_args(data_name, data_source)
             processor = self.import_class(file_path=data_source.processor)
 
-            if data_source.get("caching") is None:
+            caching_cfg = data_source.get("caching")
+            if caching_cfg is None or not caching_cfg.get("enabled", True):
                 self.data[data_name] = DictToObj(processor.create_datasets(self, self.cfg.data.get(data_name).args))
             else:
                 self.data[data_name] = DictToObj(cache_datasets_ddp_handler(self, processor, data_name, data_source))
