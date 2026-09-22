@@ -14,7 +14,7 @@ import torch.multiprocessing as mp
 from fdq.experiment import fdqExperiment
 from fdq.testing import run_test
 from fdq.ui_functions import iprint
-from fdq.dump import dump_model
+from fdq.dump import dump_model_auto, dump_model_interactive
 from fdq.inference import inference_model
 
 
@@ -48,8 +48,11 @@ def start(rank: int, cfg: DictConfig = None, cfg_container=None) -> None:
     if experiment.cfg.mode.run_test_auto or experiment.cfg.mode.run_test_interactive:
         run_test(experiment)
 
+    if experiment.cfg.mode.dump_model_interactive:
+        dump_model_interactive(experiment)
+
     if experiment.cfg.mode.dump_model:
-        dump_model(experiment)
+        dump_model_auto(experiment)
 
     if experiment.cfg.mode.run_inference:
         inference_model(experiment)

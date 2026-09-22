@@ -737,5 +737,56 @@ class TestGpuVendorSubmit(unittest.TestCase):
             check_config(job_config)
 
 
+class TestDumpModelSubmit(unittest.TestCase):
+    """Tests for submitting the automatic (config-driven) mode.dump_model to SLURM."""
+
+    def test_get_default_config_rejects_interactive_dump(self):
+        """mode.dump_model_interactive cannot run non-interactively in a SLURM job."""
+        with self.assertRaises(FDQSubmitError):
+            submit.get_default_config({}, {"run_train": True, "dump_model_interactive": True})
+
+    def test_get_default_config_accepts_auto_dump(self):
+        """mode.dump_model (automatic) is allowed and forwarded into the job config."""
+        job_config = submit.get_default_config({}, {"run_train": True, "dump_model": True})
+
+        self.assertTrue(job_config["dump_model"])
+
+    def test_get_default_config_defaults_dump_to_false(self):
+        """dump_model defaults to False when not set in mode config, like run_train/run_test."""
+        job_config = submit.get_default_config({}, {"run_train": True})
+
+        self.assertFalse(job_config["dump_model"])
+
+    def test_submit_script_wires_dump_model_command(self):
+        """A job configured with dump_model=True generates a valid script running mode.dump_model=true."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_config, submit_path = TestGpuVendorSubmit()._make_job_config(temp_dir, dump_model=True)
+
+            create_submit_file(job_config, {"additional_pip_packages": None}, submit_path)
+
+            with open(submit_path, encoding="utf8") as submit_file:
+                content = submit_file.read()
+
+            self.assertIn("DUMP_MODEL=True", content)
+            self.assertIn("mode.dump_model=true", content)
+            self.assertNotIn("#dump_model#", content)
+
+            result = subprocess.run(["bash", "-n", submit_path], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_submit_script_defaults_dump_model_false_when_key_absent(self):
+        """job_config dicts built before dump_model existed still substitute a safe default."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_config, submit_path = TestGpuVendorSubmit()._make_job_config(temp_dir)
+            self.assertNotIn("dump_model", job_config)
+
+            create_submit_file(job_config, {"additional_pip_packages": None}, submit_path)
+
+            with open(submit_path, encoding="utf8") as submit_file:
+                content = submit_file.read()
+
+            self.assertIn("DUMP_MODEL=False", content)
+
+
 if __name__ == "__main__":
     unittest.main()

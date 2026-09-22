@@ -19,6 +19,7 @@ A *fonduecaquelon* is the heavy pot that keeps cheeses (e.g. 50% Gruyère and 50
 * **High-Performance Inference:** TensorRT integration for GPU-accelerated inference with up to 10x speedup.
 * **Model Compilation:** JIT tracing/scripting and `torch.compile` support for optimized execution.
 * **Interactive Model Dumping:** Intuitive interface for exporting and optimizing trained models.
+* **Automatic Model Dumping:** Fully config-driven ONNX export with no prompts — usable in CI/SLURM pipelines.
 * **Monitoring Tools:** Built-in support for [Weights & Biases](https://wandb.ai) and [TensorBoard](https://www.tensorflow.org/tensorboard).
 
 ## 🛠️ Installation
@@ -81,9 +82,10 @@ the rest.)
 
 There is no `gpu`-equivalent extra for AMD: `torch_tensorrt`/`pycuda` are NVIDIA-only and have no
 ROCm counterpart in FDQ. As a consequence, the "Torch.compile() model" step under
-`mode.dump_model` and the `mode.run_inference` mode both print a clear message and skip instead of
-running. Everything else — training, DDP, checkpointing, ONNX export, JIT trace/script,
-`torch.compile()` without a TensorRT backend — works the same on both vendors.
+`mode.dump_model_interactive` and the `mode.run_inference` mode both print a clear message and skip
+instead of running. Everything else — training, DDP, checkpointing, ONNX export (interactive or
+automatic), JIT trace/script, `torch.compile()` without a TensorRT backend — works the same on both
+vendors.
 
 SLURM cluster submission also supports AMD nodes — see `gpu_vendor` in the
 [SLURM Cluster Execution](#slurm-cluster-execution) section below.
@@ -96,6 +98,7 @@ SLURM cluster submission also supports AMD nodes — see `gpu_vendor` in the
 - [Local Experiments](#local-experiments)
 - [SLURM Cluster Execution](#slurm-cluster-execution)
 - [Model Export and Optimization](#model-export-and-optimization)
+- [Automatic Model Dumping](#automatic-model-dumping)
 - [Additional CLI Options](#additional-cli-options)
 
 ### Local Experiments
@@ -168,8 +171,13 @@ When submitting jobs to a Slurm cluster, the only supported modes are:
 mode:
   run_train: true|false
   run_test_auto: true|false
+  dump_model: true|false
 ```
-The remaining actions have to be run in an interactive session.
+`mode.dump_model` runs inline, right after training completes in the same job (or standalone if
+`run_train: false`), and is fully driven by the `model_dump` config section — see
+[Automatic Model Dumping](#automatic-model-dumping). The remaining actions
+(`run_test_interactive`, `dump_model_interactive`, `run_inference`, `print_model_summary`) require
+a terminal to answer prompts and have to be run in an interactive session.
 
 There are two ways to submit an experiment.
 
@@ -244,11 +252,15 @@ squeue -u $USER --name=fdq-<job_name>
 
 ### Model Export and Optimization
 
-After training, export and optimize models for deployment:
+After training, export and optimize models for deployment. There are two ways to do this:
+interactively (`mode.dump_model_interactive`), which prompts you for every choice and also
+supports JIT trace/script and TensorRT optimization, or automatically (`mode.dump_model`), which
+runs ONNX export with no prompts, driven entirely by the `model_dump` config section — usable
+locally, in CI, or as a SLURM job.
 
 ```bash
 # Interactive model dumping with export options (Hydra-style)
-fdq --config-path <path_to_config_dir> --config-name <config_basename> mode.run_train=false mode.dump_model=true
+fdq --config-path <path_to_config_dir> --config-name <config_basename> mode.run_train=false mode.dump_model_interactive=true
 ```
 
 This launches an interactive interface where you can:
@@ -257,6 +269,45 @@ This launches an interactive interface where you can:
 * **JIT Compilation:** Trace or script models with PyTorch JIT
 * **TensorRT Optimization:** Compile models for GPU inference with FP32, FP16, or INT8 precision
 * **Performance Benchmarking:** Compare optimized vs. original model performance
+
+### Automatic Model Dumping
+
+`mode.dump_model` exports model(s) to ONNX without any prompts, reading everything it needs from
+the `model_dump` config section:
+
+```bash
+fdq --config-path <path_to_config_dir> --config-name <config_basename> mode.run_train=false mode.dump_model=true
+```
+
+```yaml
+mode:
+  dump_model: true
+
+model_dump:
+  checkpoint: best_val   # which trained checkpoint to load: best_val | best_train | last
+  model_name: null        # which model to export; null = export every model defined under `models`
+  input_source: OXPET     # a key under `data`, used to derive the example input's shape
+  random_input: false     # true = replace the sampled batch with random values of the same shape
+  input_dtype: float32    # float32 | float16 | int8 | float64
+  onnx:
+    use_dynamo: false     # use the newer torch.onnx dynamo-based exporter instead of TorchScript-based
+    opset_version: 12     # only used by the TorchScript-based exporter (use_dynamo: false)
+    optimize: false        # dynamo-only: run onnx_program.optimize() before saving
+    input_names: ["input"]
+    output_names: ["output"]
+```
+
+* `checkpoint` accepts the same aliases as `test.test_model` (`best`/`best_val`/`val`/`validation`,
+  `best_train`/`train`, `last`) and always loads from the **current experiment's** most recent run
+  — cross-experiment/custom-path selection is interactive-only (`mode.dump_model_interactive`).
+* Exported files are written to the same results directory as the loaded checkpoint, named
+  `<model_name>_torchscript.onnx` (or `_dynamo.onnx` / `_dynamo_optimized.onnx` when
+  `onnx.use_dynamo: true`).
+* If exporting multiple models (`model_name: null`), a failure on one model is logged and export
+  continues for the rest; if any model failed, the run exits non-zero at the end so CI/SLURM jobs
+  fail loudly instead of silently skipping a model.
+* See [segment_pets_01.yaml](experiment_templates/segment_pets/segment_pets_01.yaml) for a
+  complete example.
 
 ### Additional CLI Options
 
@@ -275,7 +326,10 @@ fdq --config-path <path_to_config_dir> --config-name <config_basename> mode.run_
 # Interactive testing
 fdq --config-path <path_to_config_dir> --config-name <config_basename> mode.run_train=false mode.run_test_interactive=true 
 
-# Export and optimize models
+# Interactively export and optimize models (ONNX, JIT, TensorRT)
+fdq --config-path <path_to_config_dir> --config-name <config_basename> mode.run_train=false mode.dump_model_interactive=true 
+
+# Automatically export models to ONNX, driven by the `model_dump` config section
 fdq --config-path <path_to_config_dir> --config-name <config_basename> mode.run_train=false mode.dump_model=true 
 
 # Run inference tests
@@ -329,7 +383,8 @@ mode:
   run_train: true
   run_test_interactive: false
   run_test_auto: true
-  dump_model: false
+  dump_model_interactive: false  # interactive ONNX/JIT/TensorRT export & optimization, see "Model Export and Optimization"
+  dump_model: false              # automatic ONNX export driven by `model_dump`, see "Automatic Model Dumping"
   run_inference: false
   print_model_summary: false
   resume_chpt_path: null
@@ -641,7 +696,7 @@ ruff check .
 * **Config Inheritance:** Use Hydra’s `defaults` list in your YAML configs to include/extend base configs and reduce duplication.
 * **Multiple Models/Losses:** Add multiple models and losses to config dictionaries as needed.
 * **Cluster Submission:** `submit.py` handles SLURM job script generation, submission, environment setup, and result copying.
-* **Model Export:** Set `mode.run_train=false mode.dump_model=true` for interactive model export and optimization.
+* **Model Export:** Set `mode.run_train=false mode.dump_model_interactive=true` for interactive model export and optimization, or `mode.dump_model=true` (with a `model_dump` config section) for automatic, no-prompt ONNX export.
 * **VRAM Estimation:** At training startup FDQ automatically prints an estimated VRAM breakdown (parameters, gradients, optimizer state, and activations measured via a dummy forward pass) to help right-size your GPU request before submitting to the cluster.
 
 ## 📚 Resources
@@ -661,6 +716,7 @@ Contributions are welcome! Please open issues or pull requests on [GitHub](https
 
 ## 🧾 Changelog
 
+- **0.1.25:** Add automatic, non-interactive ONNX model dumping: `mode.dump_model` now runs a fully config-driven export via the new `model_dump` section (checkpoint/model/input selection, ONNX options) instead of prompting, and can be submitted as a SLURM job. The previous interactive dump flow (ONNX, JIT trace/script, TensorRT) is now `mode.dump_model_interactive`.
 - **0.1.13:** Simplify DataLoader worker handling: remove `ddp_num_workers`, warn when DDP runs with `num_workers > 0`, keep cached RAM-backed loaders single-process, support optional `prefetch_factor`, and default `persistent_workers=true` when `num_workers > 0` unless explicitly disabled.
 - **0.1.11:** DDP reliability improvements: VRAM estimation is now skipped in DDP mode to avoid rank desync from an asymmetric dummy forward pass on rank 0 only.
 - **0.1.10:** Allow specifying `trained_model_path` in a model's config block to load a checkpoint from a fixed path during test mode, without interactive prompting.

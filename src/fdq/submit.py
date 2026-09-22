@@ -104,6 +104,7 @@ script_start=$(date +%s.%N)
 # Job configuration variables
 RUN_TRAIN=#run_train#
 RUN_TEST=#run_test# # test will be run automatically, but not necessarily in this job
+DUMP_MODEL=#dump_model# # if True, export model(s) to ONNX after training (or standalone, if RUN_TRAIN is False)
 IS_TEST=#is_test# # if True, start test in this job
 GRES_TEST=#gres_test#
 MEM_TEST=#mem_test#
@@ -158,6 +159,7 @@ echo "SOURCE SUBMIT FILE PATH: $SUBMIT_FILE_PATH"
 echo "SCRATCH SUBMIT FILE PATH: $SCRATCH_SUBMIT_FILE_PATH"
 echo "RUN_TRAIN: $RUN_TRAIN"
 echo "RUN_TEST: $RUN_TEST"
+echo "DUMP_MODEL: $DUMP_MODEL"
 echo "IS_TEST: $IS_TEST"
 echo "AUTO_RESUBMIT: $AUTO_RESUBMIT"
 echo "RESUME_CHPT_PATH: $RESUME_CHPT_PATH"
@@ -366,6 +368,36 @@ if [ "$RUN_TRAIN" == True ]; then
     echo "Training time: $train_time s"
     echo "Data copy time: $copy_time s"
     echo -----------------------------------------------------------
+fi
+
+if [ "$DUMP_MODEL" == True ]; then
+    if [ "$RUN_TRAIN" == True ] && [ $RETVALUE -ne 0 ]; then
+        echo -----------------------------------------------------------
+        echo "Model dump skipped due to training failure (exit code: $RETVALUE)"
+        echo -----------------------------------------------------------
+    else
+        echo -----------------------------------------------------------
+        echo "RUNNING MODEL DUMP"
+        echo -----------------------------------------------------------
+
+        dump_start=$(date +%s.%N)
+        echo "Starting model dump with command:"
+        echo "fdq --config-path \"$CONFIG_PATH\" --config-name \"$CONFIG_NAME\" $PARAMETER_OVERRIDES mode.run_train=false mode.run_test_auto=false mode.dump_model=true &"
+        fdq --config-path "$CONFIG_PATH" --config-name "$CONFIG_NAME" $PARAMETER_OVERRIDES mode.run_train=false mode.run_test_auto=false mode.dump_model=true &
+        fdq_pid=$!
+        echo "Model dump process started with PID: $fdq_pid"
+        wait $fdq_pid
+        RETVALUE=$?
+        dump_stop=$(date +%s.%N)
+        dump_time=$(echo "$dump_stop - $dump_start" | bc)
+
+        echo -----------------------------------------------------------
+        echo "MODEL DUMP COMPLETED (exit code: $RETVALUE)"
+        echo "Dump time: $dump_time s"
+        echo -----------------------------------------------------------
+
+        safe_copy "$SCRATCH_RESULTS_PATH"* "$RESULTS_PATH"
+    fi
 fi
 
 if [ "$IS_TEST" == True ]; then
@@ -772,6 +804,7 @@ def get_default_config(slurm_conf: Any, mode_config: Any) -> dict[str, Any]:
         "account": None,
         "run_train": True,
         "run_test": False,
+        "dump_model": False,
         "is_test": False,
         "job_tag": "",
         "auto_resubmit": True,
@@ -807,11 +840,12 @@ def get_default_config(slurm_conf: Any, mode_config: Any) -> dict[str, Any]:
 
     job_config["run_train"] = mode_config.get("run_train", False)
     job_config["run_test"] = mode_config.get("run_test_auto", False)
+    job_config["dump_model"] = mode_config.get("dump_model", False)
     job_config["resume_chpt_path"] = mode_config.get("resume_chpt_path", "")
     if mode_config.get("run_test_interactive"):
         raise FDQSubmitError("Interactive test mode is not supported for SLURM job submission")
-    if mode_config.get("dump_model"):
-        raise FDQSubmitError("Model dumping is currently not supported for SLURM job submission")
+    if mode_config.get("dump_model_interactive"):
+        raise FDQSubmitError("Interactive model dumping is not supported for SLURM job submission")
     if mode_config.get("run_inference"):
         raise FDQSubmitError("Inference mode is currently not supported for SLURM job submission")
     if mode_config.get("print_model_summary"):
@@ -947,6 +981,7 @@ def create_submit_file(job_config: dict[str, Any], slurm_conf: Any, submit_path:
         job_config.setdefault("parameter_run_tag", "")
         job_config.setdefault("parameter_study_paths", "")
         job_config.setdefault("test_results_dir", "")
+        job_config.setdefault("dump_model", False)
         job_config.setdefault("job_name", job_config.get("config_name", ""))
         job_config.setdefault("experiment_name", job_config.get("job_name", job_config.get("config_name", "")))
         job_config.setdefault("gpu_vendor", "nvidia")
@@ -1229,6 +1264,9 @@ def main() -> None:
                 job_config["is_test"] = True
                 job_config["job_tag"] = "_test"
                 log_info("Configured as test-only job")
+            elif not job_config["run_train"] and job_config["dump_model"]:
+                job_config["job_tag"] = "_dump"
+                log_info("Configured as dump-only job")
             else:
                 job_config["job_tag"] = "_train"
                 log_info("Configured as training job")

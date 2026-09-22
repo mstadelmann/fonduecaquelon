@@ -7,6 +7,7 @@ mode:
   run_train: true
   run_test_interactive: false
   run_test_auto: false
+  dump_model_interactive: false
   dump_model: false
   run_inference: false
   print_model_summary: false
@@ -87,6 +88,19 @@ test:
   args:
     metrics:
       nb_test_samples: "100"
+
+model_dump:
+  checkpoint: best_val
+  model_name: null
+  input_source: MNIST
+  random_input: false
+  input_dtype: float32
+  onnx:
+    use_dynamo: false
+    opset_version: 12
+    optimize: false
+    input_names: ["input"]
+    output_names: ["output"]
 
 # slurm_cluster:
 #   scratch_results_path: "/scratch/fdq_results/"
