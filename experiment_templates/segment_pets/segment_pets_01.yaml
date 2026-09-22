@@ -11,6 +11,7 @@ mode:
   run_train: true
   run_test_interactive: false
   run_test_auto: true
+  dump_model_interactive: false
   dump_model: false
   run_inference: false
   print_model_summary: false
@@ -99,9 +100,24 @@ test:
     metrics:
       nb_test_samples: "10"
 
+# Used when mode.dump_model=true (automatic ONNX export, no interactive prompts).
+# See README.md "Automatic Model Dumping" section for details on every field.
+model_dump:
+  checkpoint: best_val # which trained checkpoint to load: best_val | best_train | last
+  model_name: null # which model to export; null = export all models defined under `models`
+  input_source: OXPET # data source (see `data`) used to derive the example input's shape
+  random_input: false # true = replace the sampled batch with random values of the same shape
+  input_dtype: float32 # float32 | float16 | int8 | float64
+  onnx:
+    use_dynamo: false # use the newer torch.onnx dynamo-based exporter instead of the TorchScript-based one
+    opset_version: 12 # only used by the TorchScript-based exporter (use_dynamo: false)
+    optimize: false # dynamo-only: run onnx_program.optimize() before saving
+    input_names: ["input"]
+    output_names: ["output"]
+
 slurm_cluster:
   fdq_test_repo: false # Pull FDQ from https://test.pypi.org instead of the official PyPI - for debugging purposes only
-  fdq_version: 0.1.23
+  fdq_version: 0.1.25
   python_env_module: python/3.12.4
   uv_env_module: uv/0.6.12
   cuda_env_module: cuda/12.8.0

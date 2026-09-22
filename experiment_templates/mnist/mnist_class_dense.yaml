@@ -12,6 +12,7 @@ mode:
   run_train: true
   run_test_interactive: false
   run_test_auto: true
+  dump_model_interactive: false
   dump_model: false
   run_inference: false
   print_model_summary: false
@@ -48,7 +49,7 @@ store:
 
 slurm_cluster:
   fdq_test_repo: false
-  fdq_version: 0.1.23
+  fdq_version: 0.1.25
   python_env_module: "python/3.12.4"
   uv_env_module: "uv/0.6.12"
   cuda_env_module: "cuda/12.8.0"

@@ -363,10 +363,10 @@ def export_onnx_model(
         iprint("You can use 'https://netron.app/' to visualize the exported model.")
 
 
-def dump_model(experiment: Any) -> None:
+def dump_model_interactive(experiment: Any) -> None:
     """Interactively dumps, traces, scripts, compiles, tests, and saves a model from the given experiment."""
     iprint("\n-----------------------------------------------------------")
-    iprint("Dump model")
+    iprint("Dump model (interactive)")
     iprint("-----------------------------------------------------------\n")
 
     if experiment.is_distributed():
@@ -410,3 +410,155 @@ def dump_model(experiment: Any) -> None:
 
         if not getYesNoInput("\nProcess another model? (y/n)"):
             break
+
+
+_CHECKPOINT_ALIASES: dict[str, tuple[str, ...]] = {
+    "best_val": ("best", "best_val", "val", "validation"),
+    "best_train": ("best_train", "train"),
+    "last": ("last",),
+}
+
+_DTYPE_CASTS: dict[str, Any] = {
+    "float32": lambda t: t.float(),
+    "float16": lambda t: t.half(),
+    "int8": lambda t: t.int(),
+    "float64": lambda t: t.double(),
+}
+
+
+def select_checkpoint_auto(experiment: Any, checkpoint: str) -> None:
+    """Select which trained checkpoint to load, driven by config instead of a prompt."""
+    checkpoint = str(checkpoint).lower()
+    for mode_name, aliases in _CHECKPOINT_ALIASES.items():
+        if checkpoint in aliases:
+            getattr(experiment.mode, mode_name)()
+            iprint(f"Auto dump: Loading {mode_name} model.")
+            return
+    raise ValueError("model_dump.checkpoint must be one of: best_val, best_train, last")
+
+
+def select_models_auto(experiment: Any, model_name: str | None) -> dict[str, torch.nn.Module]:
+    """Select which model(s) to dump, driven by config instead of a prompt."""
+    if model_name is None:
+        return {name: model.to(experiment.device).eval() for name, model in experiment.models.items()}
+
+    if model_name not in experiment.models:
+        raise ValueError(
+            f"model_dump.model_name '{model_name}' not found. Available models: {list(experiment.models.keys())}"
+        )
+    return {model_name: experiment.models[model_name].to(experiment.device).eval()}
+
+
+def get_example_tensor_auto(experiment: Any, dump_cfg: Any) -> torch.Tensor:
+    """Build an example input tensor from the `model_dump` config, without prompting."""
+    input_source = dump_cfg.get("input_source")
+    if not input_source:
+        raise ValueError("model_dump.input_source must be set to a data source name (see the 'data' config section)")
+    if input_source not in experiment.data:
+        raise ValueError(
+            f"model_dump.input_source '{input_source}' not found. "
+            f"Available data sources: {list(experiment.data.keys())}"
+        )
+
+    sample = next(iter(experiment.data[input_source].train_data_loader))
+    if isinstance(sample, tuple):
+        sample = sample[0]
+    if isinstance(sample, list):
+        sample = sample[0]
+    if isinstance(sample, dict):
+        sample = next(iter(sample.values()))
+
+    if dump_cfg.get("random_input", False):
+        sample = torch.rand_like(sample)
+
+    dtype = str(dump_cfg.get("input_dtype", "float32")).lower()
+    if dtype not in _DTYPE_CASTS:
+        raise ValueError(f"model_dump.input_dtype must be one of: {list(_DTYPE_CASTS)}")
+
+    return _DTYPE_CASTS[dtype](sample.to(experiment.device))
+
+
+def export_onnx_model_auto(
+    experiment: Any,
+    example: torch.Tensor,
+    model: torch.nn.Module,
+    model_name: str,
+    onnx_cfg: Any,
+) -> str:
+    """Export a model to ONNX driven by the `model_dump.onnx` config, without prompting. Returns the saved path."""
+    iprint("\n-----------------------------------------------------------")
+    iprint(f"Export ONNX Model: {model_name}")
+    iprint("-----------------------------------------------------------\n")
+
+    use_dynamo = bool(onnx_cfg.get("use_dynamo", False))
+    input_names = list(onnx_cfg.get("input_names", ["input"]))
+    output_names = list(onnx_cfg.get("output_names", ["output"]))
+
+    save_path = os.path.join(experiment.results_dir, f"{model_name}.onnx")
+
+    if use_dynamo:
+        save_path = save_path.replace(".onnx", "_dynamo.onnx")
+        onnx_program = torch.onnx.export(
+            model,
+            example,
+            export_params=True,
+            input_names=input_names,
+            output_names=output_names,
+            dynamo=True,
+        )
+        if bool(onnx_cfg.get("optimize", False)):
+            onnx_program.optimize()
+            save_path = save_path.replace(".onnx", "_optimized.onnx")
+        onnx_program.save(save_path)
+    else:
+        save_path = save_path.replace(".onnx", "_torchscript.onnx")
+        opset_version = int(onnx_cfg.get("opset_version", 12))
+        torch.onnx.export(
+            model,
+            example,
+            save_path,
+            export_params=True,
+            opset_version=opset_version,
+            input_names=input_names,
+            output_names=output_names,
+        )
+
+    file_size_mb = os.path.getsize(save_path) / (1024 * 1024)
+    iprint(f"ONNX model exported to {save_path}")
+    iprint(f"File size: {file_size_mb:.2f} MB")
+    iprint("You can use 'https://netron.app/' to visualize the exported model.")
+    return save_path
+
+
+def dump_model_auto(experiment: Any) -> None:
+    """Non-interactively export model(s) to ONNX, fully driven by the `model_dump` config section."""
+    iprint("\n-----------------------------------------------------------")
+    iprint("Dump model (auto)")
+    iprint("-----------------------------------------------------------\n")
+
+    if experiment.is_distributed():
+        raise ValueError("ERROR: Cannot dump with world size > 1; please run in single process mode.")
+
+    dump_cfg = experiment.cfg.get("model_dump", {}) or {}
+
+    experiment.setupData()
+    experiment.init_models(instantiate=False)
+
+    select_checkpoint_auto(experiment, dump_cfg.get("checkpoint", "best_val"))
+    experiment.load_trained_models()
+
+    models_to_dump = select_models_auto(experiment, dump_cfg.get("model_name"))
+
+    failed: list[str] = []
+    for model_name, model in models_to_dump.items():
+        iprint(f"Processing {model_name}...")
+        try:
+            example = get_example_tensor_auto(experiment, dump_cfg)
+            export_onnx_model_auto(experiment, example, model, model_name, dump_cfg.get("onnx", {}))
+        except (RuntimeError, TypeError, ValueError) as e:
+            wprint(f"Failed to export ONNX model '{model_name}'!")
+            print(e)
+            failed.append(model_name)
+
+    if failed:
+        raise RuntimeError(f"Failed to export {len(failed)} model(s) to ONNX: {failed}")
