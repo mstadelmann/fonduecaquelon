@@ -111,9 +111,7 @@ class TestGetExampleTensorAuto(unittest.TestCase):
     def test_random_input_replaces_values_but_keeps_shape(self):
         batch = torch.ones(2, 3)
         experiment = self._make_experiment(batch)
-        result = get_example_tensor_auto(
-            experiment, OmegaConf.create({"input_source": "MyData", "random_input": True})
-        )
+        result = get_example_tensor_auto(experiment, OmegaConf.create({"input_source": "MyData", "random_input": True}))
         self.assertEqual(result.shape, batch.shape)
 
     def test_unwraps_tuple_batches(self):
@@ -170,9 +168,7 @@ class TestExportOnnxModelAuto(unittest.TestCase):
             model = _TinyModel().eval()
             example = torch.rand(1, 3)
 
-            path = export_onnx_model_auto(
-                experiment, example, model, "tiny", OmegaConf.create({"use_dynamo": True})
-            )
+            path = export_onnx_model_auto(experiment, example, model, "tiny", OmegaConf.create({"use_dynamo": True}))
 
             self.assertTrue(path.endswith("tiny_dynamo.onnx"))
             self.assertTrue(os.path.exists(path))
